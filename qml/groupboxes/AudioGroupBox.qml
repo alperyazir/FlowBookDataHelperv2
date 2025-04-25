@@ -1,0 +1,291 @@
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import Qt.labs.platform
+import QtMultimedia
+// import QtQuick.Controls.Material
+
+import "../../qml"
+
+GroupBox {
+
+    // FileDialog bileşeni
+    FileDialog {
+        id: fileDialog
+        title: "Select a File"
+        //folder: StandardPaths.home // Varsayılan başlangıç yolu, değiştirilecektir
+
+        onAccepted: {
+            var selectedFilePath = fileDialog.file + ""; // Seçilen dosyanın tam dosya yolu
+            if (selectedFilePath) {
+                var newPath = findBooksFolder(selectedFilePath, "books");
+                if (newPath) {
+                    audioTextField.text = newPath
+                } else {
+                    console.log("Books klasörü bulunamadı.");
+                }
+            } else {
+                console.log("Dosya yolu geçersiz.");
+            }
+        }
+
+        onRejected: {
+            console.log("File selection was canceled")
+        }
+    }
+
+    property var audioModelData: undefined
+    property int sectionIndex
+    signal removeSection(int secIndex)
+    id: root
+    title: qsTr("Audio")
+    width: parent.width * .98
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.verticalCenter: parent.verticalCenter
+    // Custom title style
+    Column {
+        anchors.fill: parent
+        spacing: 10
+
+        Row {
+            height: 40
+            anchors.right: parent.right
+
+            Button {
+                id: closeButton
+                text: "X"
+                height: 40
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        playRecordAudio.stop()
+                        audioTextField.focus = false
+                        sideBar.audioVisible = false
+                    }
+                }
+            }
+        }
+
+        Row {
+            width: parent.width * .9
+            spacing: 10
+            height: 40
+            FlowText {
+                text: "Path: "
+                color: "white"
+                anchors.centerIn: undefined
+                width: parent.width * .15
+                font.pixelSize: 15
+                verticalAlignment: Text.AlignBottom
+            }
+
+            // TextEdit bileşeni
+            TextField {
+                id: audioTextField
+                width: parent.width*.75
+                height: parent.height
+                placeholderText: "audio.mp3"
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                text: root.audioModelData.audioPath
+
+                onAccepted: {
+
+                }
+            }
+
+            Rectangle {
+                height: width
+                width: parent.width * 0.1
+                anchors.verticalCenter: parent.verticalCenter
+                color: "white"
+                FlowText {
+                    text: "..."
+                    color: "black"
+                    anchors.centerIn: undefined
+                    width: parent.width
+                    height: width
+                    font.pixelSize: 15
+                    verticalAlignment: Text.AlignBottom
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        fileDialog.folder = "file:" + appPath + root.audioModelData.path
+                        fileDialog.open()
+                    }
+                }
+            }
+        }
+
+
+        Row {
+            height: 40
+            anchors.horizontalCenter: parent.horizontalCenter
+
+            Button {
+                text: "Save"
+                onClicked: {
+                    root.audioModelData.audioPath = audioTextField.text
+
+                    config.bookSets[0].saveToJson();
+                    audioTextField.focus = false
+                    toast.show("Changes are saved to File!")
+                }
+            }
+
+            Button {
+                text: "Delete"
+                onClicked: {
+
+                    confirmBox.visible = true
+                }
+            }
+        }
+
+        Rectangle {
+            id: confirmBox
+            width: parent.width /2
+            height: 100
+            color: "transparent"
+            border.color: "red"
+            radius: 10
+            visible: false // Başlangıçta visible true, bir işlemi başlatırken görünür olacak
+            anchors.horizontalCenter: parent.horizontalCenter
+
+            Column {
+                anchors.centerIn: parent
+                spacing: 10
+
+                Text {
+                    text: "Are you sure?"
+                    font.pixelSize: 15
+                    color: "white"
+                    anchors.horizontalCenter: parent.horizontalCenter
+                }
+
+                Row {
+                    spacing: 20
+                    anchors.horizontalCenter: parent.horizontalCenter
+
+                    Button {
+                        text: "Yes"
+                        onClicked: {
+                            removeSection(root.sectionIndex)
+                            confirmBox.visible = false
+                            sideBar.audioVisible = false
+                        }
+                    }
+
+                    Button {
+                        text: "No"
+                        onClicked: {
+
+                            confirmBox.visible = false
+                        }
+                    }
+                }
+            }
+        }
+
+        // FlowText {
+        //     width: parent.width
+        //     height: 40
+        //     anchors.centerIn: undefined
+        //     font.pixelSize: 15
+        //     id: coordsText
+        //     text: "coords: (x: " + audioModelData.coords.x + ",y: "+ audioModelData.coords.y + ",w: " + audioModelData.coords.width + ",h: " + audioModelData.coords.height + ")"
+        //     color: "white"
+        // }
+
+        Row {
+            property bool isPlaying: playRecordAudio.playbackState === MediaPlayer.PlayingState
+            id: audioContrller
+            width: parent.width
+            height: 40
+            spacing: 5
+
+            Button {
+                id: playPauseButton
+                width: 60
+                anchors.verticalCenter: parent.verticalCenter
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        if (!audioContrller.isPlaying) {
+                            playRecordAudio.source = "file:" + appPath + audioTextField.text
+                            playRecordAudio.play()
+                        } else {
+                            playRecordAudio.pause()
+                        }
+                    }
+                }
+            }
+
+            Slider {
+                id: audioSlider
+                enabled: true
+                to: playRecordAudio.duration
+                value: playRecordAudio.position
+                width: parent.width - playPauseButton.width - audioContrller.spacing - stopButton.width
+                anchors.verticalCenter: parent.verticalCenter
+                onMoved: {
+                    if (playRecordAudio.seekable) {
+                        playRecordAudio.setPosition(value)
+                    } else {
+                        console.log("Media is not seekable!")
+                    }
+                }
+            }
+
+            Button {
+                id: stopButton
+                width: 60
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Stop"
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        playRecordAudio.stop()
+                    }
+                }
+            }
+        }
+
+    }
+
+    states: [
+        State {
+            name: "playing"
+            when: playRecordAudio.playbackState === MediaPlayer.PlayingState
+
+            PropertyChanges {
+                playPauseButton.text: "Pause"
+            }
+
+        },
+        State {
+            name: "paused"
+            when: playRecordAudio.playbackState === MediaPlayer.PausedState || playRecordAudio.playbackState === MediaPlayer.StoppedState
+
+            PropertyChanges {
+                playPauseButton.text: "Play"
+            }
+        }
+    ]
+
+    MediaPlayer {
+        id: playRecordAudio
+        audioOutput: AudioOutput {
+            //volume: volumeSlider.value / 100.0
+        }
+        onSourceChanged: {
+            play()
+        }
+    }
+
+
+
+}
+

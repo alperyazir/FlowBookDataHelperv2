@@ -1,0 +1,101 @@
+import QtQuick
+import QtQuick.Window
+import QtQuick.Controls
+import QtMultimedia
+
+ApplicationWindow {
+    id: mainwindow
+    //visibility: Window.Maximized
+    width: 1920// Screen.width
+    height: 1080 //Screen.height
+    visible: true
+    color: "#2c2a2a"
+
+    Colors {
+        id: myColors
+    }
+
+    FlowToolBar {
+        id: toolBar
+        onOutlineEnabled: {
+            content.outlineEnabled = enabled
+        }
+    }
+
+    Content{
+        id: content
+        anchors.top: toolBar.bottom
+        anchors.bottom: parent.bottom
+        width: 850
+        anchors.horizontalCenter: parent.horizontalCenter
+    }
+
+    FlowSideBar {
+        id: sideBar
+        width: parent.width/4
+        anchors.right: parent.right
+        anchors.top: toolBar.bottom
+        anchors.bottom: parent.bottom
+    }
+
+    Dialog {
+        id: confirmDialog
+        title: "Confirm Exit"
+        width: parent.width/4
+        height: parent.height/6
+        anchors.centerIn: parent
+        standardButtons: Dialog.Ok| Dialog.Cancel
+
+        FlowText {
+            text: "Are you sure to exit? \n Changes will be saved!"
+            wrapMode: Text.NoWrap
+            horizontalAlignment: Text.AlignHCenter
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            height: parent.height
+            color: "white"
+            font.pixelSize: 30
+        }
+
+        onAccepted: {
+            config.bookSets[0].saveToJson();
+            toast.show("Changes are saved to File!")
+
+            Qt.quit()
+        }
+
+        onRejected: {
+        }
+
+    }
+
+    FlowToast {
+        id: toast
+        width: parent.width / 6
+        height: 50
+    }
+
+
+    ActivityDialog {
+        id: activityDialog
+    }
+
+
+    Modules {
+        id: modules
+        anchors.left: parent.left
+        anchors.top: toolBar.bottom
+        anchors.bottom: parent.bottom
+        width: 150
+        book: config.bookSets[0].books[0]
+    }
+
+    // VideoOutput {
+    //     id: videoOutput
+    //     width: 1000
+    //     height: 1000
+    //     anchors.centerIn: parent
+    // }
+
+
+}
