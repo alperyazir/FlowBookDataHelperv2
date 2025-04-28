@@ -2281,13 +2281,13 @@ public:
 
         QString appDir = QGuiApplication::applicationDirPath();
 #ifdef Q_OS_MAC
-        appDir += "/../../../data/books";
+        appDir += "/../../../books";
 #else
         appDir += "/books";
 #endif \
         //QString filePath = QGuiApplication::applicationDirPath();
-        //qDebug() << appDir + "/" + _bookDirectoryName+ "/config.json";
-        QFile saveFile(appDir + "/" + _bookDirectoryName+ "/config.json");
+        //qDebug() <<  _bookDirectoryName+ "/config.json";
+        QFile saveFile(_bookDirectoryName+ "/config.json");
         if (!saveFile.open(QIODevice::WriteOnly)) {
             qWarning("Couldn't open save file.");
             return;
@@ -2433,8 +2433,13 @@ struct ConfigParser : public QObject {
     Q_PROPERTY(QString publisherName READ publisherName WRITE setPublisherName NOTIFY publisherNameChanged)
     Q_PROPERTY(QString bookTitle READ bookTitle WRITE setBookTitle NOTIFY bookTitleChanged)
     Q_PROPERTY(QString firstRunDate READ firstRunDate WRITE setFirstRunDate NOTIFY firstRunDateChanged)
+    Q_PROPERTY(QStringList recentProject READ recentProject WRITE setRecentProject NOTIFY recentProjectChanged FINAL)
 
 public:
+    static ConfigParser* instance() {
+        static ConfigParser* instance = new ConfigParser();
+        return instance;
+    }
 
     Q_INVOKABLE void refresh() {
         initialize();
@@ -2442,9 +2447,12 @@ public:
         // m_engine->load(url);
 
     }
-    explicit ConfigParser(QObject *parent = nullptr) : QObject(parent) {}
 
-    bool initialize(bool isFromFileSystem = false, const QString& path = "");
+    explicit ConfigParser(QObject *parent = nullptr);
+
+    Q_INVOKABLE bool initialize(bool isFromFileSystem = false, const QString& path = "");
+
+    Q_INVOKABLE void refreshRecentProjects();
     QVector<BookSet*> _bookSets;
 
     QVariantList bookSets() const {
@@ -2469,11 +2477,13 @@ public:
     QString decryptData(const QByteArray &byteArray, const QByteArray &key);
     void saveEncryptedJsonToFile(const QString &jsonString);
 
+
 private:
     QString _hostname;
     QString _publisher_name;
     QString _book_title;
     QString _first_run_date;
+    QStringList _recentProject;
 
     QString hostname() const { return _hostname; }
     void setHostname(const QString &hostname) {
@@ -2506,8 +2516,12 @@ private:
             emit firstRunDateChanged();
         }
     }
+
 public:
     void setEngine(QQmlApplicationEngine *engine) { m_engine = engine; }
+
+    QStringList recentProject() const;
+    void setRecentProject(const QStringList &newRecentProject);
 
 signals:
     void bookSetsChanged();
@@ -2515,6 +2529,8 @@ signals:
     void publisherNameChanged();
     void bookTitleChanged();
     void firstRunDateChanged();
+
+    void recentProjectChanged();
 
 private:
     QQmlApplicationEngine* m_engine;

@@ -18,11 +18,11 @@ ApplicationWindow {
     FlowToolBar {
         id: toolBar
         onOutlineEnabled: {
-            content.outlineEnabled = enabled
+            content.outlineEnabled = enabled;
         }
     }
 
-    Content{
+    Content {
         id: content
         anchors.top: toolBar.bottom
         anchors.bottom: parent.bottom
@@ -32,7 +32,7 @@ ApplicationWindow {
 
     FlowSideBar {
         id: sideBar
-        width: parent.width/4
+        width: parent.width / 4
         anchors.right: parent.right
         anchors.top: toolBar.bottom
         anchors.bottom: parent.bottom
@@ -41,10 +41,10 @@ ApplicationWindow {
     Dialog {
         id: confirmDialog
         title: "Confirm Exit"
-        width: parent.width/4
-        height: parent.height/6
+        width: parent.width / 4
+        height: parent.height / 6
         anchors.centerIn: parent
-        standardButtons: Dialog.Ok| Dialog.Cancel
+        standardButtons: Dialog.Ok | Dialog.Cancel
 
         FlowText {
             text: "Are you sure to exit? \n Changes will be saved!"
@@ -59,14 +59,12 @@ ApplicationWindow {
 
         onAccepted: {
             config.bookSets[0].saveToJson();
-            toast.show("Changes are saved to File!")
+            toast.show("Changes are saved to File!");
 
-            Qt.quit()
+            Qt.quit();
         }
 
-        onRejected: {
-        }
-
+        onRejected: {}
     }
 
     FlowToast {
@@ -75,20 +73,36 @@ ApplicationWindow {
         height: 50
     }
 
-
     ActivityDialog {
         id: activityDialog
     }
 
-
-    Modules {
-        id: modules
-        anchors.left: parent.left
-        anchors.top: toolBar.bottom
-        anchors.bottom: parent.bottom
-        width: 150
-        book: config.bookSets[0].books[0]
+    NewProjectDialog {
+        id: newProjectDialog
+        onAccepted: {
+            // Show progress dialog when starting processing
+            flowProgress.reset();
+            flowProgress.statusText = "Processing your project...";
+            flowProgress.addLogMessage("Starting project creation...");
+            flowProgress.open();
+        }
     }
+
+    FlowProgress {
+        id: flowProgress
+    }
+
+    OpenProject{
+        id: openProject
+    }
+
+    Connections {
+        target: config
+        onBookSetsChanged: {
+            print("Book is changed")
+        }
+    }
+
 
     // VideoOutput {
     //     id: videoOutput
@@ -96,6 +110,5 @@ ApplicationWindow {
     //     height: 1000
     //     anchors.centerIn: parent
     // }
-
 
 }

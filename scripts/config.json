@@ -1,0 +1,22 @@
+{
+    "publisher_name": "Universal ELT",
+    "book_pdf_path": "/Users/alperyazir/Dev/qt/FlowBookDataHelper2/This is Test Book.pdf",
+    "book_title": "This is Test Book",
+    "book_cover_path": "sad",
+    "audio_path": "asd",
+    "video_path": "asd",
+    "language": "tr",
+    "modules": [
+        {
+            "module_name": "Module 1",
+            "start": 1,
+            "end": 10
+        },
+        {
+            "module_name": "Module 2",
+            "start": 11,
+            "end": 25
+        }
+    ],
+    "output_path": "/Users/alperyazir/Dev/qt/FlowBookDataHelper2/build/Qt_6_5_3_for_macOS-Release/build/release/FlowBookDataHelper2.app/Contents/MacOS/../../../books"
+}

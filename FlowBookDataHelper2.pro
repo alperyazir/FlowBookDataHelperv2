@@ -6,11 +6,13 @@ QT += quick
 
 
 HEADERS += \
-    config/configparser.h
+    config/configparser.h \
+    pdfprocess/pdfprocess.h
 
 SOURCES += \
     config/configparser.cpp \
-    main.cpp
+    main.cpp \
+    pdfprocess/pdfprocess.cpp
 
 RESOURCES += qml.qrc
 

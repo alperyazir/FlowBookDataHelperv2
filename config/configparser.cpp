@@ -8,6 +8,7 @@
 #include <string>
 #include <sstream>
 #include <QRegularExpression>
+#include <QQmlContext>
 
 #include <QHostInfo>
 
@@ -60,6 +61,7 @@ bool BookSet::initialize(const QString &config_path)
         }
         _books.push_back(book);
     }
+    qDebug() << "Reading Book is succesfull";
     return true;
 }
 
@@ -377,14 +379,18 @@ QVector<Subtitles *> BookSet::getSubtitles(QString videoPath)
     return subtitles;
 }
 
+ConfigParser::ConfigParser(QObject *parent) : QObject(parent) {
+    refreshRecentProjects();
+}
+
 bool ConfigParser::initialize(bool isFromFileSystem, const QString &path)
 {
     if(!isFromFileSystem) {
         QString appDir = QGuiApplication::applicationDirPath();
 #ifdef Q_OS_MAC
-        appDir += "/../../../data/books";
+        appDir += "/../../../books/";
 #else
-        appDir += "/books";
+        appDir += "/books/";
 #endif
 
         QDir directory = appDir;
@@ -399,12 +405,18 @@ bool ConfigParser::initialize(bool isFromFileSystem, const QString &path)
             //saveEncryptedJsonToFile(R"({"test": "test", "alper":"alper"})");
             //saveEncryptedJsonToFile(getInformation(bset));
         }
+
         return result;
     }
+    _bookSets.clear();
     BookSet *bset = new BookSet;
     _bookSets.push_back(bset);
 
-    return bset->initialize(path);
+
+    bset->initialize(path);
+    bset->_bookDirectoryName = path;
+    bookSetsChanged();
+    return true;
 }
 
 QString ConfigParser::getInformation(BookSet *bset)
@@ -452,6 +464,38 @@ void ConfigParser::saveEncryptedJsonToFile(const QString& jsonString) {
         qWarning("Dosya açılamadı.");
     }
 }
+
+void ConfigParser::refreshRecentProjects()
+{
+    QString appDir = QGuiApplication::applicationDirPath();
+#ifdef Q_OS_MAC
+    appDir += "/../../../books/";
+#else
+    appDir += "/books/";
+#endif
+    QDir directory = appDir;
+    directory.setFilter(QDir::Dirs | QDir::NoDotAndDotDot);
+    auto dirList = directory.entryList();
+    QStringList recentProjects;
+    for (const auto& d : dirList) {
+        recentProjects.append(d);
+    }
+    setRecentProject(recentProjects);
+}
+
+QStringList ConfigParser::recentProject() const
+{
+    return _recentProject;
+}
+
+void ConfigParser::setRecentProject(const QStringList &newRecentProject)
+{
+    if (_recentProject == newRecentProject)
+        return;
+    _recentProject = newRecentProject;
+    emit recentProjectChanged();
+}
+
 
 QString ConfigParser::decryptData(const QByteArray& byteArray, const QByteArray& key) {
     QByteArray decryptedData = byteArray;

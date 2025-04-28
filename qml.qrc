@@ -66,6 +66,8 @@
         <file>icons/puzzle.png</file>
         <file>icons/selectCirclle.png</file>
         <file>qml/FlowSideBar.qml</file>
+        <file>qml/NewProjectDialog.qml</file>
+        <file>qml/FlowProgress.qml</file>
         <file>qml/groupboxes/AudioGroupBox.qml</file>
         <file>qml/groupboxes/VideoGroupBox.qml</file>
         <file>qml/newComponents/NewAudioComponent.qml</file>
@@ -92,5 +94,6 @@
         <file>qml/activities/ActivityCircle.qml</file>
         <file>qml/activities/ActivityMarkWithX.qml</file>
         <file>qml/groupboxes/activities/MarkWithX.qml</file>
+        <file>qml/OpenProject.qml</file>
     </qresource>
 </RCC>

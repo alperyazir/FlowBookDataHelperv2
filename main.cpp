@@ -7,6 +7,7 @@
 #include <QTranslator>
 
 #include "config/configparser.h"
+#include "pdfprocess/pdfprocess.h"
 
 int main(int argc, char *argv[])
 {
@@ -14,12 +15,15 @@ int main(int argc, char *argv[])
 
     qDebug("Application has just started :)");
 
-    // Config
-    ConfigParser *config = new ConfigParser;
-    if (!config->initialize()) {
-        qDebug() << "config has errors. Exiting...";
-        exit(1);
-    }
+    // // Config
+    //ConfigParser *config = new ConfigParser;
+    // if (!config->initialize()) {
+    //     qDebug() << "config has errors. Exiting...";
+    //     exit(1);
+    // }
+
+    auto config = ConfigParser::instance();
+    PdfProcess *pdfProcess = new PdfProcess;
 
     QQmlApplicationEngine engine;
     config->setEngine(&engine);
@@ -27,13 +31,15 @@ int main(int argc, char *argv[])
     QString appPath;
 
 
+
 #ifdef Q_OS_MAC // MacOS için özel kod
-    appPath = QGuiApplication::applicationDirPath() + "/../../../data/";
+    appPath = QGuiApplication::applicationDirPath() + "/../../../";
 #endif
 
     QQmlContext *rootContext = engine.rootContext();
     rootContext->setContextProperty("config", config);
     rootContext->setContextProperty("appPath", appPath);
+    rootContext->setContextProperty("pdfProcess", pdfProcess);
 
     const QUrl url(u"qrc:/qml/main.qml"_qs);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreated,
