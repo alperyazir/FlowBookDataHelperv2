@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Qt.labs.platform
+import QtMultimedia
 
 
 import "../../qml"
@@ -20,7 +21,8 @@ GroupBox {
             if (selectedFilePath) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
                 if (newPath) {
-                    // audioTextField.text = newPath
+                    audioTextField.text = newPath
+                    root.sectionModelData.audioExtra.path = newPath
                 } else {
                     console.log("Books klasörü bulunamadı.");
                 }
@@ -35,6 +37,7 @@ GroupBox {
     }
 
     property var activityModelData: undefined
+    property var sectionModelData: undefined
     signal removeSection()
     id: root
     title: qsTr("Activity")
@@ -119,6 +122,144 @@ GroupBox {
             width: parent.width
         }
 
+
+        Row {
+            width: parent.width * .9
+            spacing: 10
+            height: 40
+            FlowText {
+                text: "Audio Extra Path: "
+                color: "white"
+                anchors.centerIn: undefined
+                width: parent.width * .25
+                font.pixelSize: 15
+                verticalAlignment: Text.AlignBottom
+            }
+
+            // TextEdit bileşeni
+            TextField {
+                id: audioTextField
+                width: parent.width*.65
+                height: parent.height
+                placeholderText: "audio extra.mp3"
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                text: root.sectionModelData.audioExtra.path
+            }
+
+            Rectangle {
+                height: 40
+                width: parent.width * 0.1
+                anchors.verticalCenter: parent.verticalCenter
+                color: "white"
+                FlowText {
+                    text: "..."
+                    color: "black"
+                    anchors.centerIn: undefined
+                    width: parent.width
+                    height: 35
+                    font.pixelSize: 15
+                    verticalAlignment: Text.AlignBottom
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        fileDialog.folder = "file:" + appPath + root.audioModelData.path
+                        fileDialog.open()
+                    }
+                }
+            }
+        }
+
+
+
+
+        Row {
+            property bool isPlaying: playRecordAudio.playbackState === MediaPlayer.PlayingState
+            id: audioContrller
+            width: parent.width
+            height: 40
+            spacing: 5
+
+            Button {
+                id: playPauseButton
+                width: 60
+                anchors.verticalCenter: parent.verticalCenter
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        if (!audioContrller.isPlaying) {
+                            playRecordAudio.source = "file:" + appPath + audioTextField.text
+                            playRecordAudio.play()
+                        } else {
+                            playRecordAudio.pause()
+                        }
+                    }
+                }
+            }
+
+            Slider {
+                id: audioSlider
+                enabled: true
+                to: playRecordAudio.duration
+                value: playRecordAudio.position
+                width: parent.width - playPauseButton.width - audioContrller.spacing - stopButton.width
+                anchors.verticalCenter: parent.verticalCenter
+                onMoved: {
+                    if (playRecordAudio.seekable) {
+                        playRecordAudio.setPosition(value)
+                    } else {
+                        console.log("Media is not seekable!")
+                    }
+                }
+            }
+
+            Button {
+                id: stopButton
+                width: 60
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Stop"
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        playRecordAudio.stop()
+                    }
+                }
+            }
+        }
+
+        states: [
+            State {
+                name: "playing"
+                when: playRecordAudio.playbackState === MediaPlayer.PlayingState
+
+                PropertyChanges {
+                    playPauseButton.text: "Pause"
+                }
+
+            },
+            State {
+                name: "paused"
+                when: playRecordAudio.playbackState === MediaPlayer.PausedState || playRecordAudio.playbackState === MediaPlayer.StoppedState
+
+                PropertyChanges {
+                    playPauseButton.text: "Play"
+                }
+            }
+        ]
+
+        MediaPlayer {
+            id: playRecordAudio
+            audioOutput: AudioOutput {
+                //volume: volumeSlider.value / 100.0
+            }
+            onSourceChanged: {
+                play()
+            }
+        }
+
+
         Row {
             height: 40
             anchors.horizontalCenter: parent.horizontalCenter
@@ -171,6 +312,9 @@ GroupBox {
                 }
             }
         }
+
+
+
 
         Rectangle {
             id: confirmBox

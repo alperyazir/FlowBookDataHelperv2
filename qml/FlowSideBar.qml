@@ -13,6 +13,7 @@ Rectangle {
     property var audioModelData: undefined
     property var videoModelData: undefined
     property var activityModelData: undefined
+    property var sectionModelData: undefined
     property var fillModelData: undefined
     property var fillList: []
     property int fillIndex
@@ -20,11 +21,13 @@ Rectangle {
     property bool videoVisible: false
     property bool activityVisible: false
     property bool fillVisible: false
-
-
     property bool circleVisible: false
+    property bool fillwColorVisible: value
+    property bool drawMatchedVisible: value
     property var circleList: undefined
     property int circleIndex
+    property var fillWColorList: []
+    property var drawMatchedLineList: []
 
 
     color: "#131111"
@@ -50,6 +53,7 @@ Rectangle {
         id: activityGB
         visible: root.activityVisible
         activityModelData: root.activityModelData
+        sectionModelData: root.sectionModelData
 
         onRemoveSection: {
             page.removeSection(sectionIndex)
@@ -131,6 +135,52 @@ Rectangle {
         }
     }
 
+    FillWithColorGroupBox {
+        id: fillwColorGB
+        visible: root.fillwColorVisible
+        fillList: root.fillWColorList
+        page: root.page
+        sectionIndex: root.sectionIndex
+        fillIndex: root.fillIndex
+
+        onRemoveSection: {
+            page.removeSection(secIndex)
+            config.bookSets[0].saveToJson();
+            toast.show("Changes are saved to File!")
+        }
+
+        onRemoveAnswer: {
+            root.section.removeAnswer(answerIndex)
+            config.bookSets[0].saveToJson();
+            toast.show("Answer Removed!")
+
+            root.fillWColorList = root.section.answers
+        }
+    }
+
+    DrawMatchedLineGroupBox {
+        id: drawMatchedLineGB
+        visible: root.drawMatchedVisible
+        drawMatchedLineList: root.drawMatchedLineList
+        page: root.page
+        sectionIndex: root.sectionIndex
+        fillIndex: root.fillIndex
+
+        onRemoveSection: {
+            page.removeSection(secIndex)
+            config.bookSets[0].saveToJson();
+            toast.show("Changes are saved to File!")
+        }
+
+        onRemoveAnswer: {
+            root.section.removeAnswer(answerIndex)
+            config.bookSets[0].saveToJson();
+            toast.show("Answer Removed!")
+
+            root.drawMatchedLineList = root.section.answers
+        }
+    }
+
     function findBooksFolder(filePath, targetFolder) {
         // filePath'in boş olup olmadığını kontrol edelim
         // if (!filePath || typeof filePath !== 'string') {
@@ -175,6 +225,8 @@ Rectangle {
         activityVisible = false
         fillVisible = false
         circleVisible = false
+        fillwColorVisible = false
+        drawMatchedVisible = false
     }
 }
 

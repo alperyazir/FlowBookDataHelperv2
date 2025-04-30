@@ -276,7 +276,17 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
                     answer->_sourceCoords = QRect(cObj["x"].toInt(), cObj["y"].toInt(), cObj["w"].toInt(), cObj["h"].toInt());
                     answer->_sourceText = cObj["text"].toString();
                     answer->_rotation = aObj["rotation"].toDouble();
-
+                    answer->_color = aObj["color"].toString();
+                    answer->_isRound = aObj["isRound"].toBool();
+                    answer->_opacity = aObj["opacity"].toDouble();
+                    cObj = aObj["rectBegin"].toObject();
+                    answer->_rectBegin = QRect(cObj["x"].toInt(), cObj["y"].toInt(), cObj["w"].toInt(), cObj["h"].toInt());
+                    cObj = aObj["rectEnd"].toObject();
+                    answer->_rectEnd = QRect(cObj["x"].toInt(), cObj["y"].toInt(), cObj["w"].toInt(), cObj["h"].toInt());
+                    cObj = aObj["lineBegin"].toObject();
+                    answer->_lineBegin = QPoint(cObj["x"].toInt(), cObj["y"].toInt());
+                    cObj = aObj["lineEnd"].toObject();
+                    answer->_lineEnd = QPoint(cObj["x"].toInt(), cObj["y"].toInt());
                     section->_answers.push_back(answer);
                 }
 

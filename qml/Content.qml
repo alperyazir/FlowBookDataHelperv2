@@ -24,13 +24,14 @@ Rectangle {
 
             Loader {
                 id: pageLoader
+
                 active: Math.abs(index - pageView.currentIndex) <= 1 // Sadece aktif ve komşu sayfalar yüklensin
                 sourceComponent: pageDetailsComponent
                 property var page: pages[index]
                 onLoaded: {
                     if (item) {
                         item.page = page;
-                        item.outlineEnabled = root.outlineEnabled;
+                        //item.outlineEnabled = root.outlineEnabled;
                     }
                 }
             }
@@ -49,6 +50,7 @@ Rectangle {
                 root.currentPageDetails = loader.item;
             }
             toolBar.currentPageNumber = pageView.currentIndex + pages[0].page_number;
+            toolBar.setModuleText();
         }
     }
 
@@ -56,6 +58,16 @@ Rectangle {
         if (pageView.currentIndex < pagesRepeater.count) {
             sideBar.hideAllComponent();
             pageView.currentIndex++;
+        }
+    }
+
+    function getModuleName() {
+        for (var i = 0; i < config.bookSets[0].books[0].modules.length; i++) {
+            for (var j in config.bookSets[0].books[0].modules[i].pages) {
+                if (config.bookSets[0].books[0].pages[pageView.currentIndex] === config.bookSets[0].books[0].modules[i].pages[j]) {
+                    return config.bookSets[0].books[0].modules[i].name;
+                }
+            }
         }
     }
 

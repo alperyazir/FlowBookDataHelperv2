@@ -79,7 +79,7 @@ GroupBox {
 
                             TextField {
                                 id: rectTextField
-                                width: parent.width * .75
+                                width: parent.width * .45
                                 height: parent.height
                                 text: modelData.text
                                 horizontalAlignment: Text.AlignHCenter
@@ -89,27 +89,38 @@ GroupBox {
                                 }
                             }
 
-                            Rectangle {
-                                height: width
-                                width: parent.width * 0.1
+                            FlowText {
+                                text: "Rotation: "
                                 color: "white"
+                                anchors.centerIn: undefined
+                                width: parent.width * .10
+                                font.pixelSize: 15
+                                verticalAlignment: Text.AlignBottom
+                            }
 
-                                FlowText {
-                                    text: "Delete"
-                                    color: "black"
-                                    width: parent.width
-                                    height: width
-                                    font.pixelSize: 15
-                                    verticalAlignment: Text.AlignBottom
-
+                            SpinBox {
+                                id: rectRotationField
+                                width: parent.width * .20
+                                height: parent.height
+                                value: modelData.rotation
+                                editable: true
+                                from: -180
+                                to: 180
+                                onValueChanged: {
+                                    modelData.rotation = value
                                 }
+                            }
 
+                            Button {
+                                text: "X"
+                                height: 40
                                 MouseArea {
                                     anchors.fill: parent
                                     onClicked: {
                                         confirmBox.visible = true
                                         confirmBox.type = "answer"
                                         confirmBox.index = index
+                                        config.bookSets[0].saveToJson();
                                     }
                                 }
                             }

@@ -10,6 +10,7 @@ Dialog {
     width: 600
     height: 800
     modal: true
+    closePolicy: Popup.NoAutoClose // Prevents dialog from closing when clicking outside
     anchors.centerIn: parent
     standardButtons: Dialog.Ok | Dialog.Cancel
     background: Rectangle {

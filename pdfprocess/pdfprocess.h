@@ -1,14 +1,19 @@
-
 #pragma once
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 
 class PdfProcess: public QObject {
     Q_OBJECT
 public:
     Q_INVOKABLE void startProcessing(const QString &pdfConfig);
+    Q_INVOKABLE QStringList getTestVersions() const;
+    Q_INVOKABLE bool copyBookToTestVersion(const QString &testVersion, const QString &currentBookName);
+    Q_INVOKABLE bool launchTestFlowBook(const QString &testVersion);
+    Q_INVOKABLE bool packageForPlatforms(const QStringList &platforms, const QString &currentBookName);
+    
     int _progress;
     QString _logMessages;
 
@@ -16,6 +21,9 @@ public:
     void setProgress(int newProgress);
     QString logMessages() const;
     void setLogMessages(const QString &newLogMessages);
+    bool removeDir(const QString &dirPath);
+    bool copyDir(const QString &srcPath, const QString &dstPath);
+    bool zipFolder(const QString &sourceDir, const QString &zipFilePath);
 
 signals:
     void progressChanged();
@@ -24,4 +32,10 @@ signals:
 private:
     Q_PROPERTY(int progress READ progress WRITE setProgress NOTIFY progressChanged FINAL)
     Q_PROPERTY(QString logMessages READ logMessages WRITE setLogMessages NOTIFY logMessagesChanged FINAL)
+    
+    QString getPlatformFolderName(const QString &platform) const;
+    QString getLatestFlowBookVersion(const QString &platformPath) const;
+
+    bool package(const QStringList &platforms, const QString &currentBookName);
+
 };

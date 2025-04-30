@@ -10,10 +10,12 @@ Dialog {
     height: 500
     modal: true
     anchors.centerIn: parent
+    closePolicy: Popup.NoAutoClose // Prevents dialog from closing when clicking outside
     standardButtons: Dialog.Ok | Dialog.Cancel
 
     // Signal to emit when a project is selected
     signal projectSelected(string projectPath)
+    property string currentProject
 
     // Property to hold the selected project path
     property string selectedProjectPath: ""
@@ -162,6 +164,7 @@ Dialog {
                             onClicked: {
                                 // Set the selected project path
                                 var projectDir = appPath + "books/" +model.name
+                                currentProject = model.name
 
                                 selectedProjectPath = projectDir;
                                 pathTextField.text = projectDir;

@@ -152,9 +152,20 @@ struct Answer : public QObject {
     Q_PROPERTY(QVariantList group READ group WRITE setGroup NOTIFY groupChanged)
     Q_PROPERTY(bool isTrueSection READ isTrueSection WRITE setIsTrueSection NOTIFY isTrueSectionChanged)
 
+    // Yeni eklenen özellikler
+    Q_PROPERTY(QString color READ color WRITE setColor NOTIFY colorChanged)
+    Q_PROPERTY(bool isRound READ isRound WRITE setIsRound NOTIFY isRoundChanged)
+    Q_PROPERTY(double opacity READ opacity WRITE setOpacity NOTIFY opacityChanged)
+    Q_PROPERTY(QRect rectBegin READ rectBegin WRITE setRectBegin NOTIFY rectBeginChanged)
+    Q_PROPERTY(QRect rectEnd READ rectEnd WRITE setRectEnd NOTIFY rectEndChanged)
+    Q_PROPERTY(QPoint lineBegin READ lineBegin WRITE setLineBegin NOTIFY lineBeginChanged)
+    Q_PROPERTY(QPoint lineEnd READ lineEnd WRITE setLineEnd NOTIFY lineEndChanged)
+
 public:
     explicit Answer(QObject *parent = nullptr) :
-        QObject(parent), _no(0), _isCorrect(false), _diagonal(false), _rotation(0.0), _isTrueSection(false) {}
+        QObject(parent), _no(0), _isCorrect(false), _diagonal(false),
+        _rotation(0.0), _isTrueSection(false),
+        _isRound(false), _opacity(1.0) {}
 
     int _no;
     QRect _coords;
@@ -170,6 +181,16 @@ public:
     QVector<QString> _group;
     bool _isTrueSection;
 
+    // Yeni değişkenler
+    QString _color;
+    bool _isRound;
+    double _opacity;
+    QRect _rectBegin;
+    QRect _rectEnd;
+    QPoint _lineBegin;
+    QPoint _lineEnd;
+
+    // Mevcut getter/setter'lar...
     int no() const { return _no; }
     void setNo(int no) {
         if (_no != no) {
@@ -293,29 +314,86 @@ public:
         }
     }
 
+    // Yeni eklenen getter/setter'lar
+    QString color() const { return _color; }
+    void setColor(const QString &color) {
+        if (_color != color) {
+            _color = color;
+            emit colorChanged();
+        }
+    }
+
+    bool isRound() const { return _isRound; }
+    void setIsRound(bool isRound) {
+        if (_isRound != isRound) {
+            _isRound = isRound;
+            emit isRoundChanged();
+        }
+    }
+
+    double opacity() const { return _opacity; }
+    void setOpacity(double opacity) {
+        if (!qFuzzyCompare(_opacity, opacity)) {
+            _opacity = opacity;
+            emit opacityChanged();
+        }
+    }
+
+    QRect rectBegin() const { return _rectBegin; }
+    void setRectBegin(const QRect &rectBegin) {
+        if (_rectBegin != rectBegin) {
+            _rectBegin = rectBegin;
+            emit rectBeginChanged();
+        }
+    }
+
+    QRect rectEnd() const { return _rectEnd; }
+    void setRectEnd(const QRect &rectEnd) {
+        if (_rectEnd != rectEnd) {
+            _rectEnd = rectEnd;
+            emit rectEndChanged();
+        }
+    }
+
+    QPoint lineBegin() const { return _lineBegin; }
+    void setLineBegin(const QPoint &lineBegin) {
+        if (_lineBegin != lineBegin) {
+            _lineBegin = lineBegin;
+            emit lineBeginChanged();
+        }
+    }
+
+    QPoint lineEnd() const { return _lineEnd; }
+    void setLineEnd(const QPoint &lineEnd) {
+        if (_lineEnd != lineEnd) {
+            _lineEnd = lineEnd;
+            emit lineEndChanged();
+        }
+    }
+
     QJsonObject toJson() const {
         QJsonObject answerObj;
-        
+
         if (!_text.isEmpty()) {
             answerObj["text"] = _text;
         }
-        
+
         if (_no != 0) {
             answerObj["no"] = _no;
         }
-        
+
         if (_diagonal) {
             answerObj["diagonal"] = _diagonal;
         }
-        
+
         if (!_diagonalSide.isEmpty()) {
             answerObj["diagonal_side"] = _diagonalSide;
         }
-        
+
         if (_isCorrect) {
             answerObj["isCorrect"] = _isCorrect;
         }
-        
+
         if (!_realAnswer.isEmpty()) {
             answerObj["real_answer"] = _realAnswer;
         }
@@ -341,7 +419,7 @@ public:
         if (!_sourceText.isEmpty()) {
             answerObj["sourceText"] = _sourceText;
         }
-        
+
         if (!qFuzzyIsNull(_rotation)) {
             answerObj["rotation"] = _rotation;
         }
@@ -362,6 +440,51 @@ public:
             answerObj["group"] = groupArray;
         }
 
+        // Yeni özellikler JSON'a eklendi
+        if (!_color.isEmpty()) {
+            answerObj["color"] = _color;
+        }
+
+        if (_isRound) {
+            answerObj["isRound"] = _isRound;
+        }
+
+        if (!qFuzzyIsNull(_opacity)) {
+            answerObj["opacity"] = _opacity;
+        }
+
+        if (!_rectBegin.isNull() && _rectBegin.isValid()) {
+            QJsonObject rectBeginObj;
+            rectBeginObj["x"] = _rectBegin.x();
+            rectBeginObj["y"] = _rectBegin.y();
+            rectBeginObj["w"] = _rectBegin.width();
+            rectBeginObj["h"] = _rectBegin.height();
+            answerObj["rectBegin"] = rectBeginObj;
+        }
+
+        if (!_rectEnd.isNull() && _rectEnd.isValid()) {
+            QJsonObject rectEndObj;
+            rectEndObj["x"] = _rectEnd.x();
+            rectEndObj["y"] = _rectEnd.y();
+            rectEndObj["w"] = _rectEnd.width();
+            rectEndObj["h"] = _rectEnd.height();
+            answerObj["rectEnd"] = rectEndObj;
+        }
+
+        if (!_lineBegin.isNull()) {
+            QJsonObject lineBeginObj;
+            lineBeginObj["x"] = _lineBegin.x();
+            lineBeginObj["y"] = _lineBegin.y();
+            answerObj["lineBegin"] = lineBeginObj;
+        }
+
+        if (!_lineEnd.isNull()) {
+            QJsonObject lineEndObj;
+            lineEndObj["x"] = _lineEnd.x();
+            lineEndObj["y"] = _lineEnd.y();
+            answerObj["lineEnd"] = lineEndObj;
+        }
+
         return answerObj;
     }
 
@@ -379,6 +502,15 @@ signals:
     void lettersChanged();
     void groupChanged();
     void isTrueSectionChanged();
+
+    // Yeni sinyaller
+    void colorChanged();
+    void isRoundChanged();
+    void opacityChanged();
+    void rectBeginChanged();
+    void rectEndChanged();
+    void lineBeginChanged();
+    void lineEndChanged();
 };
 
 struct MatchWord : public QObject {
@@ -589,11 +721,12 @@ public:
         Answer *answer = new Answer;
         answer->setCoords(QRect(x,y,w,h));
         answer->setText(text);
-        qDebug() << "W" << w << "H" << h;
 
         _answers.push_back(answer);
         emit answersChanged();
     }
+
+
 
     Q_INVOKABLE void removeAnswer(int index) {
         if (index >= 0 && index < _answers.size()) {
@@ -1277,11 +1410,23 @@ public:
         emit answersChanged();
     }
 
-    Q_INVOKABLE Answer* createNewAnswer(int x, int y, int w, int h, const QString &text = "Dummy Text" ) {
+    Q_INVOKABLE Answer* createNewAnswer(int x, int y, int w, int h, const QString &text = "" ) {
         Answer *answer = new Answer;
         answer->setCoords(QRect(x,y,w,h));
         answer->setText(text);
 
+        _answers.push_back(answer);
+        emit answersChanged();
+        return answer;
+    }
+
+    Q_INVOKABLE Answer * createNewAnswerDrawMacthedLine(int x, int y, int w, int h ) {
+        Answer *answer = new Answer;
+        answer->setRectBegin(QRect(x,y,w,h));
+        answer->setRectEnd(QRect(x+ 150,y,w,h));
+        answer->setLineBegin(QPoint(x, y));
+        answer->setLineEnd(QPoint(x+150, y));
+        answer->setOpacity(0.5);
         _answers.push_back(answer);
         emit answersChanged();
         return answer;
@@ -2435,6 +2580,7 @@ struct ConfigParser : public QObject {
     Q_PROPERTY(QString firstRunDate READ firstRunDate WRITE setFirstRunDate NOTIFY firstRunDateChanged)
     Q_PROPERTY(QStringList recentProject READ recentProject WRITE setRecentProject NOTIFY recentProjectChanged FINAL)
 
+
 public:
     static ConfigParser* instance() {
         static ConfigParser* instance = new ConfigParser();
@@ -2484,6 +2630,7 @@ private:
     QString _book_title;
     QString _first_run_date;
     QStringList _recentProject;
+    QString _currentProjectPath;
 
     QString hostname() const { return _hostname; }
     void setHostname(const QString &hostname) {
@@ -2523,6 +2670,9 @@ public:
     QStringList recentProject() const;
     void setRecentProject(const QStringList &newRecentProject);
 
+    QString currentProjectName() const;
+    void setCurrentProjectName(const QString &newCurrentProjectName);
+
 signals:
     void bookSetsChanged();
     void hostnameChanged();
@@ -2531,6 +2681,7 @@ signals:
     void firstRunDateChanged();
 
     void recentProjectChanged();
+
 
 private:
     QQmlApplicationEngine* m_engine;

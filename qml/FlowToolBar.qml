@@ -43,17 +43,40 @@ Rectangle {
                 openProject.open()
             }
         }
-        CheckBox {
-            id: checkOutline
-            checked: true
-            onCheckedChanged: root.outlineEnabled(checked)
-            text: "Outline"
+
+        Button {
             anchors.verticalCenter: parent.verticalCenter
+            text: "Test"
+            width: 70
             height: 40
+            onClicked: {
+                testDialog.currentProject = openProject.currentProject
+                testDialog.open()
+            }
         }
+
+        Button {
+            anchors.verticalCenter: parent.verticalCenter
+            text: "Package"
+            width: 100
+            height: 40
+            onClicked: {
+                packageDialog.currentProject = openProject.currentProject
+                packageDialog.open()
+            }
+        }
+        // CheckBox {
+        //     id: checkOutline
+        //     checked: false
+        //     onCheckedChanged: root.outlineEnabled(checked)
+        //     text: "Outline"
+        //     anchors.verticalCenter: parent.verticalCenter
+        //     height: 40
+        // }
     }
 
     Row {
+        id: pagesRow
         height: parent.height
         anchors.horizontalCenter: parent.horizontalCenter
         Button {
@@ -100,22 +123,61 @@ Rectangle {
     }
 
     Rectangle {
+        id: moduleBtn
         anchors.verticalCenter: parent.verticalCenter
-        anchors.right: parent.right
-        anchors.rightMargin: 10
-        width: 40
+        anchors.left: pagesRow.right
+        anchors.leftMargin: 50
+        width: 100
         height: 40
-        color: "red"
+        color: "gray"
+        border.color: "black"
+        border.width: 1
         FlowText {
-            text: qsTr("X")
-            color: "white"
+            id: moduleTxt
+            color: "black"
+            width: parent.width * .7
+            height: parent.height
         }
 
-        MouseArea {
-            anchors.fill: parent
-            onClicked: {
-                confirmDialog.open();
-            }
-        }
+
     }
+
+    CheckBox {
+        id: moduleSideListCB
+        text: "isModuleSideLeft"
+        checked: false
+        anchors.verticalCenter: parent.verticalCenter
+        height: parent.height
+        anchors.left: moduleBtn.right
+        anchors.leftMargin: 30
+        onCheckedChanged: {
+            config.bookSets[0].books[0].isModuleSideLeft = checked
+            config.bookSets[0].saveToJson();
+        }
+
+    }
+    function setModuleText() {
+        moduleTxt.text = content.getModuleName()
+    }
+
+    // Rectangle {
+    //     id: closeBtn
+    //     anchors.verticalCenter: parent.verticalCenter
+    //     anchors.right: parent.right
+    //     anchors.rightMargin: 10
+    //     width: 40
+    //     height: 40
+    //     color: "red"
+    //     FlowText {
+    //         text: qsTr("X")
+    //         color: "white"
+    //     }
+
+    //     MouseArea {
+    //         anchors.fill: parent
+    //         onClicked: {
+    //             confirmDialog.open();
+    //         }
+    //     }
+    // }
 }

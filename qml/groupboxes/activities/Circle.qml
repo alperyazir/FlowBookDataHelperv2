@@ -114,7 +114,7 @@ Column {
         }
 
         Rectangle {
-            height: width
+            height: 40
             width: parent.width * 0.1
             anchors.verticalCenter: parent.verticalCenter
             color: "white"
@@ -123,7 +123,7 @@ Column {
                 color: "black"
                 anchors.centerIn: undefined
                 width: parent.width
-                height: width
+                height: 35
                 font.pixelSize: 15
                 verticalAlignment: Text.AlignBottom
             }

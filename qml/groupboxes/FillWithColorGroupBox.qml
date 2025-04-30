@@ -9,14 +9,14 @@ import "../../qml"
 
 GroupBox {
 
-    property var circleList: []
-    property int circleIndex
+    property var fillList: []
+    property int fillIndex
     property var page
     property int sectionIndex
     signal removeSection(int secIndex)
     signal removeAnswer(int answerIndex)
     id: root
-    title: qsTr("Circles")
+    title: qsTr("Fills With Color")
     width: parent.width * .98
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.verticalCenter: parent.verticalCenter
@@ -37,7 +37,7 @@ GroupBox {
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
-                        sideBar.circleVisible = false
+                        sideBar.fillwColorVisible = false
                     }
                 }
             }
@@ -57,7 +57,7 @@ GroupBox {
                     height: 500
                     id: rectRepeater
                     orientation: ListView.Vertical
-                    model: root.circleList
+                    model: root.fillList
                     clip: true
 
                     delegate: ItemDelegate {
@@ -65,11 +65,33 @@ GroupBox {
                         height: 40
                         Row {
                             width: parent.width * .9
-                            spacing: 10
+                            spacing: 5
                             height: 40
 
                             FlowText {
-                                text: "Circle: "
+                                text: "Color: "
+                                color: "white"
+                                anchors.centerIn: undefined
+                                width: parent.width * .12
+                                font.pixelSize: 15
+                                verticalAlignment: Text.AlignBottom
+                            }
+
+                            TextField {
+                                id: rectTextField
+                                width: parent.width * .20
+                                height: parent.height
+                                text: modelData.color
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                onTextChanged: {
+                                    modelData.color = text
+                                }
+                                placeholderText: "Ex:#00ff55"
+                            }
+
+                            FlowText {
+                                text: "Opacity: "
                                 color: "white"
                                 anchors.centerIn: undefined
                                 width: parent.width * .15
@@ -77,14 +99,28 @@ GroupBox {
                                 verticalAlignment: Text.AlignBottom
                             }
 
-                            CheckBox {
-                                id: isTrue
-                                text: "isCorrect"
+                            TextField {
+                                id: rectTextOpacity
+                                width: parent.width * .10
                                 height: parent.height
-                                width: parent.width * .75
-                                checked: false
+                                text: modelData.opacity
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                onTextChanged: {
+                                    modelData.opacity = Number(text)
+                                    config.bookSets[0].saveToJson();
+                                }
+                                placeholderText: "0.5"
+                            }
+
+                            CheckBox {
+                                id: isRoubdCb
+                                checked: modelData.isRound
+                                width: parent.width * .15
+                                height: parent.height
+                                text: "Round"
                                 onCheckedChanged: {
-                                    modelData.isCorrect = checked
+                                    modelData.isRound = isRoubdCb.checked
                                 }
                             }
 
@@ -159,7 +195,7 @@ GroupBox {
                         onClicked: {
                             if (confirmBox.type === "section") {
                                 root.removeSection(root.sectionIndex)
-                                sideBar.circleVisible = false
+                                sideBar.fillwColorVisible = false
                             } else if (confirmBox.type === "answer") {
                                 root.removeAnswer(confirmBox.index)
                             }

@@ -92,17 +92,24 @@ ApplicationWindow {
         id: flowProgress
     }
 
-    OpenProject{
+    OpenProject {
         id: openProject
+    }
+
+    TestDialog {
+        id: testDialog
+    }
+
+    PackageDialog {
+        id: packageDialog
     }
 
     Connections {
         target: config
         onBookSetsChanged: {
-            print("Book is changed")
+            print("Book is changed");
         }
     }
-
 
     // VideoOutput {
     //     id: videoOutput

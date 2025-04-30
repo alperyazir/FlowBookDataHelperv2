@@ -95,5 +95,9 @@
         <file>qml/activities/ActivityMarkWithX.qml</file>
         <file>qml/groupboxes/activities/MarkWithX.qml</file>
         <file>qml/OpenProject.qml</file>
+        <file>qml/groupboxes/FillWithColorGroupBox.qml</file>
+        <file>qml/groupboxes/DrawMatchedLineGroupBox.qml</file>
+        <file>qml/TestDialog.qml</file>
+        <file>qml/PackageDialog.qml</file>
     </qresource>
 </RCC>
