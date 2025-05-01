@@ -12,6 +12,7 @@
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
+    app.setWindowIcon(QIcon(":/logo/logo.png"));
 
     qDebug("Application has just started :)");
 
