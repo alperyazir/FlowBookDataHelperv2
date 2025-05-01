@@ -181,6 +181,7 @@ GroupBox {
                 height: 36
                 text: root.sectionModelData.audioExtra.path
                 placeholderText: "audio extra path "
+                placeholderTextColor: "gray"
                 color: "white"
 
                 background: Rectangle {

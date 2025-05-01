@@ -119,6 +119,7 @@ GroupBox {
                 height: 36
                 text: root.videoModelData.video.path
                 placeholderText: "Enter the video path"
+                placeholderTextColor: "gray"
                 color: "white"
 
                 background: Rectangle {

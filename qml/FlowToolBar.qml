@@ -168,6 +168,7 @@ Rectangle {
             }
             selectionColor: "#00e6e6"
             placeholderText: "Page"
+            placeholderTextColor: "gray"
             validator: IntValidator {
                 bottom: pageNumberInput.firstPage
                 top: pageNumberInput.lastPage
@@ -235,6 +236,7 @@ Rectangle {
         anchors.left: moduleBtn.right
         anchors.leftMargin: 30
         height: parent.height
+        width: 150
         indicator: Rectangle {
             width: 18
             height: 18
@@ -244,6 +246,15 @@ Rectangle {
             border.width: 1
             anchors.verticalCenter: parent.verticalCenter
         }
+
+        contentItem: Text {
+                text: parent.text
+                color: "white"  // Turkuaz renk
+                font.pixelSize: 16
+                anchors.verticalCenter: parent.verticalCenter
+                horizontalAlignment: Text.AlignRight
+                verticalAlignment: Text.AlignVCenter
+            }
         onCheckedChanged: {
             config.bookSets[0].books[0].isModuleSideLeft = checked;
             config.bookSets[0].saveToJson();

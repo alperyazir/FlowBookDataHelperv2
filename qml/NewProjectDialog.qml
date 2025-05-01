@@ -195,6 +195,7 @@ Dialog {
                 Layout.fillWidth: true
                 readOnly: false
                 placeholderText: "pdf path"
+                placeholderTextColor: "gray"
                 color: "white"
                 background: Rectangle {
                     color: "#1A2327"
@@ -265,6 +266,7 @@ Dialog {
                         Layout.fillWidth: true
                         readOnly: false
                         placeholderText: "publisher name"
+                        placeholderTextColor: "gray"
                         color: "white"
                         background: Rectangle {
                             color: "#1A2327"
@@ -291,6 +293,7 @@ Dialog {
                         Layout.fillWidth: true
                         readOnly: false
                         placeholderText: "book title"
+                        placeholderTextColor: "gray"
                         color: "white"
                         background: Rectangle {
                             color: "#1A2327"
@@ -384,6 +387,7 @@ Dialog {
                         Layout.fillWidth: true
                         readOnly: false
                         placeholderText: "cover image"
+                        placeholderTextColor: "gray"
                         color: "white"
                         background: Rectangle {
                             color: "#1A2327"
@@ -437,6 +441,7 @@ Dialog {
                         Layout.fillWidth: true
                         readOnly: false
                         placeholderText: "folder"
+                        placeholderTextColor: "gray"
                         color: "white"
                         background: Rectangle {
                             color: "#1A2327"
@@ -490,6 +495,7 @@ Dialog {
                         Layout.fillWidth: true
                         readOnly: false
                         placeholderText: "folder"
+                        placeholderTextColor: "gray"
                         color: "white"
                         background: Rectangle {
                             color: "#1A2327"
@@ -543,6 +549,7 @@ Dialog {
                         Layout.fillWidth: true
                         readOnly: false
                         placeholderText: "Output Path"
+                        placeholderTextColor: "gray"
                         color: "white"
                         text: appPath + "books"
                         background: Rectangle {
@@ -655,6 +662,7 @@ Dialog {
                                         text: model.name
                                         Layout.preferredWidth: 200
                                         placeholderText: "Enter Module Name"
+                                        placeholderTextColor: "gray"
                                         onTextChanged: model.name = text
                                         color: "white"
                                         background: Rectangle {

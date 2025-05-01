@@ -127,6 +127,7 @@ Column {
                         verticalAlignment: Text.AlignVCenter
                         text: modelData.word
                         placeholderText: "add..."
+                        placeholderTextColor: "gray"
                         background: Rectangle {
                             color: "#1A2327"
                             border.color: parent.focus ? "#009ca6" : "#445055"
@@ -143,6 +144,7 @@ Column {
                         verticalAlignment: Text.AlignVCenter
                         text: modelData.imagePath
                         placeholderText: "add path..."
+                        placeholderTextColor: "gray"
                         background: Rectangle {
                             color: "#1A2327"
                             border.color: parent.focus ? "#009ca6" : "#445055"
@@ -249,6 +251,7 @@ Column {
                         verticalAlignment: Text.AlignVCenter
                         text: getMathcedIndex(modelData.word)
                         placeholderText: "."
+                        placeholderTextColor: "gray"
                         background: Rectangle {
                             color: "#1A2327"
                             border.color: parent.focus ? "#009ca6" : "#445055"
@@ -265,6 +268,7 @@ Column {
                         verticalAlignment: Text.AlignVCenter
                         text: modelData.sentence
                         placeholderText: "add..."
+                        placeholderTextColor: "gray"
                         background: Rectangle {
                             color: "#1A2327"
                             border.color: parent.focus ? "#009ca6" : "#445055"
@@ -281,6 +285,7 @@ Column {
                         verticalAlignment: Text.AlignVCenter
                         text: modelData.imagePath
                         placeholderText: "add path..."
+                        placeholderTextColor: "gray"
                         background: Rectangle {
                             color: "#1A2327"
                             border.color: parent.focus ? "#009ca6" : "#445055"

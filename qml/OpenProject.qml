@@ -154,6 +154,7 @@ Dialog {
                 id: pathTextField
                 Layout.fillWidth: true
                 placeholderText: "path"
+                placeholderTextColor: "gray"
                 color: "white"
                 background: Rectangle {
                     color: "#1A2327"

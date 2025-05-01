@@ -121,6 +121,7 @@ GroupBox {
                 height: 36
                 text: root.audioModelData.audioPath
                 placeholderText: "Enter the audio path"
+                placeholderTextColor: "gray"
                 color: "white"
 
                 background: Rectangle {

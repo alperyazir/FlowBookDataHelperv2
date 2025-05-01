@@ -136,6 +136,7 @@ GroupBox {
                                 text: modelData.color
                                 color: "white"
                                 placeholderText: "Ex: #00ff55"
+                                placeholderTextColor: "gray"
                                 horizontalAlignment: Text.AlignHCenter
 
                                 background: Rectangle {
@@ -165,6 +166,7 @@ GroupBox {
                                 text: modelData.opacity
                                 color: "white"
                                 placeholderText: "0.5"
+                                placeholderTextColor: "gray"
                                 horizontalAlignment: Text.AlignHCenter
 
                                 background: Rectangle {

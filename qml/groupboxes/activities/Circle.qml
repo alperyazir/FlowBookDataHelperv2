@@ -75,7 +75,8 @@ Column {
         TextField {
             width: parent.width * .75
             height: parent.height
-            placeholderText: "Cricle the right answer."
+            placeholderText: "Circle the right answer."
+            placeholderTextColor: "gray"
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             text: root.activityModelData.headerText
@@ -110,6 +111,7 @@ Column {
             width: parent.width * .75
             height: parent.height
             placeholderText: "Enter Image Path"
+            placeholderTextColor: "gray"
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             text: root.activityModelData.sectionPath
