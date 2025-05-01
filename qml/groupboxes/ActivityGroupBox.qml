@@ -40,26 +40,65 @@ GroupBox {
     property var sectionModelData: undefined
     signal removeSection()
     id: root
-    title: qsTr("Activity")
+    title: qsTr("")
     width: parent.width * .98
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.verticalCenter: parent.verticalCenter
     onActivityModelDataChanged: {
     }
 
+    background: Rectangle {
+        color: "#232f34"
+        border.color: "#009ca6"
+        border.width: 1
+        radius: 6
+    }
+
     // Custom title style
     Column {
         anchors.fill: parent
-        spacing: 10
-
+        anchors.leftMargin: 20
+        anchors.rightMargin: 20
+        spacing: 15
         Row {
+            width: parent.width
             height: 40
-            anchors.right: parent.right
+            spacing: 10
+
+            Text {
+                text: "Activity"
+                color: "white"
+                font.pixelSize: 24
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Item {
+                width: parent.width - closeButton.width - 90
+                height: 1
+            }
 
             Button {
                 id: closeButton
                 text: "X"
-                height: 40
+                width: 32
+                height: 32
+                anchors.verticalCenter: parent.verticalCenter
+
+                background: Rectangle {
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 4
+                }
+
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    font.pixelSize: 14
+                }
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
@@ -122,78 +161,98 @@ GroupBox {
             width: parent.width
         }
 
-
         Row {
             width: parent.width * .9
             spacing: 10
             height: 40
-            FlowText {
-                text: "Audio Extra Path: "
+
+            Text {
+                text: " Path:"
                 color: "white"
-                anchors.centerIn: undefined
-                width: parent.width * .25
-                font.pixelSize: 15
-                verticalAlignment: Text.AlignBottom
+                font.pixelSize: 14
+                width: 60
+                anchors.verticalCenter: parent.verticalCenter
             }
 
-            // TextEdit bileşeni
+
             TextField {
                 id: audioTextField
-                width: parent.width*.65
-                height: parent.height
-                placeholderText: "audio extra.mp3"
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+                width: parent.width - 100
+                height: 36
                 text: root.sectionModelData.audioExtra.path
+                placeholderText: "audio extra path "
+                color: "white"
+
+                background: Rectangle {
+                    color: "#1A2327"
+                    border.color: parent.focus ? "#009ca6" : "#445055"
+                    border.width: 1
+                    radius: 4
+                }
             }
 
-            Rectangle {
-                height: 40
-                width: parent.width * 0.1
+            Button {
+                width: 36
+                height: 36
                 anchors.verticalCenter: parent.verticalCenter
-                color: "white"
-                FlowText {
+
+                background: Rectangle {
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 4
+                }
+
+                contentItem: Text {
                     text: "..."
-                    color: "black"
-                    anchors.centerIn: undefined
-                    width: parent.width
-                    height: 35
-                    font.pixelSize: 15
-                    verticalAlignment: Text.AlignBottom
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
 
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
-                        fileDialog.folder = "file:" + appPath + root.audioModelData.path
-                        fileDialog.open()
+                        fileDialog.folder = "file:" + appPath + root.sectionModelData.audioExtra.path;
+                        fileDialog.open();
                     }
                 }
             }
         }
 
-
-
-
         Row {
-            property bool isPlaying: playRecordAudio.playbackState === MediaPlayer.PlayingState
             id: audioContrller
+            property bool isPlaying: playRecordAudio.playbackState === MediaPlayer.PlayingState
             width: parent.width
             height: 40
-            spacing: 5
+            spacing: 10
 
             Button {
                 id: playPauseButton
-                width: 60
+                width: 80
+                height: 36
                 anchors.verticalCenter: parent.verticalCenter
+
+                background: Rectangle {
+                    color: parent.hovered ? "#00b3be" : "#009ca6"
+                    radius: 4
+                }
+
+                contentItem: Text {
+                    text: audioContrller.isPlaying ? "Pause" : "Play"
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
                         if (!audioContrller.isPlaying) {
-                            playRecordAudio.source = "file:" + appPath + audioTextField.text
-                            playRecordAudio.play()
+                            playRecordAudio.source = "file:" + appPath + audioTextField.text;
+                            playRecordAudio.play();
                         } else {
-                            playRecordAudio.pause()
+                            playRecordAudio.pause();
                         }
                     }
                 }
@@ -204,26 +263,69 @@ GroupBox {
                 enabled: true
                 to: playRecordAudio.duration
                 value: playRecordAudio.position
-                width: parent.width - playPauseButton.width - audioContrller.spacing - stopButton.width
+                width: parent.width - playPauseButton.width - stopButton.width - 20
+                height: 36
                 anchors.verticalCenter: parent.verticalCenter
+
+                background: Rectangle {
+                    x: audioSlider.leftPadding
+                    y: audioSlider.topPadding + audioSlider.availableHeight / 2 - height / 2
+                    width: audioSlider.availableWidth
+                    height: 4
+                    radius: 2
+                    color: "#1A2327"
+
+                    Rectangle {
+                        width: audioSlider.visualPosition * parent.width
+                        height: parent.height
+                        color: "#009ca6"
+                        radius: 2
+                    }
+                }
+
+                handle: Rectangle {
+                    x: audioSlider.leftPadding + audioSlider.visualPosition * (audioSlider.availableWidth - width)
+                    y: audioSlider.topPadding + audioSlider.availableHeight / 2 - height / 2
+                    color: "#009ca6"
+                    border.color: "white"
+                    border.width: 1
+                    radius: 6
+                    width: 16
+                    height: 16
+                }
+
                 onMoved: {
                     if (playRecordAudio.seekable) {
-                        playRecordAudio.setPosition(value)
-                    } else {
-                        console.log("Media is not seekable!")
+                        playRecordAudio.setPosition(value);
                     }
                 }
             }
 
             Button {
                 id: stopButton
-                width: 60
+                width: 80
+                height: 36
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Stop"
+
+                background: Rectangle {
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 4
+                }
+
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
-                        playRecordAudio.stop()
+                        playRecordAudio.stop();
                     }
                 }
             }
@@ -259,12 +361,27 @@ GroupBox {
             }
         }
 
-
         Row {
-            height: 40
             anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 10
+            height: 36
             Button {
                 text: "Activity"
+                width: 80
+                height: parent.height
+                background: Rectangle {
+                    color: "#1A2327"
+                    border.color: "#445055"
+                    border.width: 1
+                    radius: 4
+                }
+
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
                 onClicked: {
                     activityDialog.visible = true
                     activityDialog.wordLists = root.activityModelData.words
@@ -299,22 +416,52 @@ GroupBox {
                 }
             }
 
+
             Button {
                 text: "Save"
-                onClicked: saveChanges()
+                width: 80
+                height: parent.height
+
+                background: Rectangle {
+                    color: parent.hovered ? "#00b3be" : "#009ca6"
+                    radius: 4
+                }
+
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                onClicked: {
+                    saveChanges()
+                }
             }
 
             Button {
                 text: "Delete"
+                width: 80
+                height: parent.height
+
+                background: Rectangle {
+                    color: parent.hovered ? "#bf4040" : "#a63030"
+                    radius: 4
+                }
+
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
                 onClicked: {
 
                     confirmBox.visible = true
                 }
             }
         }
-
-
-
 
         Rectangle {
             id: confirmBox

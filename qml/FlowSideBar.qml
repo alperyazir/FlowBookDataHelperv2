@@ -6,6 +6,7 @@ import Qt.labs.platform
 import "groupboxes"
 
 Rectangle {
+    id: root
     property var page: undefined
     property var section: undefined
     property int sectionIndex
@@ -29,9 +30,7 @@ Rectangle {
     property var fillWColorList: []
     property var drawMatchedLineList: []
 
-
-    color: "gray"
-    id: root
+    color: "#1A2327" // Dark background
 
     // FileDialog bileşeni
     FileDialog {
@@ -40,12 +39,12 @@ Rectangle {
         //folder: StandardPaths.home // Varsayılan başlangıç yolu, değiştirilecektir
 
         onAccepted: {
-            console.log("Selected file: " + fileDialog.file)
-            selectedFile = fileDialog.file
+            console.log("Selected file: " + fileDialog.file);
+            selectedFile = fileDialog.file;
         }
 
         onRejected: {
-            console.log("File selection was canceled")
+            console.log("File selection was canceled");
         }
     }
 
@@ -56,10 +55,10 @@ Rectangle {
         sectionModelData: root.sectionModelData
 
         onRemoveSection: {
-            page.removeSection(sectionIndex)
+            page.removeSection(sectionIndex);
 
             config.bookSets[0].saveToJson();
-            toast.show("Changes are saved to File Activity GroupBox On remove Section!")
+            toast.show("Changes are saved to File Activity GroupBox On remove Section!");
         }
     }
 
@@ -72,17 +71,17 @@ Rectangle {
         fillIndex: root.fillIndex
 
         onRemoveSection: {
-            page.removeSection(secIndex)
+            page.removeSection(secIndex);
             config.bookSets[0].saveToJson();
-            toast.show("Changes are saved to File!")
+            toast.show("Changes are saved to File!");
         }
 
         onRemoveAnswer: {
-            root.section.removeAnswer(answerIndex)
+            root.section.removeAnswer(answerIndex);
             config.bookSets[0].saveToJson();
-            toast.show("Answer Removed!")
+            toast.show("Answer Removed!");
 
-            root.fillList = root.section.answers
+            root.fillList = root.section.answers;
         }
     }
 
@@ -95,17 +94,17 @@ Rectangle {
         circleIndex: root.circleIndex
 
         onRemoveSection: {
-            page.removeSection(secIndex)
+            page.removeSection(secIndex);
             config.bookSets[0].saveToJson();
-            toast.show("Changes are saved to File!")
+            toast.show("Changes are saved to File!");
         }
 
         onRemoveAnswer: {
-            root.section.removeAnswer(answerIndex)
+            root.section.removeAnswer(answerIndex);
             config.bookSets[0].saveToJson();
-            toast.show("Answer Removed!")
+            toast.show("Answer Removed!");
 
-            root.fillList = root.section.answers
+            root.fillList = root.section.answers;
         }
     }
 
@@ -115,10 +114,10 @@ Rectangle {
         audioModelData: root.audioModelData
         sectionIndex: root.sectionIndex
         onRemoveSection: {
-            page.removeSection(secIndex)
+            page.removeSection(secIndex);
 
             config.bookSets[0].saveToJson();
-            toast.show("Changes are saved to File!")
+            toast.show("Changes are saved to File!");
         }
     }
 
@@ -128,10 +127,10 @@ Rectangle {
         videoModelData: root.videoModelData
         sectionIndex: root.sectionIndex
         onRemoveSection: {
-            page.removeSection(secIndex)
+            page.removeSection(secIndex);
 
             config.bookSets[0].saveToJson();
-            toast.show("Changes are saved to File!")
+            toast.show("Changes are saved to File!");
         }
     }
 
@@ -144,17 +143,17 @@ Rectangle {
         fillIndex: root.fillIndex
 
         onRemoveSection: {
-            page.removeSection(secIndex)
+            page.removeSection(secIndex);
             config.bookSets[0].saveToJson();
-            toast.show("Changes are saved to File!")
+            toast.show("Changes are saved to File!");
         }
 
         onRemoveAnswer: {
-            root.section.removeAnswer(answerIndex)
+            root.section.removeAnswer(answerIndex);
             config.bookSets[0].saveToJson();
-            toast.show("Answer Removed!")
+            toast.show("Answer Removed!");
 
-            root.fillWColorList = root.section.answers
+            root.fillWColorList = root.section.answers;
         }
     }
 
@@ -167,17 +166,17 @@ Rectangle {
         fillIndex: root.fillIndex
 
         onRemoveSection: {
-            page.removeSection(secIndex)
+            page.removeSection(secIndex);
             config.bookSets[0].saveToJson();
-            toast.show("Changes are saved to File!")
+            toast.show("Changes are saved to File!");
         }
 
         onRemoveAnswer: {
-            root.section.removeAnswer(answerIndex)
+            root.section.removeAnswer(answerIndex);
             config.bookSets[0].saveToJson();
-            toast.show("Answer Removed!")
+            toast.show("Answer Removed!");
 
-            root.drawMatchedLineList = root.section.answers
+            root.drawMatchedLineList = root.section.answers;
         }
     }
 
@@ -190,7 +189,7 @@ Rectangle {
 
         // Yol parçalarını ayır
         var pathParts = filePath.split("/");
-        print(pathParts)
+        print(pathParts);
 
         // "books" klasörünü bulana kadar yukarı doğru çık
         var booksIndex = -1;
@@ -203,14 +202,13 @@ Rectangle {
 
         // Eğer "books" klasörü bulunursa, yeni yolu oluştur
         if (booksIndex !== -1) {
-
-            var newPath = "./"
+            var newPath = "./";
             for (booksIndex; booksIndex < pathParts.length; booksIndex++) {
-                newPath += pathParts[booksIndex] + "/"
+                newPath += pathParts[booksIndex] + "/";
             }
 
             if (newPath.length > 0) {
-                newPath =  newPath.substring(0, newPath.length - 1);
+                newPath = newPath.substring(0, newPath.length - 1);
             }
             return newPath;
         }
@@ -220,15 +218,12 @@ Rectangle {
     }
 
     function hideAllComponent() {
-        audioVisible = false
-        videoVisible = false
-        activityVisible = false
-        fillVisible = false
-        circleVisible = false
-        fillwColorVisible = false
-        drawMatchedVisible = false
+        audioVisible = false;
+        videoVisible = false;
+        activityVisible = false;
+        fillVisible = false;
+        circleVisible = false;
+        fillwColorVisible = false;
+        drawMatchedVisible = false;
     }
 }
-
-
-

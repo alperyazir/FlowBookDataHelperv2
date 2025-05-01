@@ -12,11 +12,89 @@ Dialog {
     modal: true
     closePolicy: Popup.NoAutoClose // Prevents dialog from closing when clicking outside
     anchors.centerIn: parent
-    standardButtons: Dialog.Ok | Dialog.Cancel
-    background: Rectangle {
-        color: "#2c2a2a"  // Dark background to match the application
-        border.color: "gray"
+
+    // Custom header
+    header: Rectangle {
+        color: "#1A2327"
+        height: 40
+        border.color: "#009ca6"
         border.width: 1
+
+        Label {
+            text: "New project"
+            color: "white"
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: parent.left
+            anchors.leftMargin: 10
+            font.pixelSize: 16
+            font.bold: true
+        }
+    }
+
+    // Custom footer for buttons
+    footer: Rectangle {
+        color: "#1A2327"
+        height: 60
+        border.color: "#009ca6"
+        border.width: 1
+
+        RowLayout {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.rightMargin: 10
+            spacing: 10
+
+            Button {
+                text: "Cancel"
+                Layout.preferredWidth: 80
+                Layout.preferredHeight: 32
+
+                background: Rectangle {
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 2
+                }
+
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                onClicked: newProjectDialog.reject()
+            }
+
+            Button {
+                text: "OK"
+                Layout.preferredWidth: 80
+                Layout.preferredHeight: 32
+
+                background: Rectangle {
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 2
+                }
+
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                onClicked: newProjectDialog.accept()
+            }
+        }
+    }
+
+    background: Rectangle {
+        color: "#232f34"
+        border.color: "#009ca6"
+        border.width: 1
+        radius: 4
     }
 
     property string selectedPdfPath: ""
@@ -109,7 +187,7 @@ Dialog {
             Label {
                 text: "Select BookPdf"
                 Layout.preferredWidth: 120
-                color: "white"  // White text for better visibility
+                color: "white"
             }
 
             TextField {
@@ -119,8 +197,10 @@ Dialog {
                 placeholderText: "pdf path"
                 color: "white"
                 background: Rectangle {
-                    color: "#3a3a3a"  // Darker background for text fields
-                    border.color: "gray"
+                    color: "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 2
                 }
             }
 
@@ -128,8 +208,26 @@ Dialog {
                 text: "..."
                 onClicked: pdfFileDialog.open()
                 background: Rectangle {
-                    color: "#505050"  // Darker button
-                    border.color: "gray"
+                    color: "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 2
+                }
+                contentItem: Text {
+                    text: "..."
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onEntered: parent.background.color = "#2A3337"
+                    onExited: parent.background.color = "#1A2327"
+                    onPressed: parent.background.color = "#0A1317"
+                    onReleased: parent.background.color = containsMouse ? "#2A3337" : "#1A2327"
+                    onClicked: pdfFileDialog.open()
                 }
             }
         }
@@ -141,8 +239,9 @@ Dialog {
             Layout.preferredHeight: 650
             visible: isPdfValid
             border.width: 1
-            border.color: "gray"
-            color: "#2c2a2a"  // Match background color
+            border.color: "#009ca6"
+            color: "#232f34"
+            radius: 4
 
             ColumnLayout {
                 anchors.fill: parent
@@ -168,8 +267,10 @@ Dialog {
                         placeholderText: "publisher name"
                         color: "white"
                         background: Rectangle {
-                            color: "#3a3a3a"
-                            border.color: "gray"
+                            color: "#1A2327"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            radius: 2
                         }
                     }
                 }
@@ -192,8 +293,10 @@ Dialog {
                         placeholderText: "book title"
                         color: "white"
                         background: Rectangle {
-                            color: "#3a3a3a"
-                            border.color: "gray"
+                            color: "#1A2327"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            radius: 2
                         }
                     }
                 }
@@ -216,8 +319,10 @@ Dialog {
                         currentIndex: 0 // Default en
 
                         background: Rectangle {
-                            color: "#3a3a3a"
-                            border.color: "gray"
+                            color: "#1A2327"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            radius: 2
                         }
 
                         contentItem: Text {
@@ -242,8 +347,9 @@ Dialog {
                             }
 
                             background: Rectangle {
-                                color: "#3a3a3a"
-                                border.color: "gray"
+                                color: "#1A2327"
+                                border.color: "#009ca6"
+                                border.width: 1
                             }
                         }
 
@@ -256,7 +362,7 @@ Dialog {
                             }
                             highlighted: languageComboBox.highlightedIndex === index
                             background: Rectangle {
-                                color: highlighted ? "#606060" : "#3a3a3a"
+                                color: highlighted ? "#2A3337" : "#1A2327"
                             }
                         }
                     }
@@ -280,8 +386,10 @@ Dialog {
                         placeholderText: "cover image"
                         color: "white"
                         background: Rectangle {
-                            color: "#3a3a3a"
-                            border.color: "gray"
+                            color: "#1A2327"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            radius: 2
                         }
                     }
 
@@ -289,8 +397,26 @@ Dialog {
                         text: "..."
                         onClicked: coverFileDialog.open()
                         background: Rectangle {
-                            color: "#505050"
-                            border.color: "gray"
+                            color: "#1A2327"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            radius: 2
+                        }
+                        contentItem: Text {
+                            text: "..."
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onEntered: parent.background.color = "#2A3337"
+                            onExited: parent.background.color = "#1A2327"
+                            onPressed: parent.background.color = "#0A1317"
+                            onReleased: parent.background.color = containsMouse ? "#2A3337" : "#1A2327"
+                            onClicked: coverFileDialog.open()
                         }
                     }
                 }
@@ -313,8 +439,10 @@ Dialog {
                         placeholderText: "folder"
                         color: "white"
                         background: Rectangle {
-                            color: "#3a3a3a"
-                            border.color: "gray"
+                            color: "#1A2327"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            radius: 2
                         }
                     }
 
@@ -322,8 +450,26 @@ Dialog {
                         text: "..."
                         onClicked: audioFolderDialog.open()
                         background: Rectangle {
-                            color: "#505050"
-                            border.color: "gray"
+                            color: "#1A2327"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            radius: 2
+                        }
+                        contentItem: Text {
+                            text: "..."
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onEntered: parent.background.color = "#2A3337"
+                            onExited: parent.background.color = "#1A2327"
+                            onPressed: parent.background.color = "#0A1317"
+                            onReleased: parent.background.color = containsMouse ? "#2A3337" : "#1A2327"
+                            onClicked: audioFolderDialog.open()
                         }
                     }
                 }
@@ -346,8 +492,10 @@ Dialog {
                         placeholderText: "folder"
                         color: "white"
                         background: Rectangle {
-                            color: "#3a3a3a"
-                            border.color: "gray"
+                            color: "#1A2327"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            radius: 2
                         }
                     }
 
@@ -355,8 +503,26 @@ Dialog {
                         text: "..."
                         onClicked: videoFolderDialog.open()
                         background: Rectangle {
-                            color: "#505050"
-                            border.color: "gray"
+                            color: "#1A2327"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            radius: 2
+                        }
+                        contentItem: Text {
+                            text: "..."
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onEntered: parent.background.color = "#2A3337"
+                            onExited: parent.background.color = "#1A2327"
+                            onPressed: parent.background.color = "#0A1317"
+                            onReleased: parent.background.color = containsMouse ? "#2A3337" : "#1A2327"
+                            onClicked: videoFolderDialog.open()
                         }
                     }
                 }
@@ -380,8 +546,10 @@ Dialog {
                         color: "white"
                         text: appPath + "books"
                         background: Rectangle {
-                            color: "#3a3a3a"
-                            border.color: "gray"
+                            color: "#1A2327"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            radius: 2
                         }
                     }
 
@@ -389,8 +557,26 @@ Dialog {
                         text: "..."
                         onClicked: outputDialog.open()
                         background: Rectangle {
-                            color: "#505050"
-                            border.color: "gray"
+                            color: "#1A2327"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            radius: 2
+                        }
+                        contentItem: Text {
+                            text: "..."
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onEntered: parent.background.color = "#2A3337"
+                            onExited: parent.background.color = "#1A2327"
+                            onPressed: parent.background.color = "#0A1317"
+                            onReleased: parent.background.color = containsMouse ? "#2A3337" : "#1A2327"
+                            onClicked: outputDialog.open()
                         }
                     }
                 }
@@ -402,8 +588,9 @@ Dialog {
                     Layout.preferredHeight: 350
                     Layout.topMargin: 5
                     border.width: 1
-                    border.color: "white"
-                    color: "#2c2a2a"
+                    border.color: "#009ca6"
+                    color: "#1A2327"
+                    radius: 4
 
                     ColumnLayout {
                         id: colm
@@ -471,8 +658,10 @@ Dialog {
                                         onTextChanged: model.name = text
                                         color: "white"
                                         background: Rectangle {
-                                            color: "#3a3a3a"
-                                            border.color: "gray"
+                                            color: "#1A2327"
+                                            border.color: "#009ca6"
+                                            border.width: 1
+                                            radius: 2
                                         }
                                     }
 
@@ -486,8 +675,10 @@ Dialog {
                                         onTextChanged: model.startPage = text
                                         color: "white"
                                         background: Rectangle {
-                                            color: "#3a3a3a"
-                                            border.color: "gray"
+                                            color: "#1A2327"
+                                            border.color: "#009ca6"
+                                            border.width: 1
+                                            radius: 2
                                         }
                                     }
 
@@ -509,8 +700,10 @@ Dialog {
                                         onTextChanged: model.endPage = text
                                         color: "white"
                                         background: Rectangle {
-                                            color: "#3a3a3a"
-                                            border.color: "gray"
+                                            color: "#1A2327"
+                                            border.color: "#009ca6"
+                                            border.width: 1
+                                            radius: 2
                                         }
                                     }
 
@@ -518,13 +711,15 @@ Dialog {
                                         text: "X"
                                         width: 25
                                         height: 25
+                                        visible: modulesModel.count > 1
                                         onClicked: {
                                             modulesModel.remove(index);
                                         }
                                         background: Rectangle {
-                                            color: "#505050"
-                                            border.color: "white"
-                                            radius: 3
+                                            color: "#1A2327"
+                                            border.color: "#009ca6"
+                                            border.width: 1
+                                            radius: 2
                                         }
                                         contentItem: Text {
                                             text: "X"
@@ -597,8 +792,9 @@ Dialog {
                                     });
                                 }
                                 background: Rectangle {
-                                    color: "#505050"
-                                    border.color: "white"
+                                    color: "#1A2327"
+                                    border.color: "#009ca6"
+                                    border.width: 1
                                     radius: 4
                                 }
                                 contentItem: Text {
@@ -615,10 +811,10 @@ Dialog {
                                     id: buttonHoverArea
                                     anchors.fill: parent
                                     hoverEnabled: true
-                                    onEntered: parent.background.color = "#606060"
-                                    onExited: parent.background.color = "#505050"
-                                    onPressed: parent.background.color = "#404040"
-                                    onReleased: parent.background.color = buttonHoverArea.containsMouse ? "#606060" : "#505050"
+                                    onEntered: parent.background.color = "#2A3337"
+                                    onExited: parent.background.color = "#1A2327"
+                                    onPressed: parent.background.color = "#0A1317"
+                                    onReleased: parent.background.color = buttonHoverArea.containsMouse ? "#2A3337" : "#1A2327"
                                     onClicked: parent.clicked()
                                 }
                             }

@@ -19,7 +19,7 @@ Column {
             if (selectedFilePath) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
                 if (newPath) {
-                    root.activityModelData.sectionPath = newPath
+                    root.activityModelData.sectionPath = newPath;
                 } else {
                     console.log("Books klasörü bulunamadı.");
                 }
@@ -29,10 +29,9 @@ Column {
         }
 
         onRejected: {
-            console.log("File selection was canceled")
+            console.log("File selection was canceled");
         }
     }
-
 
     Row {
         width: parent.width * .9
@@ -72,16 +71,21 @@ Column {
 
         // TextEdit bileşeni
         TextField {
-            width: parent.width*.75
+            width: parent.width * .75
             height: parent.height
             placeholderText: "Complete the sentences."
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             text: root.activityModelData.headerText
             onTextChanged: {
-                root.activityModelData.headerText = text
+                root.activityModelData.headerText = text;
             }
-
+            background: Rectangle {
+                color: "#1A2327"
+                border.color: parent.focus ? "#009ca6" : "#445055"
+                border.width: 1
+                radius: 4
+            }
         }
     }
 
@@ -101,35 +105,45 @@ Column {
         // TextEdit bileşeni
         TextField {
             id: audioTextField
-            width: parent.width*.75
+            width: parent.width * .75
             height: parent.height
             placeholderText: "Enter Image Path"
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             text: root.activityModelData.sectionPath
-
+            background: Rectangle {
+                color: "#1A2327"
+                border.color: parent.focus ? "#009ca6" : "#445055"
+                border.width: 1
+                radius: 4
+            }
         }
 
-        Rectangle {
-            height: 40
-            width: parent.width * 0.1
+
+        Button {
+            width: 36
+            height: 36
             anchors.verticalCenter: parent.verticalCenter
-            color: "white"
-            FlowText {
+
+            background: Rectangle {
+                color: parent.hovered ? "#2A3337" : "#1A2327"
+                border.color: "#009ca6"
+                border.width: 1
+                radius: 4
+            }
+
+            contentItem: Text {
                 text: "..."
-                color: "black"
-                anchors.centerIn: undefined
-                width: parent.width
-                height: 35
-                font.pixelSize: 15
-                verticalAlignment: Text.AlignBottom
+                color: "white"
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
             }
 
             MouseArea {
                 anchors.fill: parent
                 onClicked: {
-                    fileDialog.folder = "file:" + appPath + root.activityModelData.sectionPath
-                    fileDialog.open()
+                    fileDialog.folder = "file:" + appPath + root.activityModelData.sectionPath;
+                    fileDialog.open();
                 }
             }
         }
@@ -137,7 +151,7 @@ Column {
     GroupBox {
         id: wordsGB
         title: "Words"
-        width: parent.width* .9
+        width: parent.width * .9
         anchors.horizontalCenter: parent.horizontalCenter
         Column {
             width: parent.width * .9
@@ -148,22 +162,46 @@ Column {
                 model: root.activityModelData.words
                 Row {
                     property string wText: tf.text
-                    width: parent.width*.75
+                    width: parent.width * .75
                     anchors.horizontalCenter: parent.horizontalCenter
                     height: 30
                     TextField {
                         id: tf
-                        width: parent.width*.75
+                        width: parent.width * .75
                         height: 30
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         text: modelData
+                        background: Rectangle {
+                            color: "#1A2327"
+                            border.color: parent.focus ? "#009ca6" : "#445055"
+                            border.width: 1
+                            radius: 4
+                        }
                     }
-
                     Button {
+                        width: 30
+                        height: 30
+                        anchors.verticalCenter: parent.verticalCenter
                         text: "X"
-                        onClicked: {
-                            root.activityModelData.removeWord(index)
+
+                        background: Rectangle {
+                            color: parent.hovered ? "#bf4040" : "#a63030"
+                            radius: 4
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                root.activityModelData.removeWord(index);
+                            }
                         }
                     }
                 }
@@ -173,12 +211,10 @@ Column {
                 text: "Add New"
                 anchors.horizontalCenter: parent.horizontalCenter
                 onClicked: {
-                    saveChanges()
-                    root.activityModelData.addNewWord("Dummy")
+                    saveChanges();
+                    root.activityModelData.addNewWord("Dummy");
                 }
             }
         }
     }
-
-
 }

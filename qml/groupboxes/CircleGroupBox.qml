@@ -8,6 +8,19 @@ import QtMultimedia
 import "../../qml"
 
 GroupBox {
+    id: root
+    title: ""
+    width: parent.width * .98
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.verticalCenter: parent.verticalCenter
+    padding: 15
+
+    background: Rectangle {
+        color: "#232f34"
+        border.color: "#009ca6"
+        border.width: 1
+        radius: 6
+    }
 
     property var circleList: []
     property int circleIndex
@@ -15,88 +28,171 @@ GroupBox {
     property int sectionIndex
     signal removeSection(int secIndex)
     signal removeAnswer(int answerIndex)
-    id: root
-    title: qsTr("Circles")
-    width: parent.width * .98
-    anchors.horizontalCenter: parent.horizontalCenter
-    anchors.verticalCenter: parent.verticalCenter
 
-    // Custom title style
     Column {
         anchors.fill: parent
-        spacing: 10
+        anchors.leftMargin: 20
+        anchors.rightMargin: 20
+        spacing: 15
 
+        // Header with title and close button
         Row {
+            width: parent.width
             height: 40
-            anchors.right: parent.right
+            spacing: 10
+
+            Text {
+                text: "Circles"
+                color: "white"
+                font.pixelSize: 24
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Item {
+                width: parent.width - closeButton.width - 80
+                height: 1
+            }
 
             Button {
                 id: closeButton
                 text: "X"
-                height: 40
+                width: 32
+                height: 32
+                anchors.verticalCenter: parent.verticalCenter
+
+                background: Rectangle {
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 4
+                }
+
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    font.pixelSize: 14
+                }
+
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
-                        sideBar.circleVisible = false
+                        sideBar.circleVisible = false;
                     }
                 }
             }
         }
+
         ScrollView {
             width: parent.width
             height: 500
             ScrollBar.vertical.interactive: true
+            clip: true
 
             Column {
                 width: parent.width
-                height: 500 // Column'un height'ini içeriğe göre ayarla
                 spacing: 10
 
                 ListView {
+                    id: rectRepeater
                     width: parent.width
                     height: 500
-                    id: rectRepeater
                     orientation: ListView.Vertical
                     model: root.circleList
                     clip: true
 
                     delegate: ItemDelegate {
                         width: parent.width
-                        height: 40
-                        Row {
-                            width: parent.width * .9
-                            spacing: 10
-                            height: 40
+                        height: 50
+                        background: Rectangle {
+                            color: "#1A2327"
+                            border.color: "#445055"
+                            border.width: 1
+                            radius: 4
+                        }
 
-                            FlowText {
-                                text: "Circle: "
-                                color: "black"
-                                anchors.centerIn: undefined
-                                width: parent.width * .15
-                                font.pixelSize: 15
-                                verticalAlignment: Text.AlignBottom
+                        Row {
+                            width: parent.width
+                            height: parent.height
+                            spacing: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 10
+
+                            Text {
+                                text: "Circle:"
+                                color: "white"
+                                font.pixelSize: 14
+                                width: 50
+                                anchors.verticalCenter: parent.verticalCenter
                             }
 
                             CheckBox {
                                 id: isTrue
-                                text: "isCorrect"
+                                text: "Is Correct"
                                 height: parent.height
-                                width: parent.width * .75
-                                checked: false
+                                width: parent.width - 100
+                                checked: modelData.isCorrect || false
+
+                                contentItem: Text {
+                                    text: isTrue.text
+                                    color: "white"
+                                    font.pixelSize: 14
+                                    verticalAlignment: Text.AlignVCenter
+                                    leftPadding: isTrue.indicator.width + 8
+                                }
+
+                                indicator: Rectangle {
+                                    implicitWidth: 20
+                                    implicitHeight: 20
+                                    x: isTrue.leftPadding
+                                    y: parent.height / 2 - height / 2
+                                    radius: 4
+                                    color: "#1A2327"
+                                    border.color: isTrue.checked ? "#009ca6" : "#445055"
+                                    border.width: 1
+
+                                    Rectangle {
+                                        width: 12
+                                        height: 12
+                                        anchors.centerIn: parent
+                                        radius: 2
+                                        color: "#009ca6"
+                                        visible: isTrue.checked
+                                    }
+                                }
+
                                 onCheckedChanged: {
-                                    modelData.isCorrect = checked
+                                    modelData.isCorrect = checked;
                                 }
                             }
 
                             Button {
+                                width: 32
+                                height: 32
+                                anchors.verticalCenter: parent.verticalCenter
                                 text: "X"
-                                height: 40
+
+                                background: Rectangle {
+                                    color: parent.hovered ? "#bf4040" : "#a63030"
+                                    radius: 4
+                                }
+
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: "white"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
                                 MouseArea {
                                     anchors.fill: parent
                                     onClicked: {
-                                        confirmBox.visible = true
-                                        confirmBox.type = "answer"
-                                        confirmBox.index = index
+                                        confirmBox.visible = true;
+                                        confirmBox.type = "answer";
+                                        confirmBox.index = index;
                                         config.bookSets[0].saveToJson();
                                     }
                                 }
@@ -106,46 +202,81 @@ GroupBox {
                 }
             }
         }
+
+        // Save/Delete buttons
         Row {
-            height: 40
+            spacing: 10
             anchors.horizontalCenter: parent.horizontalCenter
+            height: 36
 
             Button {
                 text: "Save"
+                width: 80
+                height: parent.height
+
+                background: Rectangle {
+                    color: parent.hovered ? "#00b3be" : "#009ca6"
+                    radius: 4
+                }
+
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
                 onClicked: {
                     config.bookSets[0].saveToJson();
-                    toast.show("Changes are saved to File!")
+                    toast.show("Changes are saved to File!");
                 }
             }
 
             Button {
                 text: "Delete"
+                width: 80
+                height: parent.height
+
+                background: Rectangle {
+                    color: parent.hovered ? "#bf4040" : "#a63030"
+                    radius: 4
+                }
+
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
                 onClicked: {
-                    confirmBox.visible = true
-                    confirmBox.type = "section"
+                    confirmBox.visible = true;
+                    confirmBox.type = "section";
                 }
             }
         }
 
+        // Confirmation dialog
         Rectangle {
+            id: confirmBox
             property string type
             property int index
-            id: confirmBox
-            width: parent.width /2
-            height: 100
-            color: "transparent"
-            border.color: "red"
-            radius: 10
-            visible: false // Başlangıçta visible true, bir işlemi başlatırken görünür olacak
+            width: parent.width * 0.8
+            height: 120
+            color: "#1A2327"
+            border.color: "#a63030"
+            border.width: 1
+            radius: 6
+            visible: false
             anchors.horizontalCenter: parent.horizontalCenter
 
             Column {
                 anchors.centerIn: parent
-                spacing: 10
+                spacing: 15
 
                 Text {
-                    text: "Are you sure?"
-                    font.pixelSize: 15
+                    text: "Are you sure you want to delete?"
+                    font.pixelSize: 16
                     color: "white"
                     anchors.horizontalCenter: parent.horizontalCenter
                 }
@@ -156,29 +287,57 @@ GroupBox {
 
                     Button {
                         text: "Yes"
+                        width: 80
+                        height: 36
+
+                        background: Rectangle {
+                            color: parent.hovered ? "#bf4040" : "#a63030"
+                            radius: 4
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
                         onClicked: {
                             if (confirmBox.type === "section") {
-                                root.removeSection(root.sectionIndex)
-                                sideBar.circleVisible = false
+                                root.removeSection(root.sectionIndex);
+                                sideBar.circleVisible = false;
                             } else if (confirmBox.type === "answer") {
-                                root.removeAnswer(confirmBox.index)
+                                root.removeAnswer(confirmBox.index);
                             }
-
-                            confirmBox.visible = false
+                            confirmBox.visible = false;
                         }
                     }
 
                     Button {
                         text: "No"
-                        onClicked: {
+                        width: 80
+                        height: 36
 
-                            confirmBox.visible = false
+                        background: Rectangle {
+                            color: parent.hovered ? "#2A3337" : "#1A2327"
+                            border.color: "#445055"
+                            border.width: 1
+                            radius: 4
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        onClicked: {
+                            confirmBox.visible = false;
                         }
                     }
                 }
             }
         }
     }
-
 }
-

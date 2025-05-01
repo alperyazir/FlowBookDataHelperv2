@@ -9,7 +9,7 @@ Rectangle {
     property var currentPageDetails
     height: parent.height
     width: parent.width
-    color: "gray"
+    color: "#1A2327" // Dark background
 
     SwipeView {
         id: pageView
@@ -24,14 +24,12 @@ Rectangle {
 
             Loader {
                 id: pageLoader
-
-                active: Math.abs(index - pageView.currentIndex) <= 1 // Sadece aktif ve komşu sayfalar yüklensin
+                active: Math.abs(index - pageView.currentIndex) <= 1
                 sourceComponent: pageDetailsComponent
                 property var page: pages[index]
                 onLoaded: {
                     if (item) {
                         item.page = page;
-                        //item.outlineEnabled = root.outlineEnabled;
                     }
                 }
             }
@@ -39,7 +37,6 @@ Rectangle {
 
         Component {
             id: pageDetailsComponent
-            // page ve outlineEnabled Loader üzerinden atanıyor
             PageDetails {}
         }
 

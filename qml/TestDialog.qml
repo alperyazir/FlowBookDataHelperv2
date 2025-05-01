@@ -7,9 +7,8 @@ Dialog {
     id: testDialog
     title: "Test with FlowBook"
     modal: true
-    closePolicy: Popup.NoAutoClose // Prevents dialog from closing when clicking outside
+    closePolicy: Popup.NoAutoClose
 
-    // Add property to track selected version
     property int selectedVersionIndex: 0
     property string selectedVersion: versionList.model.count > 0 ? versionList.model.get(selectedVersionIndex).version : ""
     property string currentProject
@@ -17,14 +16,89 @@ Dialog {
     width: 400
     height: 500
 
-    // Add dark background to the dialog
+    // Custom header
+    header: Rectangle {
+        color: "#1A2327"
+        height: 40
+        border.color: "#009ca6"
+        border.width: 1
+        Label {
+            text: "Test with FlowBook"
+            color: "white"
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: parent.left
+            anchors.leftMargin: 10
+            font.pixelSize: 16
+            font.bold: true
+        }
+    }
+
+    // Custom footer for buttons
+    footer: Rectangle {
+        color: "#1A2327"
+        height: 60
+        border.color: "#009ca6"
+        border.width: 1
+        RowLayout {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.rightMargin: 10
+            spacing: 10
+            Button {
+                text: "Cancel"
+                Layout.preferredWidth: 80
+                Layout.preferredHeight: 32
+                background: Rectangle {
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 2
+                }
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                onClicked: testDialog.reject()
+            }
+            Button {
+                text: "OK"
+                Layout.preferredWidth: 80
+                Layout.preferredHeight: 32
+                background: Rectangle {
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 2
+                }
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                onClicked: {
+                    if (versionList.model.count > 0) {
+                        flowProgress.reset();
+                        flowProgress.statusText = "Copying book files...";
+                        flowProgress.open();
+                        pdfProcess.copyBookToTestVersion(selectedVersion, currentProject);
+                    }
+                }
+            }
+        }
+    }
+
     background: Rectangle {
-        color: "#2B2B2B"  // Dark background
+        color: "#232f34"
+        border.color: "#009ca6"
+        border.width: 1
+        radius: 4
     }
 
     anchors.centerIn: parent
 
-    // Load test versions when dialog opens
     onVisibleChanged: {
         if (visible) {
             var versions = pdfProcess.getTestVersions();
@@ -44,22 +118,21 @@ Dialog {
         anchors.fill: parent
         spacing: 20
 
-        // Title at the top
         Label {
             text: "Test is very important 🧪"
             font.pixelSize: 18
             font.bold: true
             Layout.alignment: Qt.AlignHCenter
-            color: "#FFFFFF"  // White text for dark background
+            color: "white"
         }
 
-        // Version selection area
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 300
             border.width: 1
-            border.color: "#404040"  // Darker border
-            color: "#333333"  // Dark gray background
+            border.color: "#009ca6"
+            color: "#1A2327"
+            radius: 4
 
             ListView {
                 id: versionList
@@ -72,94 +145,39 @@ Dialog {
                     width: parent.width
                     height: 40
                     border.width: 1
-                    border.color: "#404040"
-                    color: index === testDialog.selectedVersionIndex ? "#1A1A1A" : "#2B2B2B"
+                    border.color: "#009ca6"
+                    color: index === testDialog.selectedVersionIndex ? "#009ca6" : "transparent"
+                    radius: 2
 
                     Label {
                         anchors.centerIn: parent
                         text: version
-                        color: "#FFFFFF"  // White text
+                        color: index === testDialog.selectedVersionIndex ? "#232f34" : "white"
                     }
 
                     MouseArea {
                         anchors.fill: parent
+                        hoverEnabled: true
+                        onEntered: if (index !== testDialog.selectedVersionIndex)
+                            parent.color = "#232f34"
+                        onExited: if (index !== testDialog.selectedVersionIndex)
+                            parent.color = "transparent"
                         onClicked: {
                             testDialog.selectedVersionIndex = index;
-                            // Clear all backgrounds
                             for (let i = 0; i < versionList.count; i++) {
-                                versionList.itemAtIndex(i).color = "#2B2B2B";
+                                let item = versionList.itemAtIndex(i);
+                                if (item) {
+                                    item.color = i === index ? "#009ca6" : "transparent";
+                                    item.children[0].color = i === index ? "#232f34" : "white";
+                                }
                             }
-                            // Set selected background
-                            parent.color = "#1A1A1A";  // Very dark gray for selection
                         }
                     }
                 }
             }
         }
-
-        // Buttons at the bottom
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignBottom
-            spacing: 10
-
-            Item {
-                Layout.fillWidth: true
-            } // Spacer
-
-            Button {
-                text: "Start"
-                Layout.preferredWidth: 100
-                onClicked: {
-                    if (versionList.model.count > 0) {
-                        // Show progress dialog
-                        flowProgress.reset();
-                        flowProgress.statusText = "Copying book files...";
-                        flowProgress.open();
-
-                        // Start copying process
-                        pdfProcess.copyBookToTestVersion(selectedVersion, currentProject);
-                    }
-                }
-
-                background: Rectangle {
-                    color: parent.pressed ? myColors.buttonPressedColor : parent.hovered ? myColors.buttonHoverColor : myColors.buttonBackgroundColor
-                    border.color: myColors.borderColor
-                    border.width: 1
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: parent.text
-                    color: myColors.textColor
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-
-            Button {
-                text: "Close"
-                Layout.preferredWidth: 100
-                onClicked: testDialog.close()
-
-                background: Rectangle {
-                    color: parent.pressed ? "#1A1A1A" : "#333333"
-                    border.color: "#404040"
-                    border.width: 1
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: parent.text
-                    color: "#FFFFFF"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-        }
     }
 
-    // Add Connections for handling copy completion
     Connections {
         target: pdfProcess
         function onCopyCompleted(success) {
@@ -167,7 +185,6 @@ Dialog {
                 flowProgress.addLogMessage("Successfully copied book files");
                 flowProgress.statusText = "Launching FlowBook...";
 
-                // Launch FlowBook after successful copy
                 if (pdfProcess.launchTestFlowBook(selectedVersion)) {
                     flowProgress.addLogMessage("FlowBook launched successfully");
                     flowProgress.close();

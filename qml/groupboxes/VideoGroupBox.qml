@@ -6,153 +6,231 @@ import QtMultimedia
 import "../../qml"
 
 GroupBox {
+    id: root
+    title: ""
+    width: parent.width * .98
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.verticalCenter: parent.verticalCenter
+    padding: 15
 
-    // FileDialog bileşeni
+    background: Rectangle {
+        color: "#232f34"
+        border.color: "#009ca6"
+        border.width: 1
+        radius: 6
+    }
+
+    // FileDialog component
     FileDialog {
         id: fileDialog
         title: "Select a File"
-        //folder: StandardPaths.home // Varsayılan başlangıç yolu, değiştirilecektir
-
         onAccepted: {
-            var selectedFilePath = fileDialog.file + ""; // Seçilen dosyanın tam dosya yolu
+            var selectedFilePath = fileDialog.file + "";
             if (selectedFilePath) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
                 if (newPath) {
-                    videoTextField.text = newPath
+                    videoTextField.text = newPath;
                 } else {
                     console.log("Books klasörü bulunamadı.");
                 }
-            } else {
-                console.log("Dosya yolu geçersiz.");
             }
         }
-
-        onRejected: {
-            console.log("File selection was canceled")
-        }
     }
-
 
     property var videoModelData
     property int sectionIndex
     signal removeSection(int secIndex)
-    title: qsTr("Video")
-    width: parent.width * .98
-    anchors.horizontalCenter: parent.horizontalCenter
-    anchors.verticalCenter: parent.verticalCenter
-    // Custom title style
+
     Column {
         anchors.fill: parent
-        spacing: 10
+        anchors.leftMargin: 20
+        anchors.rightMargin: 20
+        spacing: 15
+
+        // Header with title and close button
         Row {
+            width: parent.width
             height: 40
-            anchors.right: parent.right
+            spacing: 10
+
+            Text {
+                text: "Video"
+                color: "white"
+                font.pixelSize: 24
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Item {
+                width: parent.width - closeButton.width - 80
+                height: 1
+            }
 
             Button {
                 id: closeButton
                 text: "X"
-                height: 40
+                width: 32
+                height: 32
+                anchors.verticalCenter: parent.verticalCenter
+
+                background: Rectangle {
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 4
+                }
+
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    font.pixelSize: 14
+                }
+
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
-                        videoTextField.focus = false
-                        sideBar.videoVisible = false
-                        playRecord.stop()
+                        videoTextField.focus = false;
+                        sideBar.videoVisible = false;
+                        playRecord.stop();
                     }
                 }
             }
         }
+
+        // Path input row
         Row {
-            width: parent.width * .9
+            width: parent.width
             spacing: 10
             height: 40
-            FlowText {
-                text: "Path: "
+
+            Text {
+                text: "Path:"
                 color: "white"
-                anchors.centerIn: undefined
-                width: parent.width * .15
-                font.pixelSize: 15
-                verticalAlignment: Text.AlignBottom
+                font.pixelSize: 14
+                width: 40
+                anchors.verticalCenter: parent.verticalCenter
             }
 
-            // TextEdit bileşeni
             TextField {
                 id: videoTextField
-                width: parent.width*.75
-                height: parent.height
-                placeholderText: "video.mp4"
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+                width: parent.width - 90
+                height: 36
                 text: root.videoModelData.video.path
+                placeholderText: "Enter the video path"
+                color: "white"
 
-                onAccepted: {
-
+                background: Rectangle {
+                    color: "#1A2327"
+                    border.color: parent.focus ? "#009ca6" : "#445055"
+                    border.width: 1
+                    radius: 4
                 }
             }
 
-            Rectangle {
-                height: width
-                width: parent.width * 0.1
+            Button {
+                width: 36
+                height: 36
                 anchors.verticalCenter: parent.verticalCenter
-                color: "white"
-                FlowText {
+
+                background: Rectangle {
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 4
+                }
+
+                contentItem: Text {
                     text: "..."
-                    color: "black"
-                    anchors.centerIn: undefined
-                    width: parent.width
-                    height: width
-                    font.pixelSize: 15
-                    verticalAlignment: Text.AlignBottom
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
 
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
-                        fileDialog.folder = "file:" + appPath + root.videoModelData.path
-                        fileDialog.open()
+                        fileDialog.folder = "file:" + appPath + root.videoModelData.path;
+                        fileDialog.open();
                     }
                 }
             }
         }
 
+        // Save/Delete buttons
         Row {
-            height: 40
+            spacing: 10
             anchors.horizontalCenter: parent.horizontalCenter
+            height: 36
+
             Button {
                 text: "Save"
+                width: 80
+                height: parent.height
+
+                background: Rectangle {
+                    color: parent.hovered ? "#00b3be" : "#009ca6"
+                    radius: 4
+                }
+
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
                 onClicked: {
-                    root.videoModelData.video.path = videoTextField.text
-                    videoTextField.focus = false
+                    root.videoModelData.video.path = videoTextField.text;
+                    videoTextField.focus = false;
                     config.bookSets[0].saveToJson();
-                    toast.show("Changes are saved to File!")
+                    toast.show("Changes are saved to File!");
                 }
             }
+
             Button {
                 text: "Delete"
-                onClicked: {
+                width: 80
+                height: parent.height
 
-                    confirmBox.visible = true
+                background: Rectangle {
+                    color: parent.hovered ? "#bf4040" : "#a63030"
+                    radius: 4
+                }
+
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                onClicked: {
+                    confirmBox.visible = true;
                 }
             }
         }
 
+        // Confirmation dialog
         Rectangle {
             id: confirmBox
-            width: parent.width /2
-            height: 100
-            color: "transparent"
-            border.color: "red"
-            radius: 10
-            visible: false // Başlangıçta visible true, bir işlemi başlatırken görünür olacak
+            width: parent.width * 0.8
+            height: 120
+            color: "#1A2327"
+            border.color: "#a63030"
+            border.width: 1
+            radius: 6
+            visible: false
             anchors.horizontalCenter: parent.horizontalCenter
 
             Column {
                 anchors.centerIn: parent
-                spacing: 10
+                spacing: 15
 
                 Text {
-                    text: "Are you sure?"
-                    font.pixelSize: 15
+                    text: "Are you sure you want to delete?"
+                    font.pixelSize: 16
                     color: "white"
                     anchors.horizontalCenter: parent.horizontalCenter
                 }
@@ -163,44 +241,89 @@ GroupBox {
 
                     Button {
                         text: "Yes"
+                        width: 80
+                        height: 36
+
+                        background: Rectangle {
+                            color: parent.hovered ? "#bf4040" : "#a63030"
+                            radius: 4
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
                         onClicked: {
-                            removeSection(root.sectionIndex)
-                            confirmBox.visible = false
-                            sideBar.videoVisible = false
+                            removeSection(root.sectionIndex);
+                            confirmBox.visible = false;
+                            sideBar.videoVisible = false;
                         }
                     }
 
                     Button {
                         text: "No"
-                        onClicked: {
+                        width: 80
+                        height: 36
 
-                            confirmBox.visible = false
+                        background: Rectangle {
+                            color: parent.hovered ? "#2A3337" : "#1A2327"
+                            border.color: "#445055"
+                            border.width: 1
+                            radius: 4
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        onClicked: {
+                            confirmBox.visible = false;
                         }
                     }
                 }
             }
         }
 
-
+        // Video controls
         Row {
-            property bool isPlaying: playRecord.playbackState === MediaPlayer.PlayingState
             id: videoContrller
+            property bool isPlaying: playRecord.playbackState === MediaPlayer.PlayingState
             width: parent.width
             height: 40
-            spacing: 5
+            spacing: 10
 
             Button {
                 id: playPauseButton
-                width: 60
+                width: 80
+                height: 36
                 anchors.verticalCenter: parent.verticalCenter
+
+                background: Rectangle {
+                    color: parent.hovered ? "#00b3be" : "#009ca6"
+                    radius: 4
+                }
+
+                contentItem: Text {
+                    text: videoContrller.isPlaying ? "Pause" : "Play"
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
                         if (!videoContrller.isPlaying) {
-                            playRecord.source = "file:" + appPath + videoTextField.text
-                            playRecord.play()
+                            playRecord.source = "file:" + appPath + videoTextField.text;
+                            playRecord.play();
                         } else {
-                            playRecord.pause()
+                            playRecord.pause();
                         }
                     }
                 }
@@ -211,112 +334,108 @@ GroupBox {
                 enabled: true
                 to: playRecord.duration
                 value: playRecord.position
-                width: parent.width - playPauseButton.width - videoContrller.spacing - stopButton.width
+                width: parent.width - playPauseButton.width - stopButton.width - 20
+                height: 36
                 anchors.verticalCenter: parent.verticalCenter
+
+                background: Rectangle {
+                    x: audioSlider.leftPadding
+                    y: audioSlider.topPadding + audioSlider.availableHeight / 2 - height / 2
+                    width: audioSlider.availableWidth
+                    height: 4
+                    radius: 2
+                    color: "#1A2327"
+
+                    Rectangle {
+                        width: audioSlider.visualPosition * parent.width
+                        height: parent.height
+                        color: "#009ca6"
+                        radius: 2
+                    }
+                }
+
+                handle: Rectangle {
+                    x: audioSlider.leftPadding + audioSlider.visualPosition * (audioSlider.availableWidth - width)
+                    y: audioSlider.topPadding + audioSlider.availableHeight / 2 - height / 2
+                    color: "#009ca6"
+                    border.color: "white"
+                    border.width: 1
+                    radius: 6
+                    width: 16
+                    height: 16
+                }
+
                 onMoved: {
                     if (playRecord.seekable) {
-                        playRecord.setPosition(value)
-                    } else {
-                        console.log("Media is not seekable!")
+                        playRecord.setPosition(value);
                     }
                 }
             }
 
             Button {
                 id: stopButton
-                width: 60
+                width: 80
+                height: 36
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Stop"
+
+                background: Rectangle {
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 4
+                }
+
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
-                        playRecord.stop()
+                        playRecord.stop();
                     }
                 }
             }
         }
 
+        // Video output
         VideoOutput {
-            height: width
-            width: parent.width
             id: videoOutput
+            height: width * 0.5625  // 16:9 aspect ratio
+            width: parent.width
         }
 
+        // Subtitle area
         Rectangle {
-            property string subText
             id: subRect
-            // width: subTxt.width * 1.05
-            // height: subTxt.height * 1.2
-            color: "black"
+            property string subText
+            color: "#1A2327"
             width: parent.width
-            height: 40
-            anchors.horizontalCenter: parent.horizontalCenter
+            height: 60
+            radius: 4
+            border.color: "#445055"
+            border.width: 1
 
             Text {
-                id: subTxt
-                fontSizeMode: Text.Fit
-                text: parent.subText
-                width: parent.width
-                height: parent.height
+                id: subText
+                anchors.centerIn: parent
                 color: "white"
-                font.pointSize: 15
-                wrapMode: Text.WordWrap
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                anchors.horizontalCenter: parent.horizontalCenter
+                font.pixelSize: 14
+                text: subRect.subText || "No subtitles"
             }
         }
     }
-
-    Timer {
-        interval: 500
-        repeat: true
-        running: playRecord.playbackState === MediaPlayer.PlayingState
-        onTriggered: {
-            for (var i = 0; i < root.videoModelData.video.subtitles.length; i++) {
-                if (playRecord.position >= root.videoModelData.video.subtitles[i].startTime && playRecord.position <= root.videoModelData.video.subtitles[i].endTime) {
-                    if (!subTxt.visible) {
-                        subTxt.visible = true;
-                    }
-
-                    subRect.subText = root.videoModelData.video.subtitles[i].subtitle;
-                    return;
-                } else {
-                    subTxt.visible = false
-                }
-            }
-        }
-    }
-
-    states: [
-        State {
-            name: "playing"
-            when: playRecord.playbackState === MediaPlayer.PlayingState
-
-            PropertyChanges {
-                playPauseButton.text: "Pause"
-            }
-
-        },
-        State {
-            name: "paused"
-            when: playRecord.playbackState === MediaPlayer.PausedState || playRecord.playbackState === MediaPlayer.StoppedState
-
-            PropertyChanges {
-                playPauseButton.text: "Play"
-            }
-        }
-    ]
-
 
     MediaPlayer {
         id: playRecord
         videoOutput: videoOutput
-        audioOutput: AudioOutput {
-        }
-        onSourceChanged: {
-            play()
+        audioOutput: AudioOutput {}
+        onPositionChanged: {
+            audioSlider.value = position;
         }
     }
 }
-

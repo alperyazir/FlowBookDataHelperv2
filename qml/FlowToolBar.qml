@@ -10,22 +10,38 @@ Rectangle {
     anchors.left: parent.left
     anchors.right: parent.right
     height: 50
-    color: "gray"
-    border.color: "black"
+    color: "#1A2327" // Dark background
+    border.color: "#009ca6" // Turquoise border
     border.width: 1
 
     Row {
         width: parent.width / 3
         height: parent.height
+        spacing: 8
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: 0
+        anchors.left: parent.left
+        anchors.leftMargin: 10
         Button {
             anchors.verticalCenter: parent.verticalCenter
             text: "Create"
             width: 70
             height: 40
+            background: Rectangle {
+                color: "#009ca6"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                color: "white"
+                font.bold: true
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                anchors.centerIn: parent
+            }
             onClicked: {
                 console.log("Create clicked");
                 newProjectDialog.open();
-
             }
         }
 
@@ -34,13 +50,25 @@ Rectangle {
             text: "Open"
             width: 70
             height: 40
+            background: Rectangle {
+                color: "#009ca6"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                color: "white"
+                font.bold: true
+                anchors.centerIn: parent
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
             onClicked: {
                 // config.refresh();
                 // toast.show("Config Reloaded");
 
-                config.refreshRecentProjects()
+                config.refreshRecentProjects();
                 openProject.loadRecentProjects();
-                openProject.open()
+                openProject.open();
             }
         }
 
@@ -49,9 +77,21 @@ Rectangle {
             text: "Test"
             width: 70
             height: 40
+            background: Rectangle {
+                color: "#009ca6"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                color: "white"
+                font.bold: true
+                anchors.centerIn: parent
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
             onClicked: {
-                testDialog.currentProject = openProject.currentProject
-                testDialog.open()
+                testDialog.currentProject = openProject.currentProject;
+                testDialog.open();
             }
         }
 
@@ -60,9 +100,21 @@ Rectangle {
             text: "Package"
             width: 100
             height: 40
+            background: Rectangle {
+                color: "#009ca6"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                color: "white"
+                font.bold: true
+                anchors.centerIn: parent
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
             onClicked: {
-                packageDialog.currentProject = openProject.currentProject
-                packageDialog.open()
+                packageDialog.currentProject = openProject.currentProject;
+                packageDialog.open();
             }
         }
         // CheckBox {
@@ -77,45 +129,77 @@ Rectangle {
 
     Row {
         id: pagesRow
-        height: parent.height
+        height: parent.height * .8
         anchors.horizontalCenter: parent.horizontalCenter
+        spacing: 8
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: 0
         Button {
             anchors.verticalCenter: parent.verticalCenter
             text: "<"
-            width: 70
-            height: 50
+            width: 80
+            height: parent.height
+            background: Rectangle {
+                color: "#232f34"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                color: "#00e6e6"
+                font.bold: true
+                anchors.centerIn: parent
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
             onClicked: {
                 content.goPrev();
             }
         }
-
         TextField {
             id: pageNumberInput
             property int firstPage: pages[0].page_number
             property int lastPage: pages[pages.length - 1].page_number
-            width: 70
-            height: 50
+            width: 80
+            height: parent.height
+            color: "white" // text color
+            background: Rectangle {
+                color: "#232f34"
+                radius: 6
+            }
+            selectionColor: "#00e6e6"
             placeholderText: "Page"
             validator: IntValidator {
                 bottom: pageNumberInput.firstPage
                 top: pageNumberInput.lastPage
             }
+            font.pixelSize: 18
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             text: root.currentPageNumber
-
             onAccepted: {
                 var page = parseInt(text);
                 content.goToPage(page - pages[0].page_number);
                 focus = false;
             }
         }
-
         Button {
             anchors.verticalCenter: parent.verticalCenter
             text: ">"
-            width: 70
-            height: 50
+            width: 80
+            height: parent.height
+            background: Rectangle {
+                color: "#232f34"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                color: "#00e6e6"
+                font.bold: true
+                anchors.centerIn: parent
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+
             onClicked: {
                 content.goNext();
             }
@@ -129,17 +213,18 @@ Rectangle {
         anchors.leftMargin: 50
         width: 100
         height: 40
-        color: "gray"
-        border.color: "black"
+        color: "#232f34"
+        border.color: "#009ca6"
         border.width: 1
         FlowText {
             id: moduleTxt
-            color: "black"
+            color: "white"
             width: parent.width * .7
             height: parent.height
+            anchors.centerIn: parent
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
         }
-
-
     }
 
     CheckBox {
@@ -147,17 +232,25 @@ Rectangle {
         text: "isModuleSideLeft"
         checked: false
         anchors.verticalCenter: parent.verticalCenter
-        height: parent.height
         anchors.left: moduleBtn.right
         anchors.leftMargin: 30
+        height: parent.height
+        indicator: Rectangle {
+            width: 18
+            height: 18
+            radius: 4
+            color: moduleSideListCB.checked ? "#00e6e6" : "#232f34"
+            border.color: "#009ca6"
+            border.width: 1
+            anchors.verticalCenter: parent.verticalCenter
+        }
         onCheckedChanged: {
-            config.bookSets[0].books[0].isModuleSideLeft = checked
+            config.bookSets[0].books[0].isModuleSideLeft = checked;
             config.bookSets[0].saveToJson();
         }
-
     }
     function setModuleText() {
-        moduleTxt.text = content.getModuleName()
+        moduleTxt.text = content.getModuleName();
     }
 
     // Rectangle {

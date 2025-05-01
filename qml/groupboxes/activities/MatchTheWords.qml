@@ -21,8 +21,8 @@ Column {
             if (selectedFilePath) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
                 if (newPath) {
-                    activeImage.imagePath = newPath
-                    print("activeImage", activeImage)
+                    activeImage.imagePath = newPath;
+                    print("activeImage", activeImage);
                 } else {
                     console.log("Books klasörü bulunamadı.");
                 }
@@ -32,10 +32,9 @@ Column {
         }
 
         onRejected: {
-            console.log("File selection was canceled")
+            console.log("File selection was canceled");
         }
     }
-
 
     Row {
         width: parent.width * .9
@@ -75,23 +74,28 @@ Column {
 
         // TextEdit bileşeni
         TextField {
-            width: parent.width*.75
+            width: parent.width * .75
             height: parent.height
             placeholderText: "Match the words."
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             text: root.activityModelData.headerText
             onTextChanged: {
-                root.activityModelData.headerText = text
+                root.activityModelData.headerText = text;
             }
-
+            background: Rectangle {
+                color: "#1A2327"
+                border.color: parent.focus ? "#009ca6" : "#445055"
+                border.width: 1
+                radius: 4
+            }
         }
     }
 
     GroupBox {
         id: wordsGB
         title: "Left"
-        width: parent.width* .95
+        width: parent.width * .95
         anchors.horizontalCenter: parent.horizontalCenter
         Column {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -123,6 +127,12 @@ Column {
                         verticalAlignment: Text.AlignVCenter
                         text: modelData.word
                         placeholderText: "add..."
+                        background: Rectangle {
+                            color: "#1A2327"
+                            border.color: parent.focus ? "#009ca6" : "#445055"
+                            border.width: 1
+                            radius: 4
+                        }
                     }
 
                     TextField {
@@ -133,40 +143,67 @@ Column {
                         verticalAlignment: Text.AlignVCenter
                         text: modelData.imagePath
                         placeholderText: "add path..."
+                        background: Rectangle {
+                            color: "#1A2327"
+                            border.color: parent.focus ? "#009ca6" : "#445055"
+                            border.width: 1
+                            radius: 4
+                        }
                     }
 
-                    Rectangle {
-                        height: parent.height * .95
-                        width: parent.width * 0.10
+
+                    Button {
+                        width: 30
+                        height: 30
                         anchors.verticalCenter: parent.verticalCenter
-                        color: "white"
-                        FlowText {
+
+                        background: Rectangle {
+                            color: parent.hovered ? "#2A3337" : "#1A2327"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            radius: 4
+                        }
+
+                        contentItem: Text {
                             text: "..."
-                            color: "black"
-                            anchors.centerIn: undefined
-                            width: parent.width
-                            height: parent.height
-                            font.pixelSize: 15
-                            verticalAlignment: Text.AlignBottom
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
                         }
 
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                activeImage = modelData
-                                fileDialog.folder = "file:" + appPath + root.activityModelData.sectionPath
-                                fileDialog.open()
+                                activeImage = modelData;
+                                fileDialog.folder = "file:" + appPath + root.activityModelData.sectionPath;
+                                fileDialog.open();
                             }
                         }
                     }
 
                     Button {
-                        text: "X"
-                        width: parent.width * 0.08
-                        height: parent.height * 0.9
+                        width: 30
+                        height: 30
                         anchors.verticalCenter: parent.verticalCenter
-                        onClicked: {
-                            root.activityModelData.removeMatchWord(index)
+                        text: "X"
+
+                        background: Rectangle {
+                            color: parent.hovered ? "#bf4040" : "#a63030"
+                            radius: 4
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                root.activityModelData.removeMatchWord(index);
+                            }
                         }
                     }
                 }
@@ -176,9 +213,9 @@ Column {
                 text: "Add New"
                 anchors.horizontalCenter: parent.horizontalCenter
                 onClicked: {
-                    saveChanges()
+                    saveChanges();
 
-                    root.activityModelData.createMatchWord("", "")
+                    root.activityModelData.createMatchWord("", "");
                 }
             }
         }
@@ -187,7 +224,7 @@ Column {
     GroupBox {
         id: rightGB
         title: "Right"
-        width: parent.width* .95
+        width: parent.width * .95
         anchors.horizontalCenter: parent.horizontalCenter
         Column {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -212,6 +249,12 @@ Column {
                         verticalAlignment: Text.AlignVCenter
                         text: getMathcedIndex(modelData.word)
                         placeholderText: "."
+                        background: Rectangle {
+                            color: "#1A2327"
+                            border.color: parent.focus ? "#009ca6" : "#445055"
+                            border.width: 1
+                            radius: 4
+                        }
                     }
 
                     TextField {
@@ -222,6 +265,12 @@ Column {
                         verticalAlignment: Text.AlignVCenter
                         text: modelData.sentence
                         placeholderText: "add..."
+                        background: Rectangle {
+                            color: "#1A2327"
+                            border.color: parent.focus ? "#009ca6" : "#445055"
+                            border.width: 1
+                            radius: 4
+                        }
                     }
 
                     TextField {
@@ -232,40 +281,68 @@ Column {
                         verticalAlignment: Text.AlignVCenter
                         text: modelData.imagePath
                         placeholderText: "add path..."
+                        background: Rectangle {
+                            color: "#1A2327"
+                            border.color: parent.focus ? "#009ca6" : "#445055"
+                            border.width: 1
+                            radius: 4
+                        }
                     }
 
-                    Rectangle {
-                        height: parent.height * .95
-                        width: parent.width * 0.10
+
+
+                    Button {
+                        width: 30
+                        height: 30
                         anchors.verticalCenter: parent.verticalCenter
-                        color: "white"
-                        FlowText {
+
+                        background: Rectangle {
+                            color: parent.hovered ? "#2A3337" : "#1A2327"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            radius: 4
+                        }
+
+                        contentItem: Text {
                             text: "..."
-                            color: "black"
-                            anchors.centerIn: undefined
-                            width: parent.width
-                            height: parent.height
-                            font.pixelSize: 15
-                            verticalAlignment: Text.AlignBottom
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
                         }
 
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                activeImage = modelData
-                                fileDialog.folder = "file:" + appPath + root.activityModelData.sectionPath
-                                fileDialog.open()
+                                activeImage = modelData;
+                                fileDialog.folder = "file:" + appPath + root.activityModelData.sectionPath;
+                                fileDialog.open();
                             }
                         }
                     }
 
+
                     Button {
-                        text: "X"
-                        width: parent.width * 0.08
-                        height: parent.height * 0.9
+                        width: 30
+                        height: 30
                         anchors.verticalCenter: parent.verticalCenter
-                        onClicked: {
-                            root.activityModelData.removeSentences(index)
+                        text: "X"
+
+                        background: Rectangle {
+                            color: parent.hovered ? "#bf4040" : "#a63030"
+                            radius: 4
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                root.activityModelData.removeSentences(index);                                                }
                         }
                     }
                 }
@@ -275,9 +352,9 @@ Column {
                 text: "Add New"
                 anchors.horizontalCenter: parent.horizontalCenter
                 onClicked: {
-                    saveChanges()
+                    saveChanges();
 
-                    root.activityModelData.createSentences("", "", "")
+                    root.activityModelData.createSentences("", "", "");
                 }
             }
         }
@@ -286,9 +363,8 @@ Column {
     function getMathcedIndex(sentence) {
         for (var i = 0; i < root.activityModelData.matchWord.length; i++) {
             if (root.activityModelData.matchWord[i].word === sentence)
-                return i
+                return i;
         }
-        return ""
+        return "";
     }
-
 }

@@ -9,7 +9,7 @@ ApplicationWindow {
     width: 1920// Screen.width
     height: 1080 //Screen.height
     visible: true
-    color: "#2c2a2a"
+    color: "#232f34"
 
     Colors {
         id: myColors
@@ -45,7 +45,11 @@ ApplicationWindow {
         height: parent.height / 6
         anchors.centerIn: parent
         standardButtons: Dialog.Ok | Dialog.Cancel
-
+        background: Rectangle {
+            color: myColors.surfaceColor
+            border.color: myColors.borderColor
+            border.width: 1
+        }
         FlowText {
             text: "Are you sure to exit? \n Changes will be saved!"
             wrapMode: Text.NoWrap
@@ -53,17 +57,14 @@ ApplicationWindow {
             anchors.horizontalCenter: parent.horizontalCenter
             width: parent.width
             height: parent.height
-            color: "white"
+            color: myColors.textColor
             font.pixelSize: 30
         }
-
         onAccepted: {
             config.bookSets[0].saveToJson();
             toast.show("Changes are saved to File!");
-
             Qt.quit();
         }
-
         onRejected: {}
     }
 
