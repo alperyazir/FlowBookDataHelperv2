@@ -182,50 +182,79 @@ QStringList PdfProcess::getTestVersions() const {
     return versions;
 }
 
-bool PdfProcess::copyBookToTestVersion(const QString &testVersion, const QString &currentBookName) {
-    // Get application directory
-    QString appDir = QGuiApplication::applicationDirPath();
+void PdfProcess::copyBookToTestVersion(const QString &testVersion, const QString &currentBookName) {
+    // Asenkron işlem başlat
+    QtConcurrent::run([=]() {
+        setProgress(0);
+        setLogMessages("Starting to copy book files...");
+
+        // Get application directory
+        QString appDir = QGuiApplication::applicationDirPath();
 #ifdef Q_OS_MAC
-    appDir += "/../../../";
+        appDir += "/../../../";
 #else
-    appDir += "/";
+        appDir += "/";
 #endif
 
-    // Source directory (books/XXX)
-    QDir sourceDir(appDir + "books/" + currentBookName);
-    if (!sourceDir.exists()) {
-        qDebug() << "Source book directory not found:" << sourceDir.absolutePath();
-        return false;
-    }
-
-    // Target directory (test/version/data/books)
-    QDir targetDir(appDir + "test/" + testVersion + "/data/books");
-    
-    // Create target directory if it doesn't exist
-    if (!targetDir.exists()) {
-        if (!targetDir.mkpath(".")) {
-            qDebug() << "Failed to create target directory:" << targetDir.absolutePath();
-            return false;
+        // Source directory (books/XXX)
+        QDir sourceDir(appDir + "books/" + currentBookName);
+        if (!sourceDir.exists()) {
+            setLogMessages("Error: Source book directory not found");
+            emit copyCompleted(false);
+            return;
         }
-    }
 
-    // Remove existing directory if it exists
-    QString targetBookPath = targetDir.absolutePath() + "/" + currentBookName;
-    if (QDir(targetBookPath).exists()) {
-        if (!removeDir(targetBookPath)) {
-            qDebug() << "Failed to remove existing book directory:" << targetBookPath;
-            return false;
+        setProgress(15);
+        setLogMessages("Checking target directory...");
+        
+        // Target directory (test/version/data/books)
+        QDir targetDir(appDir + "test/" + testVersion + "/data/books");
+        
+        // Create target directory if it doesn't exist
+        if (!targetDir.exists()) {
+            setLogMessages("Creating target directory...");
+            if (!targetDir.mkpath(".")) {
+                setLogMessages("Error: Failed to create target directory");
+                emit copyCompleted(false);
+                return;
+            }
         }
-    }
 
-    // Copy directory
-    if (!copyDir(sourceDir.absolutePath(), targetBookPath)) {
-        qDebug() << "Failed to copy book directory from" << sourceDir.absolutePath() << "to" << targetBookPath;
-        return false;
-    }
+        setProgress(30);
+        
+        // Check and remove existing book if it exists
+        QString targetBookPath = targetDir.absolutePath() + "/" + currentBookName;
+        if (QDir(targetBookPath).exists()) {
+            setLogMessages("Found existing book, cleaning up...");
+            if (!removeDir(targetBookPath)) {
+                setLogMessages("Error: Failed to remove existing book directory");
+                emit copyCompleted(false);
+                return;
+            }
+            setLogMessages("Successfully removed existing book");
+        }
 
-    qDebug() << "Successfully copied book directory to test version";
-    return true;
+        setProgress(50);
+        setLogMessages("Starting to copy new book files...");
+        
+        // Copy directory
+        if (!copyDir(sourceDir.absolutePath(), targetBookPath)) {
+            setLogMessages("Error: Failed to copy book directory");
+            emit copyCompleted(false);
+            return;
+        }
+
+        // Verify the copy was successful
+        if (!QDir(targetBookPath).exists()) {
+            setLogMessages("Error: Book directory was not copied correctly");
+            emit copyCompleted(false);
+            return;
+        }
+
+        setProgress(100);
+        setLogMessages("Successfully copied book files to test version");
+        emit copyCompleted(true);
+    });
 }
 
 // Helper function to recursively remove a directory

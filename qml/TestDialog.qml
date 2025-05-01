@@ -112,32 +112,26 @@ Dialog {
                 Layout.preferredWidth: 100
                 onClicked: {
                     if (versionList.model.count > 0) {
-                        var success = pdfProcess.copyBookToTestVersion(selectedVersion, currentProject);
-                        if (success) {
-                            console.log("Successfully copied book to test version:", selectedVersion);
-                            // Launch FlowBook after successful copy
-                            if (pdfProcess.launchTestFlowBook(selectedVersion)) {
-                                console.log("Launching FlowBook from test version:", selectedVersion);
-                                testDialog.close();
-                            } else {
-                                console.error("Failed to launch FlowBook from test version:", selectedVersion);
-                            }
-                        } else {
-                            console.error("Failed to copy book to test version:", selectedVersion);
-                        }
+                        // Show progress dialog
+                        flowProgress.reset();
+                        flowProgress.statusText = "Copying book files...";
+                        flowProgress.open();
+
+                        // Start copying process
+                        pdfProcess.copyBookToTestVersion(selectedVersion, currentProject);
                     }
                 }
 
                 background: Rectangle {
-                    color: parent.pressed ? "#1A1A1A" : "#333333"
-                    border.color: "#404040"
+                    color: parent.pressed ? myColors.buttonPressedColor : parent.hovered ? myColors.buttonHoverColor : myColors.buttonBackgroundColor
+                    border.color: myColors.borderColor
                     border.width: 1
                     radius: 4
                 }
 
                 contentItem: Text {
                     text: parent.text
-                    color: "#FFFFFF"
+                    color: myColors.textColor
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -161,6 +155,28 @@ Dialog {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
+            }
+        }
+    }
+
+    // Add Connections for handling copy completion
+    Connections {
+        target: pdfProcess
+        function onCopyCompleted(success) {
+            if (success) {
+                flowProgress.addLogMessage("Successfully copied book files");
+                flowProgress.statusText = "Launching FlowBook...";
+
+                // Launch FlowBook after successful copy
+                if (pdfProcess.launchTestFlowBook(selectedVersion)) {
+                    flowProgress.addLogMessage("FlowBook launched successfully");
+                    flowProgress.close();
+                    testDialog.close();
+                } else {
+                    flowProgress.addLogMessage("Failed to launch FlowBook");
+                }
+            } else {
+                flowProgress.addLogMessage("Failed to copy book files");
             }
         }
     }

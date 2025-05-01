@@ -10,7 +10,7 @@ class PdfProcess: public QObject {
 public:
     Q_INVOKABLE void startProcessing(const QString &pdfConfig);
     Q_INVOKABLE QStringList getTestVersions() const;
-    Q_INVOKABLE bool copyBookToTestVersion(const QString &testVersion, const QString &currentBookName);
+    Q_INVOKABLE void copyBookToTestVersion(const QString &testVersion, const QString &currentBookName);
     Q_INVOKABLE bool launchTestFlowBook(const QString &testVersion);
     Q_INVOKABLE bool packageForPlatforms(const QStringList &platforms, const QString &currentBookName);
     
@@ -28,6 +28,7 @@ public:
 signals:
     void progressChanged();
     void logMessagesChanged();
+    void copyCompleted(bool success);
 
 private:
     Q_PROPERTY(int progress READ progress WRITE setProgress NOTIFY progressChanged FINAL)
