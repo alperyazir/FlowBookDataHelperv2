@@ -30,7 +30,7 @@ Rectangle {
     property var drawMatchedLineList: []
 
 
-    color: "#131111"
+    color: "gray"
     id: root
 
     // FileDialog bileşeni

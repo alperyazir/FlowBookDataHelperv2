@@ -9,9 +9,12 @@
 #include <algorithm>
 #include <QtConcurrent>
 
-void PdfProcess::startProcessing(const QString &pdfConfig)
+void PdfProcess::startProcessing(QString &pdfConfig)
 {
     qDebug() << "Starting PDF processing with config:" << pdfConfig;
+    if (pdfConfig.size() > 0 && pdfConfig.startsWith("/")) {
+        pdfConfig = pdfConfig.removeFirst();
+    }
     //emit processingStarted();
 
     // Create a temporary file to store the JSON config
@@ -34,6 +37,8 @@ void PdfProcess::startProcessing(const QString &pdfConfig)
 
     // Setup the process to run the Python script
     QProcess *process = new QProcess(this);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
     process->setProcessChannelMode(QProcess::MergedChannels);
 
     // Connect to readyRead to capture output in real-time
@@ -122,7 +127,7 @@ void PdfProcess::startProcessing(const QString &pdfConfig)
     arguments << "-u" << scriptPath << tempPath;
 
     // Start the process with python3 command
-    process->start("python3", arguments);
+    process->start("python", arguments);
 
     // Don't wait here - the process will emit signals as it proceeds
     qDebug() << "Python process started";
@@ -163,7 +168,7 @@ QStringList PdfProcess::getTestVersions() const {
 #ifdef Q_OS_MAC
     appDir += "/../../../";
 #else
-    appDir += "/";
+    appDir += "/../";
 #endif
     QDir currentDir(appDir);
     // Check if "test" directory exists
@@ -193,7 +198,7 @@ void PdfProcess::copyBookToTestVersion(const QString &testVersion, const QString
 #ifdef Q_OS_MAC
         appDir += "/../../../";
 #else
-        appDir += "/";
+        appDir += "/../";
 #endif
 
         // Source directory (books/XXX)
@@ -317,7 +322,7 @@ bool PdfProcess::launchTestFlowBook(const QString &testVersion) {
 #ifdef Q_OS_MAC
     appDir += "/../../../";
 #else
-    appDir += "/";
+    appDir += "/../";
 #endif
 
     // Construct path to FlowBook executable based on platform
@@ -405,7 +410,7 @@ bool PdfProcess::package(const QStringList &platforms, const QString &currentBoo
 #ifdef Q_OS_MAC
     appDir += "/../../../";
 #else
-    appDir += "/";
+    appDir += "/../";
 #endif
 
     // Create/Clean release directory for the book

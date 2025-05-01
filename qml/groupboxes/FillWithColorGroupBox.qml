@@ -70,7 +70,7 @@ GroupBox {
 
                             FlowText {
                                 text: "Color: "
-                                color: "white"
+                                color: "black"
                                 anchors.centerIn: undefined
                                 width: parent.width * .12
                                 font.pixelSize: 15
@@ -92,7 +92,7 @@ GroupBox {
 
                             FlowText {
                                 text: "Opacity: "
-                                color: "white"
+                                color: "black"
                                 anchors.centerIn: undefined
                                 width: parent.width * .15
                                 font.pixelSize: 15

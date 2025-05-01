@@ -8,7 +8,7 @@
 class PdfProcess: public QObject {
     Q_OBJECT
 public:
-    Q_INVOKABLE void startProcessing(const QString &pdfConfig);
+    Q_INVOKABLE void startProcessing(QString &pdfConfig);
     Q_INVOKABLE QStringList getTestVersions() const;
     Q_INVOKABLE void copyBookToTestVersion(const QString &testVersion, const QString &currentBookName);
     Q_INVOKABLE bool launchTestFlowBook(const QString &testVersion);

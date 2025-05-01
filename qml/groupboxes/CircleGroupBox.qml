@@ -70,7 +70,7 @@ GroupBox {
 
                             FlowText {
                                 text: "Circle: "
-                                color: "white"
+                                color: "black"
                                 anchors.centerIn: undefined
                                 width: parent.width * .15
                                 font.pixelSize: 15

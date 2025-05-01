@@ -14,11 +14,6 @@ Dialog {
 
     anchors.centerIn: parent
 
-    // Add dark background to the dialog
-    background: Rectangle {
-        color: "#2B2B2B"  // Dark background
-    }
-
     // Properties to track selected operating systems
     property var selectedOS: ({
                                   windows: false      // Windows 10+ selected by default
@@ -37,7 +32,7 @@ Dialog {
 
         // Title
         Label {
-            text: "Select Operating Systems 🙈"
+            text: "Select Platforms  🙈"
             font.pixelSize: 16
             font.bold: true
             Layout.alignment: Qt.AlignHCenter
@@ -62,6 +57,7 @@ Dialog {
                     text: "Windows"
                     checked: selectedOS.windows
                     onCheckedChanged: selectedOS.windows = checked
+
                 }
 
                 CheckBox {
@@ -84,7 +80,7 @@ Dialog {
                     text: "MacOs"
                     checked: selectedOS.macos
                     onCheckedChanged: selectedOS.macos = checked
-                }
+                 }
             }
         }
 
@@ -133,19 +129,6 @@ Dialog {
                     }
                 }
 
-                background: Rectangle {
-                    color: parent.pressed ? "#1A1A1A" : "#333333"
-                    border.color: "#404040"
-                    border.width: 1
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: parent.text
-                    color: "#FFFFFF"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
             }
 
             Button {

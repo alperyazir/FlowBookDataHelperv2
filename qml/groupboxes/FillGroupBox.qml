@@ -70,7 +70,7 @@ GroupBox {
 
                             FlowText {
                                 text: "Fill: "
-                                color: "white"
+                                color: "black"
                                 anchors.centerIn: undefined
                                 width: parent.width * .15
                                 font.pixelSize: 15
@@ -91,7 +91,7 @@ GroupBox {
 
                             FlowText {
                                 text: "Rotation: "
-                                color: "white"
+                                color: "black"
                                 anchors.centerIn: undefined
                                 width: parent.width * .10
                                 font.pixelSize: 15
