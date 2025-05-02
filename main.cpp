@@ -8,6 +8,7 @@
 
 #include "config/configparser.h"
 #include "pdfprocess/pdfprocess.h"
+#include "update/updatemanager.h"
 
 int main(int argc, char *argv[])
 {
@@ -25,13 +26,12 @@ int main(int argc, char *argv[])
 
     auto config = ConfigParser::instance();
     PdfProcess *pdfProcess = new PdfProcess;
+    UpdateManager *updateManager = new UpdateManager();
 
     QQmlApplicationEngine engine;
     config->setEngine(&engine);
 
     QString appPath;
-
-
 
 #ifdef Q_OS_MAC // MacOS için özel kod
     appPath = QGuiApplication::applicationDirPath() + "/../../../";
@@ -41,6 +41,7 @@ int main(int argc, char *argv[])
     rootContext->setContextProperty("config", config);
     rootContext->setContextProperty("appPath", appPath);
     rootContext->setContextProperty("pdfProcess", pdfProcess);
+    rootContext->setContextProperty("updateManager", updateManager);
 
     const QUrl url(u"qrc:/qml/main.qml"_qs);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreated,
@@ -49,6 +50,9 @@ int main(int argc, char *argv[])
                              QCoreApplication::exit(-1);
                      }, Qt::QueuedConnection);
     engine.load(url);
+
+    // Uygulama başlatıldığında güncelleme kontrolünü yap
+    QMetaObject::invokeMethod(updateManager, "checkForUpdates", Qt::QueuedConnection);
 
     return app.exec();
 }
