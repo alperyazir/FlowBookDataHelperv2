@@ -80,6 +80,7 @@ Column {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             text: root.activityModelData.headerText
+            color: "white"
             onTextChanged: {
                 root.activityModelData.headerText = text;
             }
@@ -128,6 +129,7 @@ Column {
                         text: modelData.word
                         placeholderText: "add..."
                         placeholderTextColor: "gray"
+                        color: "white"
                         background: Rectangle {
                             color: "#1A2327"
                             border.color: parent.focus ? "#009ca6" : "#445055"
@@ -145,6 +147,7 @@ Column {
                         text: modelData.imagePath
                         placeholderText: "add path..."
                         placeholderTextColor: "gray"
+                        color: "white"
                         background: Rectangle {
                             color: "#1A2327"
                             border.color: parent.focus ? "#009ca6" : "#445055"
@@ -252,6 +255,7 @@ Column {
                         text: getMathcedIndex(modelData.word)
                         placeholderText: "."
                         placeholderTextColor: "gray"
+                        color: "white"
                         background: Rectangle {
                             color: "#1A2327"
                             border.color: parent.focus ? "#009ca6" : "#445055"
@@ -269,6 +273,7 @@ Column {
                         text: modelData.sentence
                         placeholderText: "add..."
                         placeholderTextColor: "gray"
+                        color: "white"
                         background: Rectangle {
                             color: "#1A2327"
                             border.color: parent.focus ? "#009ca6" : "#445055"
@@ -286,6 +291,7 @@ Column {
                         text: modelData.imagePath
                         placeholderText: "add path..."
                         placeholderTextColor: "gray"
+                        color: "white"
                         background: Rectangle {
                             color: "#1A2327"
                             border.color: parent.focus ? "#009ca6" : "#445055"

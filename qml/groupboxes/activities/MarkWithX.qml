@@ -78,6 +78,7 @@ Column {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             text: root.activityModelData.headerText
+            color: "white"
             onTextChanged: {
                 root.activityModelData.headerText = text;
             }
@@ -112,6 +113,7 @@ Column {
             placeholderTextColor: "gray"
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
+            color: "white"
             text: root.activityModelData.sectionPath
             background: Rectangle {
                 color: "#1A2327"
