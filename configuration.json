@@ -1,0 +1,26 @@
+{
+    "application": {
+        "name": "FlowBookEnvironment",
+        "version": "1.0.0",
+        "downloadUrl": "https://drive.google.com/uc?export=download&id=11WMllZeSNdjTwhcPP_Anfpz_xuZiQqrl",
+        "releaseNotes": "Yeni özellikler"
+    },
+    "components": [
+        {
+            "name": "FlowBookDataHelper",
+            "version": "1.0.0",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=YOUR_DATA_FILES_ID",
+            "fileName": "FowBookDataHelper.zip",
+            "targetPath": "flowbookdatahelper",
+            "releaseNotes": "FlowBookDataHelper Yeni Versiyonu"
+        },
+        {
+            "name": "FowBookTest",
+            "version": "1.0.0",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=YOUR_DATA_FILES_ID",
+            "fileName": "FowBookTest.zip",
+            "targetPath": "test",
+            "releaseNotes": "FlowBook Yeni Test Versiyonu"
+        }
+    ]
+}
