@@ -121,26 +121,13 @@ void UpdateManager::loadConfiguration()
     }
     
     // Load temporary remote config if it exists
-    QString appDir = QCoreApplication::applicationDirPath();
-    QStringList possiblePaths = {
-        appDir + "/temp_config.json",
-        QCoreApplication::applicationDirPath() + "/../../temp_config.json",
-        QCoreApplication::applicationDirPath() + "/../../../temp_config.json",
-        QDir::currentPath() + "/temp_config.json"
-    };
+    QString tempConfigPath = getTempConfigPath();
     
-    bool foundRemoteConfig = false;
-    for (const QString &path : possiblePaths) {
-        if (QFile::exists(path)) {
-            addLogMessage("Found remote configuration at: " + path);
-            readConfig(path, m_remoteConfig);
-            foundRemoteConfig = true;
-            break;
-        }
-    }
-    
-    if (!foundRemoteConfig) {
-        addLogMessage("Could not find any remote configuration file. Checking for updates might not work correctly.");
+    if (QFile::exists(tempConfigPath)) {
+        addLogMessage("Found remote configuration at: " + tempConfigPath);
+        readConfig(tempConfigPath, m_remoteConfig);
+    } else {
+        addLogMessage("Could not find remote configuration file at: " + tempConfigPath);
     }
     
     // Analyze components and send to QML
@@ -158,6 +145,22 @@ QString UpdateManager::getConfigPath() const
 #endif
     
     return appDir + "/configuration.json";
+}
+
+QString UpdateManager::getTempConfigPath() const
+{
+    // Get the path to the temp_config.json file
+    // This should be in the parent directory of the scripts directory
+    QString appDir = QCoreApplication::applicationDirPath();
+    
+#ifdef Q_OS_MAC
+    // On Mac, app bundle structure is: YourApp.app/Contents/MacOS/executable
+    // We need to go up 3 levels to get to the directory containing the app bundle
+    return appDir + "/../../../temp_config.json";
+#else
+    // On Windows, the executable is directly in the app directory
+    return appDir + "/temp_config.json";
+#endif
 }
 
 void UpdateManager::readConfig(const QString &path, QJsonObject &config)
@@ -380,26 +383,13 @@ void UpdateManager::handleCheckFinished(int exitCode, QProcess::ExitStatus exitS
         readConfig(configPath, m_localConfig);
         
         // Read temporary configuration file (remote config)
-        QString appDir = QCoreApplication::applicationDirPath();
-        QStringList possiblePaths = {
-            appDir + "/temp_config.json",
-            QCoreApplication::applicationDirPath() + "/../../temp_config.json",
-            QCoreApplication::applicationDirPath() + "/../../../temp_config.json",
-            QDir::currentPath() + "/temp_config.json"
-        };
+        QString tempConfigPath = getTempConfigPath();
         
-        bool foundRemoteConfig = false;
-        for (const QString &path : possiblePaths) {
-            if (QFile::exists(path)) {
-                addLogMessage("Found remote configuration at: " + path);
-                readConfig(path, m_remoteConfig);
-                foundRemoteConfig = true;
-                break;
-            }
-        }
-        
-        if (!foundRemoteConfig) {
-            addLogMessage("Could not find any remote configuration file after check.");
+        if (QFile::exists(tempConfigPath)) {
+            addLogMessage("Found remote configuration at: " + tempConfigPath);
+            readConfig(tempConfigPath, m_remoteConfig);
+        } else {
+            addLogMessage("Could not find remote configuration file after check: " + tempConfigPath);
         }
         
         // Analyze components

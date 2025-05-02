@@ -69,11 +69,12 @@ private:
     
     void setupPaths();
     QString getPythonExecutablePath() const;
+    QString getConfigPath() const;
+    QString getTempConfigPath() const;
+    void readConfig(const QString &path, QJsonObject &config);
     void addLogMessage(const QString &message);
     bool compareVersions(const QString &localVersion, const QString &remoteVersion);
     void analyzeComponents();
-    QString getConfigPath() const;
-    void readConfig(const QString &path, QJsonObject &config);
 };
 
 #endif // UPDATEMANAGER_H 

@@ -117,32 +117,25 @@ def download_remote_config():
 
         log(f"Remote configuration downloaded to {temp_path}")
 
-        # Save to multiple possible locations to ensure it can be found
-        app_dir = get_application_directory()
-        possible_locations = [
-            os.path.join(app_dir, "temp_config.json"),
-            os.path.join(os.path.dirname(app_dir), "temp_config.json"),
-            os.path.join(os.path.dirname(os.path.dirname(app_dir)), "temp_config.json"),
-        ]
+        # Get script directory and go one level up
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        parent_dir = os.path.dirname(script_dir)
+        config_location = os.path.join(parent_dir, "temp_config.json")
 
-        for location in possible_locations:
-            try:
-                directory = os.path.dirname(location)
-                if not os.path.exists(directory):
-                    os.makedirs(directory, exist_ok=True)
-
-                shutil.copy2(temp_path, location)
-                log(f"Copied configuration to {location}")
-            except Exception as e:
-                log(f"Could not copy to {location}: {e}")
+        try:
+            shutil.copy2(temp_path, config_location)
+            log(f"Copied configuration to {config_location}")
+        except Exception as e:
+            log(f"Could not copy to {config_location}: {e}")
+            return None
 
         # For debugging purposes
         log(f"Current working directory: {os.getcwd()}")
-        log(f"Application directory: {app_dir}")
-        log(f"Script location: {os.path.abspath(__file__)}")
+        log(f"Script directory: {script_dir}")
+        log(f"Parent directory: {parent_dir}")
 
         # Don't remove the temporary file
-        return temp_path
+        return config_location
 
     except URLError as e:
         log(f"Error downloading remote configuration: {e}")
