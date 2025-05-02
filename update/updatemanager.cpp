@@ -471,13 +471,13 @@ void UpdateManager::handleUpdateFinished(int exitCode, QProcess::ExitStatus exit
         
         if (exitCode == 10) {
             // Restart required
-            message = "Update successful. Restart required.";
+            message = "Update successful. Application will close to complete the update.";
             success = true;
             needsRestart = true;
-            addLogMessage("Restart required.");
+            addLogMessage("Application will close to complete the update.");
         } 
         else if (exitCode == 0) {
-            // Successful update
+            // Successful update without restart
             message = "Update completed successfully.";
             success = true;
             addLogMessage("Update completed successfully.");
@@ -508,9 +508,13 @@ void UpdateManager::handleUpdateFinished(int exitCode, QProcess::ExitStatus exit
     connect(m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), 
             this, &UpdateManager::handleCheckFinished);
     
-    // If restart is needed, automatically restart the application after a short delay
+    // If restart is needed, emit restart required signal and wait for user confirmation
+    // or automatically restart after a short delay based on your preference
     if (needsRestart) {
-        QTimer::singleShot(3000, this, &UpdateManager::restartApplication);
+        emit restartRequired();
+        
+        // Give some time to show the message before restarting
+        QTimer::singleShot(5000, this, &UpdateManager::restartApplication);
     }
 }
 

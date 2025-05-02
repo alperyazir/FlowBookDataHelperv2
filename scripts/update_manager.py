@@ -12,6 +12,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+import zipfile
 from datetime import datetime
 from urllib.error import URLError
 
@@ -145,6 +146,112 @@ def download_remote_config():
         return None
 
 
+def download_file(url, target_path):
+    """Download a file from URL."""
+    log(f"Downloading from {url} to {target_path}")
+    try:
+        with urllib.request.urlopen(url) as response, open(
+            target_path, "wb"
+        ) as out_file:
+            total_size = int(response.info().get("Content-Length", 0))
+            downloaded = 0
+            block_size = 8192
+
+            while True:
+                buffer = response.read(block_size)
+                if not buffer:
+                    break
+
+                downloaded += len(buffer)
+                out_file.write(buffer)
+
+                # Calculate and log progress
+                if total_size > 0:
+                    percent = downloaded * 100 / total_size
+                    log(
+                        f"Download progress: {percent:.1f}% ({downloaded}/{total_size} bytes)"
+                    )
+                else:
+                    log(f"Downloaded {downloaded} bytes")
+
+        log(f"Download completed: {target_path}")
+        return True
+    except Exception as e:
+        log(f"Download error: {str(e)}")
+        return False
+
+
+def extract_zip(zip_path, extract_path):
+    """Extract zip file to specified path."""
+    log(f"Extracting {zip_path} to {extract_path}")
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            total_files = len(zip_ref.namelist())
+            log(f"Zip contains {total_files} files")
+
+            for i, file in enumerate(zip_ref.namelist(), 1):
+                if i % 5 == 0 or i == total_files:  # Log every 5 files or the last file
+                    log(f"Extracting file {i}/{total_files}: {file}")
+
+            zip_ref.extractall(extract_path)
+
+        log(f"Successfully extracted {zip_path} to {extract_path}")
+        return True
+    except Exception as e:
+        log(f"Extraction error: {str(e)}")
+        return False
+
+
+def update_component(component, app_dir, is_main_app=False):
+    """Update a component."""
+    name = component.get("name", "Unknown")
+    version = component.get("version", "Unknown")
+    download_url = component.get("downloadUrl", "")
+    file_name = component.get("fileName", f"{name}.zip")
+    target_path = component.get("targetPath", "")
+
+    log(f"Updating component: {name} to version {version}")
+
+    # Determine download and extraction paths
+    download_path = os.path.join(app_dir, file_name)
+
+    # Special case for FlowBookTest - extract to test folder
+    if name == "FlowBookTest":
+        extract_path = os.path.join(app_dir, "test")
+        if not os.path.exists(extract_path):
+            os.makedirs(extract_path, exist_ok=True)
+    else:
+        extract_path = os.path.join(app_dir, target_path) if target_path else app_dir
+
+    # Download the file
+    if not download_file(download_url, download_path):
+        log(f"Failed to download {name}")
+        return False
+
+    # For main application, just return the path to the zip
+    if is_main_app:
+        log(f"Main application zip downloaded to {download_path}")
+        return download_path
+
+    # For other components, extract them now
+    if not os.path.exists(extract_path):
+        os.makedirs(extract_path, exist_ok=True)
+
+    if not extract_zip(download_path, extract_path):
+        log(f"Failed to extract {name}")
+        return False
+
+    # Remove downloaded zip
+    try:
+        os.remove(download_path)
+        log(f"Removed downloaded zip: {download_path}")
+    except Exception as e:
+        log(f"Could not remove zip file: {str(e)}")
+
+    log(f"Component {name} updated successfully")
+    return True
+
+
 def compare_versions(local_version, remote_version):
     """Compare two version strings."""
     if local_version == remote_version:
@@ -166,6 +273,54 @@ def compare_versions(local_version, remote_version):
             return False
 
     return False  # They are equal
+
+
+def create_update_script(main_app_zip, app_dir):
+    """Create a batch/shell script to finish the update after app exit."""
+    if platform.system() == "Windows":
+        script_path = os.path.join(app_dir, "_update_helper.bat")
+
+        # Get the executable name - assuming it's the only .exe in the app_dir
+        exe_files = [f for f in os.listdir(app_dir) if f.endswith(".exe")]
+        if not exe_files:
+            log("No .exe file found in app directory")
+            return None
+
+        exe_name = exe_files[0]
+        log(f"Found executable: {exe_name}")
+
+        with open(script_path, "w") as f:
+            f.write("@echo off\n")
+            f.write("echo Updating application...\n")
+            f.write("timeout /t 2 >nul\n")  # Give time for the app to fully close
+            f.write(f'del "{os.path.join(app_dir, exe_name)}"\n')
+            f.write(f"echo Extracting update...\n")
+            # Use PowerShell to extract the zip (more reliable than batch)
+            f.write(
+                f"powershell -command \"Expand-Archive -Path '{main_app_zip}' -DestinationPath '{app_dir}' -Force\"\n"
+            )
+            f.write(f'del "{main_app_zip}"\n')
+            f.write(f"echo Starting updated application...\n")
+            f.write(f'start "" "{os.path.join(app_dir, exe_name)}"\n')
+            f.write("exit\n")
+    else:
+        # For macOS or Linux
+        script_path = os.path.join(app_dir, "_update_helper.sh")
+        with open(script_path, "w") as f:
+            f.write("#!/bin/bash\n")
+            f.write('echo "Updating application..."\n')
+            f.write("sleep 2\n")  # Give time for the app to fully close
+            f.write(f"rm -f \"{os.path.join(app_dir, 'FlowBookDataHelper2')}\"\n")
+            f.write(f'echo "Extracting update..."\n')
+            f.write(f'unzip -o "{main_app_zip}" -d "{app_dir}"\n')
+            f.write(f'rm -f "{main_app_zip}"\n')
+            f.write(f'echo "Starting updated application..."\n')
+            f.write(f"\"{os.path.join(app_dir, 'FlowBookDataHelper2')}\" &\n")
+            f.write("exit 0\n")
+        os.chmod(script_path, 0o755)  # Make executable
+
+    log(f"Created update helper script: {script_path}")
+    return script_path
 
 
 def check_for_updates(mode="check"):
@@ -192,10 +347,11 @@ def check_for_updates(mode="check"):
         return EXIT_CODE_ERROR
 
     # Check if the application needs an update
-    application_update_needed = False
-    components_update_needed = False
+    main_app_update_needed = False
+    components_to_update = []
 
     # Application update check
+    main_app_component = None
     if "application" in local_config and "application" in remote_config:
         local_app = local_config["application"]
         remote_app = remote_config["application"]
@@ -203,7 +359,8 @@ def check_for_updates(mode="check"):
         if compare_versions(
             local_app.get("version", "0"), remote_app.get("version", "0")
         ):
-            application_update_needed = True
+            main_app_update_needed = True
+            main_app_component = remote_app
             log(
                 f"Application update available: {local_app.get('version', 'unknown')} -> {remote_app.get('version', 'unknown')}"
             )
@@ -228,79 +385,96 @@ def check_for_updates(mode="check"):
                     local_component.get("version", "0"),
                     remote_component.get("version", "0"),
                 ):
-                    components_update_needed = True
+                    components_to_update.append(remote_component)
                     log(
                         f"Component '{name}' update available: {local_component.get('version', 'unknown')} -> {remote_component.get('version', 'unknown')}"
                     )
             else:
+                components_to_update.append(remote_component)
                 log(
                     f"New component available: {name} ({remote_component.get('version', 'unknown')})"
                 )
-                components_update_needed = True
 
-    # If application needs update, it requires a restart
-    if application_update_needed:
-        if mode == "apply":
-            # Apply application update (would typically download and install the new version)
-            log(
-                "Application update requires restart. Please download the latest version manually."
+    # If only checking for updates, return information
+    if mode == "check":
+        if main_app_update_needed or components_to_update:
+            log("Updates are available")
+            return EXIT_CODE_SUCCESS
+        else:
+            log("No updates available")
+            return EXIT_CODE_SUCCESS
+
+    # If applying updates
+    if mode == "apply":
+        # First update components
+        for component in components_to_update:
+            if component["name"] != "FlowBookDataHelper":  # Don't update main app yet
+                log(f"Updating component: {component['name']}")
+                success = update_component(component, app_dir)
+                if not success:
+                    log(f"Failed to update component: {component['name']}")
+
+        # Update local configuration with component versions
+        if components_to_update:
+            try:
+                updated_config = local_config.copy()
+
+                # Update component versions
+                if "components" in updated_config:
+                    for i, component in enumerate(updated_config["components"]):
+                        for remote_component in components_to_update:
+                            if component["name"] == remote_component["name"]:
+                                updated_config["components"][i]["version"] = (
+                                    remote_component["version"]
+                                )
+                                if "releaseNotes" in remote_component:
+                                    updated_config["components"][i]["releaseNotes"] = (
+                                        remote_component["releaseNotes"]
+                                    )
+
+                # Write updated config
+                with open(local_config_path, "w") as f:
+                    json.dump(updated_config, f, indent=4)
+
+                log("Updated local configuration with new component versions")
+            except Exception as e:
+                log(f"Error updating local configuration: {str(e)}")
+
+        # Finally, if main app needs update
+        if main_app_update_needed and main_app_component:
+            log("Preparing to update main application...")
+            main_app_zip = update_component(
+                main_app_component, app_dir, is_main_app=True
             )
-            return EXIT_CODE_RESTART_REQUIRED
-        else:
-            log("Application update available but not applied (check-only mode)")
-            return EXIT_CODE_RESTART_REQUIRED
 
-    # If components need updates
-    if components_update_needed:
-        if mode == "apply":
-            # Apply component updates
-            log("Applying component updates...")
+            if main_app_zip and os.path.exists(main_app_zip):
+                # Create helper script to complete update after app exits
+                update_script = create_update_script(main_app_zip, app_dir)
 
-            # Simulate update process
-            time.sleep(random.uniform(1.0, 3.0))
+                if update_script:
+                    log("Main application update prepared, restart required.")
 
-            # Here we would actually download and install component updates
-            # For each component that needs an update:
-            # 1. Download the component from its URL
-            # 2. Extract/install it to the target path
+                    # On Windows, start the update script
+                    if platform.system() == "Windows":
+                        try:
+                            subprocess.Popen(f'start "" "{update_script}"', shell=True)
+                            log("Update helper script launched")
+                        except Exception as e:
+                            log(f"Failed to launch update helper: {str(e)}")
 
-            # Update local configuration
-            with open(local_config_path, "w") as f:
-                # Update the local config with the remote component versions
-                if "components" in local_config and "components" in remote_config:
-                    local_components = {
-                        component["name"]: component
-                        for component in local_config.get("components", [])
-                    }
-                    remote_components = {
-                        component["name"]: component
-                        for component in remote_config.get("components", [])
-                    }
+                    return EXIT_CODE_RESTART_REQUIRED
+                else:
+                    log("Failed to create update script")
+                    return EXIT_CODE_ERROR
+            else:
+                log("Failed to download main application update")
+                return EXIT_CODE_ERROR
 
-                    for component in local_config["components"]:
-                        name = component["name"]
-                        if name in remote_components:
-                            # Update version and other fields
-                            component["version"] = remote_components[name]["version"]
-                            if "releaseNotes" in remote_components[name]:
-                                component["releaseNotes"] = remote_components[name][
-                                    "releaseNotes"
-                                ]
-                            if "downloadUrl" in remote_components[name]:
-                                component["downloadUrl"] = remote_components[name][
-                                    "downloadUrl"
-                                ]
+        log("Update process completed successfully")
+        return EXIT_CODE_SUCCESS
 
-                json.dump(local_config, f, indent=4)
-
-            log("Component updates completed successfully")
-            return EXIT_CODE_SUCCESS
-        else:
-            log("Component updates available but not applied (check-only mode)")
-            return EXIT_CODE_SUCCESS
-
-    log("No updates available")
-    return EXIT_CODE_SUCCESS
+    log("Unknown mode specified")
+    return EXIT_CODE_ERROR
 
 
 def main():

@@ -142,6 +142,44 @@ Item {
                 }
             }
 
+            // Progress message when update is in progress
+            Rectangle {
+                Layout.fillWidth: true
+                height: updateProgressText.contentHeight + 20
+                color: "#e67e22"
+                visible: updateInProgress
+
+                Text {
+                    id: updateProgressText
+                    text: "Update in progress... This may take a few moments."
+                    color: "white"
+                    font.pixelSize: 14
+                    font.bold: true
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    wrapMode: Text.Wrap
+                }
+            }
+
+            // Update closing warning message
+            Rectangle {
+                Layout.fillWidth: true
+                height: closeWarningText.contentHeight + 20
+                color: "#c0392b"
+                visible: updateMessage.indexOf("close") !== -1
+
+                Text {
+                    id: closeWarningText
+                    text: "IMPORTANT: The application will close automatically to complete the update. Your work will be saved, and the application will restart when update is complete."
+                    color: "white"
+                    font.pixelSize: 14
+                    font.bold: true
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    wrapMode: Text.Wrap
+                }
+            }
+
             // Check and Update buttons
             RowLayout {
                 Layout.fillWidth: true
