@@ -46,6 +46,7 @@ ApplicationWindow {
         anchors.bottom: parent.bottom
         anchors.leftMargin: 80
         anchors.bottomMargin: 20
+        hoverEnabled: false
         z: 10
         width: 40
         height: 40
@@ -54,7 +55,7 @@ ApplicationWindow {
         icon.color: "white"
 
         background: Rectangle {
-            color: updateLogButton.hovered ? "#3498db" : "#2980b9"
+            color: "#3498db"
             radius: width / 2
         }
 
@@ -62,9 +63,9 @@ ApplicationWindow {
             updateLogViewer.visible = !updateLogViewer.visible;
         }
 
-        ToolTip.visible: hovered
-        ToolTip.text: "Güncelleme Kayıtlarını Göster"
-        ToolTip.delay: 500
+        // ToolTip.visible: hovered
+        // ToolTip.text: "Güncelleme Kayıtlarını Göster"
+        // ToolTip.delay: 500
     }
 
     FlowToolBar {

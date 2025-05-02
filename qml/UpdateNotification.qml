@@ -22,10 +22,11 @@ Item {
         anchors.left: parent.left
         anchors.bottom: parent.bottom
         anchors.margins: 20
+        hoverEnabled: false
         z: 10
 
         background: Rectangle {
-            color: updateButton.hovered ? "#3498db" : "#2980b9"
+            color: "#3498db"
             radius: width / 2
 
             // Update notification indicator

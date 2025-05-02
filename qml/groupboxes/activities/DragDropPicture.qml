@@ -78,6 +78,7 @@ Column {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             text: root.activityModelData.headerText
+            color: "white"
             onTextChanged: {
                 root.activityModelData.headerText = text;
             }
@@ -113,6 +114,7 @@ Column {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             text: root.activityModelData.sectionPath
+            color: "white"
             background: Rectangle {
                 color: "#1A2327"
                 border.color: parent.focus ? "#009ca6" : "#445055"
@@ -175,6 +177,7 @@ Column {
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         text: modelData
+                        color: "white"
                         background: Rectangle {
                             color: "#1A2327"
                             border.color: parent.focus ? "#009ca6" : "#445055"
