@@ -289,19 +289,54 @@ def create_update_script(main_app_zip, app_dir):
         exe_name = exe_files[0]
         log(f"Found executable: {exe_name}")
 
+        # Fix path by replacing single quotes with double quotes and using the exact file name
+        main_app_zip_path = main_app_zip.replace("\\", "\\\\")
+        app_dir_path = app_dir.replace("\\", "\\\\")
+
         with open(script_path, "w") as f:
             f.write("@echo off\n")
             f.write("echo Updating application...\n")
-            f.write("timeout /t 2 >nul\n")  # Give time for the app to fully close
-            f.write(f'del "{os.path.join(app_dir, exe_name)}"\n')
-            f.write(f"echo Extracting update...\n")
-            # Use PowerShell to extract the zip (more reliable than batch)
+            f.write("title FlowBook Update Helper\n")  # Add a title to the window
+
+            # Wait a bit longer to ensure the application fully closes and releases file handles
+            f.write("echo Waiting for application to close...\n")
+            f.write("timeout /t 3 >nul\n")
+
+            # Try to delete the executable with retries
+            f.write("echo Removing old version...\n")
+            f.write("set MAX_RETRIES=5\n")
+            f.write("set RETRY_COUNT=0\n")
+            f.write(":DELETE_RETRY\n")
+            f.write(f'del /F /Q "{os.path.join(app_dir, exe_name)}"\n')
+            f.write('if exist "' + os.path.join(app_dir, exe_name) + '" (\n')
+            f.write("    set /a RETRY_COUNT+=1\n")
+            f.write("    if %RETRY_COUNT% LSS %MAX_RETRIES% (\n")
+            f.write("        echo Delete failed, retrying in 1 second...\n")
+            f.write("        timeout /t 1 >nul\n")
+            f.write("        goto DELETE_RETRY\n")
+            f.write("    ) else (\n")
             f.write(
-                f"powershell -command \"Expand-Archive -Path '{main_app_zip}' -DestinationPath '{app_dir}' -Force\"\n"
+                "        echo Failed to delete executable after %MAX_RETRIES% attempts\n"
             )
-            f.write(f'del "{main_app_zip}"\n')
-            f.write(f"echo Starting updated application...\n")
+            f.write("        echo Will try to extract anyway\n")
+            f.write("    )\n")
+            f.write(")\n")
+
+            # Extract with PowerShell
+            f.write("echo Extracting update...\n")
+            # Use the actual zip file name, with proper path escaping
+            f.write(
+                f"powershell -command \"& {{Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('{main_app_zip_path}', '{app_dir_path}')}}\" 2>nul\n"
+            )
+
+            # Delete the zip file
+            f.write(f'del /F /Q "{main_app_zip}"\n')
+
+            # Start the new version
+            f.write("echo Starting updated application...\n")
             f.write(f'start "" "{os.path.join(app_dir, exe_name)}"\n')
+            f.write("echo Update completed successfully.\n")
+            f.write("timeout /t 3 >nul\n")
             f.write("exit\n")
     else:
         # For macOS or Linux
@@ -309,13 +344,14 @@ def create_update_script(main_app_zip, app_dir):
         with open(script_path, "w") as f:
             f.write("#!/bin/bash\n")
             f.write('echo "Updating application..."\n')
-            f.write("sleep 2\n")  # Give time for the app to fully close
+            f.write("sleep 3\n")  # Wait a bit longer
             f.write(f"rm -f \"{os.path.join(app_dir, 'FlowBookDataHelper2')}\"\n")
             f.write(f'echo "Extracting update..."\n')
             f.write(f'unzip -o "{main_app_zip}" -d "{app_dir}"\n')
             f.write(f'rm -f "{main_app_zip}"\n')
             f.write(f'echo "Starting updated application..."\n')
             f.write(f"\"{os.path.join(app_dir, 'FlowBookDataHelper2')}\" &\n")
+            f.write('echo "Update completed successfully."\n')
             f.write("exit 0\n")
         os.chmod(script_path, 0o755)  # Make executable
 
@@ -454,13 +490,34 @@ def check_for_updates(mode="check"):
                 if update_script:
                     log("Main application update prepared, restart required.")
 
-                    # On Windows, start the update script
+                    # On Windows, prepare the script to run after application exit
                     if platform.system() == "Windows":
                         try:
-                            subprocess.Popen(f'start "" "{update_script}"', shell=True)
-                            log("Update helper script launched")
+                            # Use Windows Start command without shell=True for security
+                            log(f"Registering update helper script: {update_script}")
+
+                            # Create a temporary VBScript to launch the batch file with minimized window
+                            vbs_path = os.path.join(app_dir, "_run_update.vbs")
+                            with open(vbs_path, "w") as vbs:
+                                vbs.write(
+                                    f'Set WshShell = CreateObject("WScript.Shell")\n'
+                                )
+                                vbs.write(
+                                    f'WshShell.Run "{update_script.replace("\\", "\\\\")}", 1, False\n'
+                                )
+
+                            # Register the VBScript to run after application exits
+                            # This will be triggered by the restartApplication method
+                            registry_path = os.path.join(
+                                app_dir, "_update_registry.bat"
+                            )
+                            with open(registry_path, "w") as reg:
+                                reg.write("@echo off\n")
+                                reg.write(f'wscript.exe "{vbs_path}"\n')
+
+                            log("Update helper registration complete")
                         except Exception as e:
-                            log(f"Failed to launch update helper: {str(e)}")
+                            log(f"Failed to register update helper: {str(e)}")
 
                     return EXIT_CODE_RESTART_REQUIRED
                 else:

@@ -362,8 +362,39 @@ void UpdateManager::restartApplication()
 {
     addLogMessage("Restarting application...");
     qDebug() << "Restarting application...";
+    
+    // Check if update registry file exists (created by Python script)
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString updateRegistryPath;
+    
+#ifdef Q_OS_WIN
+    updateRegistryPath = appDir + "/_update_registry.bat";
+    
+    if (QFile::exists(updateRegistryPath)) {
+        addLogMessage("Found update registry script, will execute after application closes");
+        
+        // Execute the registry script which will then run the real update script
+        QProcess::startDetached(updateRegistryPath, QStringList());
+        
+        // Close the application
+        QCoreApplication::quit();
+    } else {
+        // Normal restart without update
+        addLogMessage("No update script found, performing normal restart");
+        QCoreApplication::quit();
+        QProcess::startDetached(QCoreApplication::applicationFilePath(), QStringList());
+    }
+#else
+    // On macOS/Linux, don't need to manually trigger anything, just exit
     QCoreApplication::quit();
-    QProcess::startDetached(QCoreApplication::applicationFilePath(), QStringList());
+    
+    // Check if this is part of an update process
+    updateRegistryPath = appDir + "/_update_helper.sh";
+    if (!QFile::exists(updateRegistryPath)) {
+        // Only start new instance if not part of update process
+        QProcess::startDetached(QCoreApplication::applicationFilePath(), QStringList());
+    }
+#endif
 }
 
 void UpdateManager::clearLogs()
