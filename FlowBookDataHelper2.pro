@@ -7,14 +7,12 @@ QT += quick concurrent
 
 HEADERS += \
     config/configparser.h \
-    pdfprocess/pdfprocess.h \
-    update/updatemanager.h
+    pdfprocess/pdfprocess.h
 
 SOURCES += \
     config/configparser.cpp \
     main.cpp \
-    pdfprocess/pdfprocess.cpp \
-    update/updatemanager.cpp
+    pdfprocess/pdfprocess.cpp
 
 RESOURCES += qml.qrc
 

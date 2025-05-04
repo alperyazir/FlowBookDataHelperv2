@@ -7,8 +7,6 @@
         <file>qml/FlowText.qml</file>
         <file>qml/Colors.qml</file>
         <file>qml/FlowToast.qml</file>
-        <file>qml/UpdateNotification.qml</file>
-        <file>qml/UpdateLogViewer.qml</file>
         <file>icons/singlePage.png</file>
         <file>icons/doublePage.png</file>
         <file>icons/nextPage.png</file>
@@ -67,8 +65,6 @@
         <file>icons/tick.svg</file>
         <file>icons/puzzle.png</file>
         <file>icons/selectCirclle.png</file>
-        <file>icons/update.png</file>
-        <file>icons/log.png</file>
 	<file>logo/logo.png</file>
         <file>qml/FlowSideBar.qml</file>
 	<file>qml/NewProjectDialog.qml</file>
