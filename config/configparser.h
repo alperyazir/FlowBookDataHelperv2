@@ -19,6 +19,8 @@
 #include <QDir>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QException>
+
 
 struct CircleExtra : public QObject {
     Q_OBJECT
@@ -2426,6 +2428,7 @@ public:
 
     bool initialize(const QString &config_path);
     Q_INVOKABLE void saveToJson() {
+        try {
         static QMutex mutex;
         QMutexLocker locker(&mutex);
 
@@ -2510,6 +2513,9 @@ public:
                 QFile::remove(filePath);
                 QFile::copy(filePath + ".bak", filePath);
             }
+        }
+        } catch(const QException & ex) {
+            qDebug() << "Exception catched while saving "  <<  ex.what();
         }
     }
 

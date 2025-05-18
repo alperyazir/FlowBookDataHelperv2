@@ -32,7 +32,7 @@ ApplicationWindow {
 
     FlowSideBar {
         id: sideBar
-        width: parent.width / 4
+        width: parent.width / 3.5
         anchors.right: parent.right
         anchors.top: toolBar.bottom
         anchors.bottom: parent.bottom
