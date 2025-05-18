@@ -305,7 +305,7 @@ def process_pdf_with_config(config_file, dpi=150):
             pages_config.append(
                 {
                     "page_number": page_idx,
-                    "image_path": f"./books/{pdf_name}/images/{module_folder_name}/{page_num}.png",
+                    "image_path": f"./books/{pdf_name}/images/{module_folder_name}/{page_num+1}.png",
                     "sections": [],
                 }
             )
