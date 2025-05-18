@@ -16,53 +16,90 @@ bool BookSet::initialize(const QString &config_path)
 {
     QFile inFile(config_path + "/config.json");
     if (!inFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qDebug() << "Error while opening config file";
+        qWarning() << "Error while opening config file:" << config_path + "/config.json";
         return false;
     }
+
     QByteArray data = inFile.readAll();
     inFile.close();
+
+    if (data.isEmpty()) {
+        qWarning() << "Config file is empty:" << config_path + "/config.json";
+        return false;
+    }
 
     QJsonParseError errorPtr;
     QJsonDocument doc = QJsonDocument::fromJson(data, &errorPtr);
     if (doc.isNull()) {
-        qDebug() << "Config file parsing failed";
-    } else {
-        //        qDebug() << doc;
+        qWarning() << "Config file parsing failed:" << errorPtr.errorString();
+        return false;
     }
 
     auto root = doc.object();
-
-    _publisherName = root["publisher_name"].toString();
-    _publisherLogoPath = root["publisher_logo_path"].toString();
-    _publisherFullLogoPath = root["publisher_full_logo_path"].toString();
-    _fullscreen = root["fullscreen"].toBool();
-    _bookTitle = root["book_title"].toString();
-    _bookCover = root["book_cover"].toString();
-    _language = root["language"].toString();
-    auto bks = root["books"].toArray();
-    _bookCount = bks.size();
-    for (auto const &b : bks) {
-        auto bObj = b.toObject();
-
-        Book *book = new Book;
-        book->_type = bObj["type"].toInt();
-        book->_name = bObj["name"].toString();
-        book->_isModuleSideLeft = bObj["is_module_side_left"].toBool();
-        book->_modules = handleBooksModules(bObj["modules"].toArray());
-        // adding all pages and all games to a single vector
-        for (Module *m: book->_modules) {
-            for(Page *p: m->_pages) {
-                book->_pages.push_back(p);
-            }
-
-            for (Game *g: m->_games) {
-                book->_games.push_back(g);
-            }
-        }
-        _books.push_back(book);
+    if (root.isEmpty()) {
+        qWarning() << "Config file is empty or invalid:" << config_path + "/config.json";
+        return false;
     }
-    qDebug() << "Reading Book is succesfull";
-    return true;
+
+    try {
+        _publisherName = root["publisher_name"].toString();
+        _publisherLogoPath = root["publisher_logo_path"].toString();
+        _publisherFullLogoPath = root["publisher_full_logo_path"].toString();
+        _fullscreen = root["fullscreen"].toBool();
+        _bookTitle = root["book_title"].toString();
+        _bookCover = root["book_cover"].toString();
+        _language = root["language"].toString();
+
+        auto bks = root["books"].toArray();
+        _bookCount = bks.size();
+
+        // Clear existing books before loading new ones
+        qDeleteAll(_books);
+        _books.clear();
+
+        for (auto const &b : bks) {
+            if (!b.isObject()) {
+                qWarning() << "Invalid book object in config";
+                continue;
+            }
+
+            auto bObj = b.toObject();
+            Book *book = new Book;
+            
+            // Set basic properties
+            book->_type = bObj["type"].toInt();
+            book->_name = bObj["name"].toString();
+            book->_isModuleSideLeft = bObj["is_module_side_left"].toBool();
+
+            // Load modules
+            auto modules = handleBooksModules(bObj["modules"].toArray());
+            book->_modules = modules;
+
+            // Add pages and games from modules
+            for (Module *m: book->_modules) {
+                if (m) {
+                    for(Page *p: m->_pages) {
+                        if (p) book->_pages.push_back(p);
+                    }
+
+                    for (Game *g: m->_games) {
+                        if (g) book->_games.push_back(g);
+                    }
+                }
+            }
+
+            _books.push_back(book);
+        }
+
+        qDebug() << "Reading Book is successful:" << _bookTitle;
+        return true;
+    } catch (const std::exception& e) {
+        qWarning() << "Exception while parsing config:" << e.what();
+        return false;
+    } catch (...) {
+        qWarning() << "Unknown exception while parsing config";
+        return false;
+    }
 }
 
 QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)

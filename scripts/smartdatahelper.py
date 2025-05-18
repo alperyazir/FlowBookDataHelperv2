@@ -39,7 +39,8 @@ def save_pdf_as_images(pdf_path, output_dir, dpi=150):
         print(f"  Sayfa {page_num+1}/{total_pages} işleniyor...", flush=True)
         page = doc.load_page(page_num)
         pix = page.get_pixmap(matrix=mat)
-        output_path = os.path.join(output_dir, f"{page_num}.png")
+        # Sayfa numarasını 1'den başlat
+        output_path = os.path.join(output_dir, f"{page_num+1}.png")
         pix.save(output_path)
         print(f"  Sayfa {page_num+1} kaydedildi: {output_path}", flush=True)
 
@@ -176,12 +177,13 @@ def process_pdf_with_config(config_file, dpi=150):
                 print(f"  Uyarı: Sayfa {page_num} mevcut değil, atlanıyor.", flush=True)
                 continue
 
-            source_file = os.path.join(temp_images_folder, f"{page_num}.png")
-            target_file = os.path.join(module_folder, f"{page_num}.png")
+            # Sayfa numarasını 1'den başlat
+            source_file = os.path.join(temp_images_folder, f"{page_num+1}.png")
+            target_file = os.path.join(module_folder, f"{page_num+1}.png")
 
             if os.path.exists(source_file):
                 print(
-                    f"  Kopyalanıyor: {page_num}.png -> {module_folder_name}/{page_num}.png",
+                    f"  Kopyalanıyor: {page_num+1}.png -> {module_folder_name}/{page_num+1}.png",
                     flush=True,
                 )
                 shutil.copy2(source_file, target_file)
@@ -207,22 +209,11 @@ def process_pdf_with_config(config_file, dpi=150):
         print(
             f"Kapak resmi kopyalanıyor: {book_cover_path} -> {images_folder}/book_cover.png"
         )
+        # Kapak resmini book_cover.png olarak kaydet
         shutil.copy2(book_cover_path, os.path.join(images_folder, "book_cover.png"))
         print(f"Kapak resmi kopyalandı.", flush=True)
     else:
-        # Kapak sayfası belirtilmemiş, ilk sayfayı kapak olarak kullan
-        first_page_path = os.path.join(temp_images_folder, "0.png")
-        if os.path.exists(first_page_path):
-            print(
-                f"Kapak resmi olarak ilk sayfa kullanılıyor: {first_page_path} -> {images_folder}/book_cover.png"
-            )
-            shutil.copy2(first_page_path, os.path.join(images_folder, "book_cover.png"))
-            print(f"İlk sayfa kapak olarak kopyalandı.", flush=True)
-        else:
-            print(
-                f"Uyarı: Kapak resmi bulunamadı ve ilk sayfa da mevcut değil!",
-                flush=True,
-            )
+        print(f"Uyarı: Kapak resmi belirtilmemiş!", flush=True)
 
     # Geçici klasörü temizle
     print(f"PROGRESS:82%", flush=True)  # Temizlik işlemi
@@ -332,7 +323,11 @@ def process_pdf_with_config(config_file, dpi=150):
         "publisher_logo_path": "./publisher_logo/publisher_logo.png",
         "publisher_full_logo_path": "./rsc/images/publisher_full_logo.png",
         "book_title": book_title if book_title else pdf_name,
-        "book_cover": f"./books/{pdf_name}/images/book_cover.png",
+        "book_cover": (
+            book_cover_path
+            if book_cover_path
+            else f"./books/{pdf_name}/images/book_cover.png"
+        ),
         "language": language,
         "fullscreen": False,
         "books": [{"modules": modules_config}],

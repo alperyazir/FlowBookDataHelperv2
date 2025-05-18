@@ -16,6 +16,9 @@
 #include <QFile>
 #include <QTextStream>
 #include <QGuiApplication>
+#include <QDir>
+#include <QMutex>
+#include <QMutexLocker>
 
 struct CircleExtra : public QObject {
     Q_OBJECT
@@ -2423,24 +2426,91 @@ public:
 
     bool initialize(const QString &config_path);
     Q_INVOKABLE void saveToJson() {
+        static QMutex mutex;
+        QMutexLocker locker(&mutex);
 
         QString appDir = QGuiApplication::applicationDirPath();
 #ifdef Q_OS_MAC
         appDir += "/../../../books";
 #else
         appDir += "/books";
-#endif \
-        //QString filePath = QGuiApplication::applicationDirPath();
-        //qDebug() <<  _bookDirectoryName+ "/config.json";
-        QFile saveFile(_bookDirectoryName+ "/config.json");
-        if (!saveFile.open(QIODevice::WriteOnly)) {
-            qWarning("Couldn't open save file.");
+#endif
+
+        // Create directory if it doesn't exist
+        QDir dir(_bookDirectoryName);
+        if (!dir.exists()) {
+            if (!dir.mkpath(".")) {
+                qWarning("Couldn't create directory: %s", qPrintable(_bookDirectoryName));
+                return;
+            }
+        }
+
+        QString filePath = _bookDirectoryName + "/config.json";
+        QString tempFilePath = filePath + ".tmp";
+        
+        // First write to a temporary file
+        QFile tempFile(tempFilePath);
+        if (!tempFile.open(QIODevice::WriteOnly)) {
+            qWarning("Couldn't open temporary file for writing: %s", qPrintable(tempFilePath));
             return;
         }
 
         QJsonDocument saveDoc(toJson());
-        saveFile.write(saveDoc.toJson());
-        saveFile.close();
+        QByteArray jsonData = saveDoc.toJson();
+        
+        // Write to temporary file
+        if (tempFile.write(jsonData) != jsonData.size()) {
+            qWarning("Failed to write complete data to temporary file");
+            tempFile.close();
+            QFile::remove(tempFilePath);
+            return;
+        }
+        
+        // Ensure all data is written to disk
+        tempFile.flush();
+        tempFile.close();
+
+        // Create backup of existing file if it exists
+        QFile existingFile(filePath);
+        if (existingFile.exists()) {
+            QString backupPath = filePath + ".bak";
+            QFile::remove(backupPath);
+            if (!QFile::copy(filePath, backupPath)) {
+                qWarning("Couldn't create backup file: %s", qPrintable(backupPath));
+                QFile::remove(tempFilePath);
+                return;
+            }
+        }
+
+        // Replace the original file with the temporary file
+        if (!QFile::remove(filePath)) {
+            qWarning("Couldn't remove original file: %s", qPrintable(filePath));
+            QFile::remove(tempFilePath);
+            return;
+        }
+
+        if (!QFile::rename(tempFilePath, filePath)) {
+            qWarning("Couldn't rename temporary file to original: %s", qPrintable(filePath));
+            // Try to restore from backup
+            if (QFile::exists(filePath + ".bak")) {
+                QFile::copy(filePath + ".bak", filePath);
+            }
+            return;
+        }
+
+
+        // Verify the written data
+        QFile verifyFile(filePath);
+        if (verifyFile.open(QIODevice::ReadOnly)) {
+            QByteArray verifyData = verifyFile.readAll();
+            verifyFile.close();
+            
+            if (verifyData != jsonData) {
+                qWarning("Data verification failed, restoring backup");
+                QFile::remove(filePath);
+                QFile::copy(filePath + ".bak", filePath);
+            }
+        }
     }
 
     QString _publisherName;
