@@ -391,6 +391,8 @@ GroupBox {
                     activityDialog.answers = root.activityModelData.answers
                     activityDialog.activityModelData = root.activityModelData
 
+                    print(root.activityModelData.type)
+
                     if (root.activityModelData.type === "matchTheWords")
                         activityDialog.createActivityMatchTheWord()
 

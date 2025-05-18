@@ -76,7 +76,8 @@ Rectangle {
     }
 
     function goToPage(pageNumber) {
-        if (pageNumber < pagesRepeater.count && pageNumber > 0) {
+        print(pageNumber, pagesRepeater.count)
+        if (pageNumber <= pagesRepeater.count && pageNumber >= 0) {
             sideBar.hideAllComponent();
             pageView.currentIndex = pageNumber;
         }

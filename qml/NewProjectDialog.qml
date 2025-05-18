@@ -4,11 +4,12 @@ import QtQuick.Layouts
 import QtQuick.Dialogs
 
 Dialog {
+    property var additionalFiles: []
     id: newProjectDialog
 
     title: "New project"
     width: 600
-    height: 800
+    height: 900
     modal: true
     closePolicy: Popup.NoAutoClose // Prevents dialog from closing when clicking outside
     anchors.centerIn: parent
@@ -116,10 +117,10 @@ Dialog {
 
         // Sadece tek bir modül ekle
         modulesModel.append({
-            name: "Module 1",
-            startPage: "1",
-            endPage: "10"
-        });
+                                name: "Module 1",
+                                startPage: "1",
+                                endPage: "10"
+                            });
     }
 
     // File dialog for selecting files
@@ -166,6 +167,53 @@ Dialog {
             outputEdit.text = selectedFolder.toString().replace("file://", "");
         }
     }
+
+    // Birden fazla dosya seçmek için dialog
+    FileDialog {
+        id: additionalFilesDialog
+        title: "Select Additional Files"
+        fileMode: FileDialog.OpenFiles // Birden fazla dosya seçimi
+
+        // Son seçilen klasörü kullan
+        currentFolder: lastSelectedFolder !== "" ?
+                           "file://" + lastSelectedFolder :
+                           StandardPaths.standardLocations(StandardPaths.DocumentsLocation)[0]
+
+        onAccepted: {
+            // Seçilen dosyaları additionalFiles modeline ekle
+            var newFiles = [];
+            for (var i = 0; i < additionalFiles.length; i++) {
+                newFiles.push(additionalFiles[i]);
+            }
+
+            for (var j = 0; j < selectedFiles.length; j++) {
+                var fileUrl = selectedFiles[j];
+                var filePath = fileUrl.toString().replace(/^(file:\/{2})/, "");
+
+                // Windows için düzeltme
+                if (Qt.platform.os === "windows") {
+                    filePath = filePath.replace(/^\//, "");
+                }
+
+                // Son '/' karakterinden sonraki kısmı dosya adı olarak al
+                var fileName = filePath.substring(filePath.lastIndexOf('/') + 1);
+                if (fileName === "") {
+                    // Windows için backslash kontrolü
+                    fileName = filePath.substring(filePath.lastIndexOf('\\') + 1);
+                }
+
+                newFiles.push({
+                                  fileUrl: fileUrl,
+                                  filePath: filePath,
+                                  fileName: fileName
+                              });
+            }
+
+            additionalFiles = newFiles;
+            console.log("Additional files:", additionalFiles.length);
+        }
+    }
+
 
     // Function to validate PDF
     function validatePdf() {
@@ -453,7 +501,7 @@ Dialog {
 
                     Button {
                         text: "..."
-                        onClicked: audioFolderDialog.open()
+
                         background: Rectangle {
                             color: "#1A2327"
                             border.color: "#009ca6"
@@ -474,7 +522,10 @@ Dialog {
                             onExited: parent.background.color = "#1A2327"
                             onPressed: parent.background.color = "#0A1317"
                             onReleased: parent.background.color = containsMouse ? "#2A3337" : "#1A2327"
-                            onClicked: audioFolderDialog.open()
+                            onClicked: {
+                                audioFolderDialog.currentFolder = selectedPdfPath.replace("file://", "");
+                                audioFolderDialog.open()
+                            }
                         }
                     }
                 }
@@ -528,7 +579,10 @@ Dialog {
                             onExited: parent.background.color = "#1A2327"
                             onPressed: parent.background.color = "#0A1317"
                             onReleased: parent.background.color = containsMouse ? "#2A3337" : "#1A2327"
-                            onClicked: videoFolderDialog.open()
+                            onClicked: {
+                                videoFolderDialog.currentFolder = selectedPdfPath.replace("file://", "");
+                                videoFolderDialog.open()
+                            }
                         }
                     }
                 }
@@ -552,6 +606,7 @@ Dialog {
                         placeholderTextColor: "gray"
                         color: "white"
                         text: appPath + "books"
+
                         background: Rectangle {
                             color: "#1A2327"
                             border.color: "#009ca6"
@@ -587,7 +642,138 @@ Dialog {
                         }
                     }
                 }
+                /*
+                // Ayrıştırıcı
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: "#009ca6"
+                }
 
+                // Ek dosyalar başlığı
+                Label {
+                    text: "Additional Files"
+                    font.bold: true
+                    color: "white"
+                }
+
+                // Dosya seçme butonu ve seçilen dosyaları gösterecek liste
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Button {
+                        text: "Select Files"
+                        Layout.preferredWidth: 120
+                        Layout.preferredHeight: 32
+                        background: Rectangle {
+                            color: parent.hovered ? "#2A3337" : "#1A2327"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            radius: 2
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: additionalFilesDialog.open()
+                    }
+
+                    // "Clear All" butonu
+                    Button {
+                        text: "Clear All"
+                        visible: additionalFiles.length > 0
+                        Layout.preferredWidth: 80
+                        Layout.preferredHeight: 32
+                        background: Rectangle {
+                            color: parent.hovered ? "#2A3337" : "#1A2327"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            radius: 2
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
+                            additionalFiles = []
+                        }
+                    }
+
+                    // Seçilen dosya sayısını gösteren etiket
+                    Label {
+                        text: additionalFiles.length > 0 ? additionalFiles.length + " file(s) selected" : "No files selected"
+                        color: "white"
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignRight
+                    }
+                }
+
+
+                // Seçilen dosyaları gösteren liste
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(150, additionalFilesList.contentHeight + 10)
+                    color: "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    visible: additionalFiles.length > 0
+
+                    ListView {
+                        id: additionalFilesList
+                        anchors.fill: parent
+                        anchors.margins: 5
+                        model: additionalFiles
+                        clip: true
+
+                        ScrollBar.vertical: ScrollBar {}
+
+                        delegate: RowLayout {
+                            width: additionalFilesList.width
+                            spacing: 5
+
+                            // Dosya adı
+                            Label {
+                                text: modelData.fileName
+                                color: "white"
+                                Layout.fillWidth: true
+                                elide: Text.ElideMiddle
+                            }
+
+                            // Silme ikonu
+                            Button {
+                                text: "✕"
+                                Layout.preferredWidth: 24
+                                Layout.preferredHeight: 24
+                                background: Rectangle {
+                                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                                    border.color: "#009ca6"
+                                    border.width: 1
+                                    radius: 2
+                                }
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: "white"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                onClicked: {
+                                    var newFiles = [];
+                                    for (var i = 0; i < additionalFiles.length; i++) {
+                                        if (i !== index) {
+                                            newFiles.push(additionalFiles[i]);
+                                        }
+                                    }
+                                    additionalFiles = newFiles;
+                                }
+                            }
+                        }
+                    }
+                }
+                */
                 // Modules and Pages section
                 Rectangle {
                     Layout.fillWidth: true
@@ -794,10 +980,10 @@ Dialog {
 
                                     // Yeni modül ekle
                                     modulesModel.append({
-                                        name: newName,
-                                        startPage: newStartPage.toString(),
-                                        endPage: ""
-                                    });
+                                                            name: newName,
+                                                            startPage: newStartPage.toString(),
+                                                            endPage: ""
+                                                        });
                                 }
                                 background: Rectangle {
                                     color: "#1A2327"
@@ -829,6 +1015,7 @@ Dialog {
                         }
                     }
                 }
+
             }
         }
     }
@@ -844,21 +1031,26 @@ Dialog {
         for (var i = 0; i < modulesModel.count; i++) {
             var module = modulesModel.get(i);
             modulesArray.push({
-                "module_name": module.name,
-                "start": parseInt(module.startPage),
-                "end": parseInt(module.endPage)
-            });
+                                  "module_name": module.name,
+                                  "start": parseInt(module.startPage),
+                                  "end": parseInt(module.endPage)
+                              });
         }
+
+        var pdfPath = pdfPathTextField.text
+        var bookCoverPath = pdfPathTextField.text
+        var audioPath = audioFolderTextField.text
+        var videoPath = videoFolderTextField.text
 
         // Build the complete JSON object
         var projectData = {
             "publisher_name": publisherNameEdit.text,
             "book_title": bookTitleEdit.text,
             "language": languageComboBox.currentText,
-            "book_pdf_path": pdfPathTextField.text,
-            "book_cover_path": coverPathTextField.text,
-            "audio_path": audioFolderTextField.text,
-            "video_path": videoFolderTextField.text,
+            "book_pdf_path": pdfPath.startsWith("/") ? pdfPath.slice(1) : pdfPath,
+            "book_cover_path": bookCoverPath.startsWith("/") ? bookCoverPath.slice(1) : bookCoverPath,
+            "audio_path": audioPath.startsWith("/") ? audioPath.slice(1) : audioPath,
+            "video_path": videoPath.startsWith("/") ? videoPath.slice(1) : videoPath,
             "modules": modulesArray,
             "output_path": outputEdit.text
         };
@@ -869,6 +1061,16 @@ Dialog {
         console.log("Project JSON data:");
         console.log(jsonString);
         pdfProcess.startProcessing(jsonString);
+
+        // if (additionalFiles.length > 0) {
+        //     var filePaths = [];
+        //     for (var i = 0; i < additionalFiles.length; i++) {
+        //         filePaths.push(additionalFiles[i].filePath);
+        //     }
+
+        //     // raw klasörüne kopyala
+        //     pdfProcess.copyAdditionalFiles(filePaths);
+        // }
 
         // Reset form fields
         resetForm();

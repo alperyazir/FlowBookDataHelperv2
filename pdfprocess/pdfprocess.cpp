@@ -9,11 +9,12 @@
 #include <algorithm>
 #include <QtConcurrent>
 
-void PdfProcess::startProcessing(QString &pdfConfig)
+void PdfProcess::startProcessing(const QString &pdfConfig)
 {
     qDebug() << "Starting PDF processing with config:" << pdfConfig;
-    if (pdfConfig.size() > 0 && pdfConfig.startsWith("/")) {
-        pdfConfig = pdfConfig.removeFirst();
+    QString mPdfConfig = pdfConfig;
+    if (mPdfConfig.size() > 0 && mPdfConfig.startsWith("/")) {
+        mPdfConfig = mPdfConfig.removeFirst();
     }
     //emit processingStarted();
 
@@ -27,7 +28,7 @@ void PdfProcess::startProcessing(QString &pdfConfig)
 
     // Write the JSON config to the temp file
     QTextStream out(&tempFile);
-    out << pdfConfig;
+    out << mPdfConfig;
     out.flush();
 
     // Keep the temp file open but detach it so it doesn't get deleted when tempFile goes out of scope
@@ -39,6 +40,7 @@ void PdfProcess::startProcessing(QString &pdfConfig)
     QProcess *process = new QProcess(this);
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert("PYTHONIOENCODING", "utf-8");
+    process->setProcessEnvironment(env);
     process->setProcessChannelMode(QProcess::MergedChannels);
 
     // Connect to readyRead to capture output in real-time
@@ -213,7 +215,8 @@ void PdfProcess::copyBookToTestVersion(const QString &testVersion, const QString
         setLogMessages("Checking target directory...");
         
         // Target directory (test/version/data/books)
-        QDir targetDir(appDir + "test/" + testVersion + "/data/books");
+        QDir targetDir(appDir + "test/" + testVersion + "/books");
+        qDebug() <<"sourceDir" << sourceDir<<"  targetDir: " << targetDir << " " <<currentBookName;
         
         // Create target directory if it doesn't exist
         if (!targetDir.exists()) {
@@ -241,6 +244,7 @@ void PdfProcess::copyBookToTestVersion(const QString &testVersion, const QString
 
         setProgress(50);
         setLogMessages("Starting to copy new book files...");
+
         
         // Copy directory
         if (!copyDir(sourceDir.absolutePath(), targetBookPath)) {
@@ -291,6 +295,7 @@ bool PdfProcess::copyDir(const QString &srcPath, const QString &dstPath) {
     QDir srcDir(srcPath);
     QDir dstDir(dstPath);
 
+    if (srcPath.endsWith("raw"))  return true;
     if (!dstDir.exists()) {
         if (!dstDir.mkpath(".")) {
             return false;
@@ -312,7 +317,6 @@ bool PdfProcess::copyDir(const QString &srcPath, const QString &dstPath) {
             return false;
         }
     }
-    
     return true;
 }
 
@@ -491,6 +495,9 @@ bool PdfProcess::package(const QStringList &platforms, const QString &currentBoo
         // FlowBook kopyalama
         setProgress(baseProgress + progressPerPlatform * 0.4); // %40
         setLogMessages(QString("6/7 - Copying FlowBook for %1...").arg(platformName));
+        qDebug() << "sourceFlowBookPath" << sourceFlowBookPath;
+        qDebug() << "targetPath" << targetPath;
+
         if (!copyDir(sourceFlowBookPath, targetPath)) {
             setLogMessages(QString("Error: Failed to copy FlowBook for %1").arg(platformName));
             qDebug() << "Failed to copy FlowBook from" << sourceFlowBookPath << "to" << targetPath;
@@ -547,10 +554,26 @@ bool PdfProcess::zipFolder(const QString &sourceDir, const QString &zipFilePath)
 #else
     // On Windows, you might want to use 7zip or another tool
     // This is a placeholder - implement according to your needs
-    return false;
+    QString sevenZipPath = "C:/Program Files/7-Zip/7z.exe";
+
+    // Alternatif 7z.exe yolu
+    if (!QFile::exists(sevenZipPath)) {
+        sevenZipPath = "C:/Program Files (x86)/7-Zip/7z.exe";
+    }
+
+    // 7z.exe bulunamadıysa hata döndür
+    if (!QFile::exists(sevenZipPath)) {
+        setLogMessages("7-Zip not found. Please install 7-Zip or verify the path.");
+        process->deleteLater();
+        return false;
+    }
+
+    // 7z.exe çalıştır: "7z.exe a -tzip zipFilePath sourceDir/*"
+    arguments << "a" << "-tzip" << zipFilePath << sourceDir + "/*";
+    process->start(sevenZipPath, arguments);
 #endif
 
-    if (!process->waitForFinished(30000)) { // 30 second timeout
+    if (!process->waitForFinished(60000)) { // 30 second timeout
         qDebug() << "Zip process timed out";
         process->deleteLater();
         return false;
@@ -561,11 +584,48 @@ bool PdfProcess::zipFolder(const QString &sourceDir, const QString &zipFilePath)
     return success;
 }
 
+void PdfProcess::copyAdditionalFiles(const QStringList &filePaths)
+{
+    /*
+    QDir dir(destDir);
+    if (!dir.exists()) {
+        if (!dir.mkpath(".")) {
+            qDebug() << "Failed to create destination directory:" << destDir;
+            return;
+        }
+    }
+
+    for (const QString &filePath : filePaths) {
+        QFileInfo fileInfo(filePath);
+        QString destFile = destDir + "/" + fileInfo.fileName();
+
+        if (QFile::exists(destFile)) {
+            // Eğer aynı isimde dosya varsa üzerine yazma
+            if (!QFile::remove(destFile)) {
+                qDebug() << "Failed to remove existing file:" << destFile;
+                continue;
+            }
+        }
+
+        if (!QFile::copy(filePath, destFile)) {
+            qDebug() << "Failed to copy file from" << filePath << "to" << destFile;
+        } else {
+            qDebug() << "Successfully copied" << fileInfo.fileName() << "to" << destDir;
+        }
+    }
+*/
+}
+
 bool PdfProcess::packageForPlatforms(const QStringList &platforms, const QString &currentBookName) {
     //QtConcurrent::run(this, &PdfProcess::package,platforms, currentBookName);
 
     QThread* thread = QThread::create([=]() {
         this->package(platforms, currentBookName);  // sınıf metodu
     });
+    qDebug() << "stack size " << thread->stackSize();
+    connect(thread, &QThread::finished, thread, &QThread::deleteLater);
+
+    //thread->setStackSize(8 * 1024 * 1024);
     thread->start();
+    return true;
 }

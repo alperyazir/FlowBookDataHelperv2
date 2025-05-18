@@ -279,7 +279,7 @@ Rectangle {
         MouseArea {
             anchors.fill: parent
             onClicked: {
-                activityDialog.visible = false;
+                activityDialog.visible = false
             }
         }
     }

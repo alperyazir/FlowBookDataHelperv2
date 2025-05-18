@@ -481,7 +481,7 @@ void ConfigParser::refreshRecentProjects()
 #ifdef Q_OS_MAC
     appDir += "/../../../books/";
 #else
-    appDir += "/books/";
+    appDir += "/../books/";
 #endif
     QDir directory = appDir;
     directory.setFilter(QDir::Dirs | QDir::NoDotAndDotDot);

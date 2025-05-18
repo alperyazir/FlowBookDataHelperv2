@@ -36,6 +36,7 @@ int main(int argc, char *argv[])
 #ifdef Q_OS_MAC // MacOS için özel kod
     appPath = QGuiApplication::applicationDirPath() + "/../../../";
 #endif
+    appPath = QGuiApplication::applicationDirPath() + "/../";
 
     QQmlContext *rootContext = engine.rootContext();
     rootContext->setContextProperty("config", config);

@@ -16,11 +16,11 @@ Dialog {
 
     // Properties to track selected operating systems
     property var selectedOS: ({
-            windows: false,
-            windows78: false,
-            linux: false,
-            macos: false
-        })
+                                  windows: false,
+                                  windows78: false,
+                                  linux: false,
+                                  macos: false
+                              })
 
     // Custom header
     header: Rectangle {
@@ -137,7 +137,7 @@ Dialog {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 160
+            Layout.preferredHeight: 250
             color: "transparent"
             border.width: 1
             border.color: "#009ca6"
@@ -153,28 +153,107 @@ Dialog {
                     text: "Windows"
                     checked: selectedOS.windows
                     onCheckedChanged: selectedOS.windows = checked
+                    width: 400
+                    height: 50
+
+                    indicator: Rectangle {
+                        width: 18
+                        height: 18
+                        radius: 4
+                        color: windowsCheck.checked ? "#00e6e6" : "#232f34"
+                        border.color: "#009ca6"
+                        border.width: 1
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 5
+                    }
+
+                    contentItem: Text {
+                        text: parent.text
+                        color: "white"
+                        font.pixelSize: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.indicator.right
+                        anchors.leftMargin: 10
+                    }
                 }
 
                 CheckBox {
                     id: windows78Check
                     text: "Windows 7-8"
                     checked: selectedOS.windows78
+                    width: 150
                     onCheckedChanged: selectedOS.windows78 = checked
                     Layout.leftMargin: 20
+                    indicator: Rectangle {
+                        width: 18
+                        height: 18
+                        radius: 4
+                        color: windows78Check.checked ? "#00e6e6" : "#232f34"
+                        border.color: "#009ca6"
+                        border.width: 1
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    contentItem: Text {
+                        text: parent.text
+                        color: "white"
+                        font.pixelSize: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.indicator.right
+                        anchors.leftMargin: 10
+                    }
                 }
 
                 CheckBox {
                     id: linuxCheck
                     text: "Linux"
                     checked: selectedOS.linux
+                    width: 150
                     onCheckedChanged: selectedOS.linux = checked
+                    indicator: Rectangle {
+                        width: 18
+                        height: 18
+                        radius: 4
+                        color: linuxCheck.checked ? "#00e6e6" : "#232f34"
+                        border.color: "#009ca6"
+                        border.width: 1
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    contentItem: Text {
+                        text: parent.text
+                        color: "white"
+                        font.pixelSize: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.indicator.right
+                        anchors.leftMargin: 10
+                    }
                 }
 
                 CheckBox {
                     id: macosCheck
-                    text: "MacOs"
+                    text: "MacOS"
                     checked: selectedOS.macos
                     onCheckedChanged: selectedOS.macos = checked
+                    indicator: Rectangle {
+                        width: 18
+                        height: 18
+                        radius: 4
+                        color: macosCheck.checked ? "#00e6e6" : "#232f34"
+                        border.color: "#009ca6"
+                        border.width: 1
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    contentItem: Text {
+                        text: parent.text
+                        color: "white"
+                        font.pixelSize: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.indicator.right
+                        anchors.leftMargin: 10
+                    }
                 }
             }
         }

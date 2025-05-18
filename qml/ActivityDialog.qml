@@ -194,6 +194,7 @@ Rectangle {
     }
 
     function createActivityFindPuzzle() {
+        print("createActivityFindPuzzle")
         var component = Qt.createComponent("activities/ActivityFindPuzzle.qml")
         var activityPuzzleWords = component.createObject(root, {});
         activityPuzzleWords.headerText = root.activityModelData.headerText

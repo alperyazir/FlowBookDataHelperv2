@@ -276,8 +276,8 @@ Dialog {
     // Handle dialog result
     onAccepted: {
         if (!isNullOrWhitespace(selectedProjectPath)) {
-            config.initialize(true, selectedProjectPath);
-            print("Project is loading", selectedProjectPath);
+            config.initialize(true,  selectedProjectPath);
+            print("Project is loading",  selectedProjectPath);
         }
     }
 }
