@@ -57,12 +57,16 @@ GroupBox {
     // Custom title style
     Column {
         anchors.fill: parent
-        anchors.leftMargin: 20
-        anchors.rightMargin: 20
-        spacing: 15
+        anchors.leftMargin: 5
+        anchors.rightMargin: 5
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: 5
+
+        // Header with title and close button
         Row {
             width: parent.width
-            height: 40
+            height: parent.height * 0.1
             spacing: 10
 
             Text {
@@ -74,15 +78,15 @@ GroupBox {
             }
 
             Item {
-                width: parent.width - closeButton.width - 90
+                width: parent.width - closeButton.width - parent.width*.5
                 height: 1
             }
 
             Button {
                 id: closeButton
                 text: "X"
-                width: 32
-                height: 32
+                width: height
+                height: parent.height / 2
                 anchors.verticalCenter: parent.verticalCenter
 
                 background: Rectangle {
@@ -113,7 +117,7 @@ GroupBox {
             visible: root.activityModelData.type === "dragdroppicture"
             enabled: visible
             width: parent.width
-
+            height: parent.height * 0.6
         }
 
         MatchTheWords {
@@ -121,13 +125,15 @@ GroupBox {
             visible: root.activityModelData.type === "matchTheWords"
             enabled: visible
             width: parent.width
+            height: parent.height * 0.7
         }
 
-        DragDropPicture {
+        DragDropPictureGroup {
             id: ddppicturegroup
             visible: root.activityModelData.type === "dragdroppicturegroup"
             enabled: visible
             width: parent.width
+            height: parent.height * 0.5
 
         }
 
@@ -136,6 +142,7 @@ GroupBox {
             visible: root.activityModelData.type === "fillpicture"
             enabled: visible
             width: parent.width
+            height: parent.height * 0.5
 
         }
 
@@ -144,6 +151,7 @@ GroupBox {
             visible: root.activityModelData.type === "puzzleFindWords"
             enabled: visible
             width: parent.width
+            height: parent.height * 0.5
 
         }
 
@@ -152,6 +160,7 @@ GroupBox {
             visible: root.activityModelData.type === "circle"
             enabled: visible
             width: parent.width
+            height: parent.height * 0.5
         }
 
         MarkWithX {
@@ -159,12 +168,13 @@ GroupBox {
             visible: root.activityModelData.type === "markwithx"
             enabled: visible
             width: parent.width
+            height: parent.height * 0.5
         }
 
         Row {
             width: parent.width * .9
             spacing: 10
-            height: 40
+            height: parent.height * 0.05
 
             Text {
                 text: " Path:"
@@ -178,7 +188,7 @@ GroupBox {
             TextField {
                 id: audioTextField
                 width: parent.width - 100
-                height: 36
+                height: parent.height
                 text: root.sectionModelData.audioExtra.path
                 placeholderText: "audio extra path "
                 placeholderTextColor: "gray"
@@ -193,8 +203,8 @@ GroupBox {
             }
 
             Button {
-                width: 36
-                height: 36
+                width: parent.height
+                height: parent.height
                 anchors.verticalCenter: parent.verticalCenter
 
                 background: Rectangle {
@@ -225,13 +235,13 @@ GroupBox {
             id: audioContrller
             property bool isPlaying: playRecordAudio.playbackState === MediaPlayer.PlayingState
             width: parent.width
-            height: 40
+            height: parent.height * 0.05
             spacing: 10
 
             Button {
                 id: playPauseButton
-                width: 80
-                height: 36
+                width: parent.width / 4
+                height: parent.height
                 anchors.verticalCenter: parent.verticalCenter
 
                 background: Rectangle {
@@ -265,7 +275,7 @@ GroupBox {
                 to: playRecordAudio.duration
                 value: playRecordAudio.position
                 width: parent.width - playPauseButton.width - stopButton.width - 20
-                height: 36
+                height: parent.height
                 anchors.verticalCenter: parent.verticalCenter
 
                 background: Rectangle {
@@ -304,8 +314,8 @@ GroupBox {
 
             Button {
                 id: stopButton
-                width: 80
-                height: 36
+                width: parent.width / 4
+                height: parent.height
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Stop"
 
@@ -363,16 +373,17 @@ GroupBox {
         }
 
         Row {
-            anchors.horizontalCenter: parent.horizontalCenter
             spacing: 10
-            height: 36
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            height: parent.height * 0.05
             Button {
                 text: "Activity"
-                width: 80
-                height: parent.height
+                width: parent.width / 4
+                height: parent.height * .8
                 background: Rectangle {
-                    color: "#1A2327"
-                    border.color: "#445055"
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#009ca6"
                     border.width: 1
                     radius: 4
                 }
@@ -422,8 +433,8 @@ GroupBox {
 
             Button {
                 text: "Save"
-                width: 80
-                height: parent.height
+                width: parent.width / 4
+                height: parent.height * .8
 
                 background: Rectangle {
                     color: parent.hovered ? "#00b3be" : "#009ca6"
@@ -444,8 +455,8 @@ GroupBox {
 
             Button {
                 text: "Delete"
-                width: 80
-                height: parent.height
+                width: parent.width / 4
+                height: parent.height * .8
 
                 background: Rectangle {
                     color: parent.hovered ? "#bf4040" : "#a63030"
@@ -468,21 +479,24 @@ GroupBox {
 
         Rectangle {
             id: confirmBox
-            width: parent.width /2
-            height: 100
-            color: "transparent"
-            border.color: "red"
-            radius: 10
-            visible: false // Başlangıçta visible true, bir işlemi başlatırken görünür olacak
+            property string type
+            property int index
+            color: "#1A2327"
+            border.color: "#a63030"
+            border.width: 1
+            radius: 6
+            visible: false
             anchors.horizontalCenter: parent.horizontalCenter
+            height: parent.height * 0.05
+            width: parent.width * 0.8
 
             Column {
                 anchors.centerIn: parent
-                spacing: 10
+                spacing: 5
 
                 Text {
-                    text: "Are you sure?"
-                    font.pixelSize: 15
+                    text: "Are you sure you want to delete?"
+                    font.pixelSize: 16
                     color: "white"
                     anchors.horizontalCenter: parent.horizontalCenter
                 }
@@ -493,6 +507,20 @@ GroupBox {
 
                     Button {
                         text: "Yes"
+                        width: 80
+                        height: 20
+
+                        background: Rectangle {
+                            color: parent.hovered ? "#bf4040" : "#a63030"
+                            radius: 4
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
                         onClicked: {
                             removeSection()
                             confirmBox.visible = false
@@ -502,8 +530,23 @@ GroupBox {
 
                     Button {
                         text: "No"
-                        onClicked: {
+                        width: 80
+                        height: 20
 
+                        background: Rectangle {
+                            color: parent.hovered ? "#2A3337" : "#1A2327"
+                            border.color: "#445055"
+                            border.width: 1
+                            radius: 4
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
                             confirmBox.visible = false
                         }
                     }
@@ -515,32 +558,32 @@ GroupBox {
     function saveChanges() {
 
         // drag drop picture
-        for ( var i = 0; i < ddpicture.words.count; i++) {
+        for ( var i = 0; i < ddpicture.words.length; i++) {
             root.activityModelData.words[i] =  ddpicture.words.itemAt(i).wText
         }
         // drag drop picture group
-        for ( var i = 0; i < ddppicturegroup.words.count; i++) {
+        for ( var i = 0; i < ddppicturegroup.words.length; i++) {
             root.activityModelData.words[i] =  ddppicturegroup.words.itemAt(i).wText
         }
         // fill picture
-        for ( var i = 0; i < fillpicture.words.count; i++) {
+        for ( var i = 0; i < fillpicture.words.length; i++) {
             root.activityModelData.words[i] =  fillpicture.words.itemAt(i).wText
         }
 
         // Match Word
-        for ( var i = 0; i < matchthewords.words.count; i++) {
+        for ( var i = 0; i < matchthewords.words.length; i++) {
             root.activityModelData.matchWord[i].word =  matchthewords.words.itemAt(i).wordText
             root.activityModelData.matchWord[i].imagePath =  matchthewords.words.itemAt(i).imagePathText
         }
         // Match sentence
-        for ( var i = 0; i < matchthewords.sentences.count; i++) {
+        for ( var i = 0; i < matchthewords.sentences.length; i++) {
             root.activityModelData.sentences[i].word =  matchthewords.words.itemAt(parseInt(matchthewords.sentences.itemAt(i).wordText)).wordText
             root.activityModelData.sentences[i].imagePath =  matchthewords.sentences.itemAt(i).imagePathText
             root.activityModelData.sentences[i].sentence =  matchthewords.sentences.itemAt(i).sentenceText
         }
 
         // find puzzle
-        for ( var i = 0; i < findPuzzle.words.count; i++) {
+        for ( var i = 0; i < findPuzzle.words.length; i++) {
             root.activityModelData.words[i] =  findPuzzle.words.itemAt(i).wText
         }
 

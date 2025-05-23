@@ -4,6 +4,7 @@ import shutil
 import argparse
 import subprocess
 import sys
+import string
 
 import os
 
@@ -18,6 +19,32 @@ except ImportError:
     print("PyMuPDF yükleniyor...", flush=True)
     subprocess.check_call([sys.executable, "-m", "pip", "install", "PyMuPDF"])
     import fitz
+
+# Türkçe karakterler için dönüşüm tablosu
+tr_chars = str.maketrans("ıİüÜöÖğĞşŞçÇ", "iIuUoOgGsSçC")
+
+
+def normalize_filename(filename):
+    """
+    Dosya adını normalize eder:
+    - Türkçe karakterleri İngilizce karşılıklarına çevirir
+    - Tüm karakterleri küçük harfe çevirir
+    - Boşlukları alt çizgi ile değiştirir
+    """
+    # Uzantıyı ayır
+    name, ext = os.path.splitext(filename)
+
+    # Türkçe karakterleri değiştir
+    name = name.translate(tr_chars)
+
+    # Küçük harfe çevir
+    name = name.lower()
+
+    # Boşlukları alt çizgi yap
+    name = name.replace(" ", "_")
+
+    # Uzantıyı geri ekle
+    return name + ext
 
 
 def save_pdf_as_images(pdf_path, output_dir, dpi=150):
@@ -39,7 +66,6 @@ def save_pdf_as_images(pdf_path, output_dir, dpi=150):
         print(f"  Sayfa {page_num+1}/{total_pages} işleniyor...", flush=True)
         page = doc.load_page(page_num)
         pix = page.get_pixmap(matrix=mat)
-        # Sayfa numarasını 1'den başlat
         output_path = os.path.join(output_dir, f"{page_num+1}.png")
         pix.save(output_path)
         print(f"  Sayfa {page_num+1} kaydedildi: {output_path}", flush=True)
@@ -86,9 +112,9 @@ def process_pdf_with_config(config_file, dpi=150):
     # PDF dosya adını çıkart
     pdf_filename = os.path.basename(book_pdf_path)
     pdf_name = os.path.splitext(pdf_filename)[0]
-    pdf_name = pdf_name.replace(" ", "_")
+    pdf_name = normalize_filename(pdf_name)
 
-    print(f"İşleniyor: {pdf_filename}", flush=True)
+    print(f"İşleniyor: {pdf_filename} -> {pdf_name}", flush=True)
 
     # 1. Ana klasörü oluştur
     pdf_folder = os.path.join(output_path, pdf_name)
@@ -151,8 +177,12 @@ def process_pdf_with_config(config_file, dpi=150):
     # Toplam işlenecek sayfa sayısını hesapla
     total_pages_to_copy = 0
     for module in modules:
-        start_page = module.get("start", 0)
-        end_page = module.get("end", 0)
+        start_page = (
+            module.get("start", 1) - 1
+        )  # 1'den başlayan sayfa numarasını 0'dan başlayan indekse çevir
+        end_page = (
+            module.get("end", 1) - 1
+        )  # 1'den başlayan sayfa numarasını 0'dan başlayan indekse çevir
         if start_page <= end_page and start_page >= 0 and end_page < page_count:
             total_pages_to_copy += end_page - start_page + 1
 
@@ -161,12 +191,16 @@ def process_pdf_with_config(config_file, dpi=150):
         module_name = module.get("module_name", "")
         # Modül ismindeki boşlukları _ ile değiştir
         module_folder_name = module_name.replace(" ", "_")
-        start_page = module.get("start", 0)
-        end_page = module.get("end", 0)
+        start_page = (
+            module.get("start", 1) - 1
+        )  # 1'den başlayan sayfa numarasını 0'dan başlayan indekse çevir
+        end_page = (
+            module.get("end", 1) - 1
+        )  # 1'den başlayan sayfa numarasını 0'dan başlayan indekse çevir
 
         module_folder = os.path.join(images_folder, module_folder_name)
         print(
-            f"Modül {i}/{len(modules)}: '{module_name}' için sayfalar kopyalanıyor (Sayfa {start_page}-{end_page})...",
+            f"Modül {i}/{len(modules)}: '{module_name}' için sayfalar kopyalanıyor (Sayfa {start_page+1}-{end_page+1})...",
             flush=True,
         )
 
@@ -287,8 +321,12 @@ def process_pdf_with_config(config_file, dpi=150):
         module_name = module.get("module_name", "")
         # Modül ismindeki boşlukları _ ile değiştir
         module_folder_name = module_name.replace(" ", "_")
-        start_page = module.get("start", 0)
-        end_page = module.get("end", 0)
+        start_page = (
+            module.get("start", 1) - 1
+        )  # 1'den başlayan sayfa numarasını 0'dan başlayan indekse çevir
+        end_page = (
+            module.get("end", 1) - 1
+        )  # 1'den başlayan sayfa numarasını 0'dan başlayan indekse çevir
 
         print(
             f"  Modül '{module_name}' için JSON yapılandırması hazırlanıyor...",

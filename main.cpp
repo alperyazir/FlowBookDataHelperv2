@@ -5,13 +5,18 @@
 #include <QDir>
 #include <QIcon>
 #include <QTranslator>
+#include <QQuickStyle>
 
 #include "config/configparser.h"
 #include "pdfprocess/pdfprocess.h"
 
+
+
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
+    QQuickStyle::setStyle("Fusion");
+
     app.setWindowIcon(QIcon(":/logo/logo.png"));
 
     qDebug("Application has just started :)");
@@ -35,8 +40,11 @@ int main(int argc, char *argv[])
 
 #ifdef Q_OS_MAC // MacOS için özel kod
     appPath = QGuiApplication::applicationDirPath() + "/../../../";
-#endif
+#else
     appPath = QGuiApplication::applicationDirPath() + "/../";
+#endif
+
+
 
     QQmlContext *rootContext = engine.rootContext();
     rootContext->setContextProperty("config", config);

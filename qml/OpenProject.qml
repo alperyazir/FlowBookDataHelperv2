@@ -251,6 +251,7 @@ Dialog {
                             onEntered: parent.hovered = true
                             onExited: parent.hovered = false
                             onClicked: {
+                                print(appPath, model.name)
                                 var projectDir = appPath + "books/" + model.name;
                                 currentProject = model.name;
                                 selectedProjectPath = projectDir;

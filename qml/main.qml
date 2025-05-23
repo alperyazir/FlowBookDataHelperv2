@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Window
 import QtQuick.Controls
 import QtMultimedia
+import QtQuick.Controls.Basic
 
 ApplicationWindow {
     id: mainwindow
@@ -26,8 +27,9 @@ ApplicationWindow {
         id: content
         anchors.top: toolBar.bottom
         anchors.bottom: parent.bottom
-        width: 850
-        anchors.horizontalCenter: parent.horizontalCenter
+        width: parent.width /2
+        anchors.left: parent.left
+        anchors.leftMargin: parent.width / 5.5
     }
 
     FlowSideBar {
@@ -80,6 +82,8 @@ ApplicationWindow {
 
     NewProjectDialog {
         id: newProjectDialog
+        width: parent.width/2
+        height: parent.height / 6 * 5
         onAccepted: {
             // Show progress dialog when starting processing
             flowProgress.reset();
@@ -107,7 +111,7 @@ ApplicationWindow {
 
     Connections {
         target: config
-        onBookSetsChanged: {
+        function onBookSetsChanged() {
             print("Book is changed");
         }
     }

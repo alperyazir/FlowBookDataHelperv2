@@ -170,7 +170,8 @@ public:
     explicit Answer(QObject *parent = nullptr) :
         QObject(parent), _no(0), _isCorrect(false), _diagonal(false),
         _rotation(0.0), _isTrueSection(false),
-        _isRound(false), _opacity(1.0) {}
+        _isRound(false), _opacity(1.0) {
+    }
 
     int _no;
     QRect _coords;
@@ -207,6 +208,7 @@ public:
     QRect coords() const { return _coords; }
     void setCoords(const QRect &coords) {
         if (_coords != coords) {
+
             _coords = coords;
             emit coordsChanged();
         }
@@ -731,8 +733,6 @@ public:
         emit answersChanged();
     }
 
-
-
     Q_INVOKABLE void removeAnswer(int index) {
         if (index >= 0 && index < _answers.size()) {
             _answers.erase(_answers.begin() + index);
@@ -741,7 +741,8 @@ public:
 
     }
 
-    Q_INVOKABLE void addNewWord(const QString &word) {
+
+    Q_INVOKABLE void addNewWord(const QString &word = "") {
         _words.push_back(word);
         emit wordsChanged();
     }
@@ -1306,7 +1307,7 @@ struct Section : public QObject {
 
 public:
     explicit Section(QObject *parent = nullptr) : QObject(parent),
-        _magnifier(nullptr), _activity(nullptr), _video(nullptr), _audio_extra(nullptr) {}
+        _magnifier(nullptr), _activity(nullptr), _video(nullptr), _audio_extra(nullptr) { }
 
     QString _title;
     QString _type;
@@ -1340,8 +1341,11 @@ public:
 
     QRect coords() const { return _coords; }
     void setCoords(const QRect &coords) {
+        qDebug() << "COORDS CHANGED1";
+
         if (_coords != coords) {
             _coords = coords;
+            qDebug() << "COORDS CHANGED2";
             emit coordsChanged();
         }
     }
@@ -1419,7 +1423,7 @@ public:
         Answer *answer = new Answer;
         answer->setCoords(QRect(x,y,w,h));
         answer->setText(text);
-
+               
         _answers.push_back(answer);
         emit answersChanged();
         return answer;
@@ -1432,6 +1436,8 @@ public:
         answer->setLineBegin(QPoint(x, y));
         answer->setLineEnd(QPoint(x+150, y));
         answer->setOpacity(0.5);
+        
+        
         _answers.push_back(answer);
         emit answersChanged();
         return answer;
@@ -1594,6 +1600,12 @@ signals:
     void audioExtraChanged();
     void freeTextFieldsChanged();
     void checkAnswerChanged();
+
+public slots:
+    Q_INVOKABLE void notifyAnswersChanged() {
+        emit answersChanged();
+    }
+
 };
 
 struct Page : public QObject {
@@ -1604,7 +1616,6 @@ struct Page : public QObject {
 
 public:
     explicit Page(QObject *parent = nullptr) : QObject(parent), _page_number(0) {}
-
     int _page_number;
     QString _image_path;
     QVector<Section*> _sections;
@@ -2429,91 +2440,91 @@ public:
     bool initialize(const QString &config_path);
     Q_INVOKABLE void saveToJson() {
         try {
-        static QMutex mutex;
-        QMutexLocker locker(&mutex);
+            static QMutex mutex;
+            QMutexLocker locker(&mutex);
 
-        QString appDir = QGuiApplication::applicationDirPath();
+            QString appDir = QGuiApplication::applicationDirPath();
 #ifdef Q_OS_MAC
-        appDir += "/../../../books";
+            appDir += "/../../../books";
 #else
-        appDir += "/books";
+            appDir += "/books";
 #endif
 
-        // Create directory if it doesn't exist
-        QDir dir(_bookDirectoryName);
-        if (!dir.exists()) {
-            if (!dir.mkpath(".")) {
-                qWarning("Couldn't create directory: %s", qPrintable(_bookDirectoryName));
+            // Create directory if it doesn't exist
+            QDir dir(_bookDirectoryName);
+            if (!dir.exists()) {
+                if (!dir.mkpath(".")) {
+                    qWarning("Couldn't create directory: %s", qPrintable(_bookDirectoryName));
+                    return;
+                }
+            }
+
+            QString filePath = _bookDirectoryName + "/config.json";
+            QString tempFilePath = filePath + ".tmp";
+
+            // First write to a temporary file
+            QFile tempFile(tempFilePath);
+            if (!tempFile.open(QIODevice::WriteOnly)) {
+                qWarning("Couldn't open temporary file for writing: %s", qPrintable(tempFilePath));
                 return;
             }
-        }
 
-        QString filePath = _bookDirectoryName + "/config.json";
-        QString tempFilePath = filePath + ".tmp";
-        
-        // First write to a temporary file
-        QFile tempFile(tempFilePath);
-        if (!tempFile.open(QIODevice::WriteOnly)) {
-            qWarning("Couldn't open temporary file for writing: %s", qPrintable(tempFilePath));
-            return;
-        }
+            QJsonDocument saveDoc(toJson());
+            QByteArray jsonData = saveDoc.toJson();
 
-        QJsonDocument saveDoc(toJson());
-        QByteArray jsonData = saveDoc.toJson();
-        
-        // Write to temporary file
-        if (tempFile.write(jsonData) != jsonData.size()) {
-            qWarning("Failed to write complete data to temporary file");
-            tempFile.close();
-            QFile::remove(tempFilePath);
-            return;
-        }
-        
-        // Ensure all data is written to disk
-        tempFile.flush();
-        tempFile.close();
-
-        // Create backup of existing file if it exists
-        QFile existingFile(filePath);
-        if (existingFile.exists()) {
-            QString backupPath = filePath + ".bak";
-            QFile::remove(backupPath);
-            if (!QFile::copy(filePath, backupPath)) {
-                qWarning("Couldn't create backup file: %s", qPrintable(backupPath));
+            // Write to temporary file
+            if (tempFile.write(jsonData) != jsonData.size()) {
+                qWarning("Failed to write complete data to temporary file");
+                tempFile.close();
                 QFile::remove(tempFilePath);
                 return;
             }
-        }
 
-        // Replace the original file with the temporary file
-        if (!QFile::remove(filePath)) {
-            qWarning("Couldn't remove original file: %s", qPrintable(filePath));
-            QFile::remove(tempFilePath);
-            return;
-        }
+            // Ensure all data is written to disk
+            tempFile.flush();
+            tempFile.close();
 
-        if (!QFile::rename(tempFilePath, filePath)) {
-            qWarning("Couldn't rename temporary file to original: %s", qPrintable(filePath));
-            // Try to restore from backup
-            if (QFile::exists(filePath + ".bak")) {
-                QFile::copy(filePath + ".bak", filePath);
+            // Create backup of existing file if it exists
+            QFile existingFile(filePath);
+            if (existingFile.exists()) {
+                QString backupPath = filePath + ".bak";
+                QFile::remove(backupPath);
+                if (!QFile::copy(filePath, backupPath)) {
+                    qWarning("Couldn't create backup file: %s", qPrintable(backupPath));
+                    QFile::remove(tempFilePath);
+                    return;
+                }
             }
-            return;
-        }
 
-
-        // Verify the written data
-        QFile verifyFile(filePath);
-        if (verifyFile.open(QIODevice::ReadOnly)) {
-            QByteArray verifyData = verifyFile.readAll();
-            verifyFile.close();
-            
-            if (verifyData != jsonData) {
-                qWarning("Data verification failed, restoring backup");
-                QFile::remove(filePath);
-                QFile::copy(filePath + ".bak", filePath);
+            // Replace the original file with the temporary file
+            if (!QFile::remove(filePath)) {
+                qWarning("Couldn't remove original file: %s", qPrintable(filePath));
+                QFile::remove(tempFilePath);
+                return;
             }
-        }
+
+            if (!QFile::rename(tempFilePath, filePath)) {
+                qWarning("Couldn't rename temporary file to original: %s", qPrintable(filePath));
+                // Try to restore from backup
+                if (QFile::exists(filePath + ".bak")) {
+                    QFile::copy(filePath + ".bak", filePath);
+                }
+                return;
+            }
+
+
+            // Verify the written data
+            QFile verifyFile(filePath);
+            if (verifyFile.open(QIODevice::ReadOnly)) {
+                QByteArray verifyData = verifyFile.readAll();
+                verifyFile.close();
+
+                if (verifyData != jsonData) {
+                    qWarning("Data verification failed, restoring backup");
+                    QFile::remove(filePath);
+                    QFile::copy(filePath + ".bak", filePath);
+                }
+            }
         } catch(const QException & ex) {
             qDebug() << "Exception catched while saving "  <<  ex.what();
         }

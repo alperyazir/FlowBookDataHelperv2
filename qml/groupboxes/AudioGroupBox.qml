@@ -45,15 +45,15 @@ GroupBox {
 
     Column {
         anchors.fill: parent
-        anchors.leftMargin: 20
-        anchors.rightMargin: 20
-        spacing: 15
+        anchors.leftMargin: 5
+        anchors.rightMargin: 5
+        spacing: 10
 
         // Header with title and close button
         Row {
             width: parent.width
-            height: 40
-            spacing: 10
+            height: parent.height / 9
+            spacing: 3
 
             Text {
                 text: "Audio"
@@ -64,15 +64,15 @@ GroupBox {
             }
 
             Item {
-                width: parent.width - closeButton.width - 80
+                width: parent.width - closeButton.width - parent.width*.2
                 height: 1
             }
 
             Button {
                 id: closeButton
                 text: "X"
-                width: 32
-                height: 32
+                width: height
+                height: parent.height / 2
                 anchors.verticalCenter: parent.verticalCenter
 
                 background: Rectangle {
@@ -90,6 +90,7 @@ GroupBox {
                     font.pixelSize: 14
                 }
 
+
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
@@ -104,21 +105,21 @@ GroupBox {
         // Path input row
         Row {
             width: parent.width
-            spacing: 10
-            height: 40
+            spacing: 3
+            height: parent.height / 9
 
             Text {
                 text: "Path:"
                 color: "white"
                 font.pixelSize: 14
-                width: 40
+                width: parent.width * 0.1
                 anchors.verticalCenter: parent.verticalCenter
             }
 
             TextField {
                 id: audioTextField
-                width: parent.width - 90
-                height: 36
+                width: parent.width * 0.75
+                height: parent.height
                 text: root.audioModelData.audioPath
                 placeholderText: "Enter the audio path"
                 placeholderTextColor: "gray"
@@ -133,8 +134,8 @@ GroupBox {
             }
 
             Button {
-                width: 36
-                height: 36
+                width: parent.width * 0.1
+                height: parent.height
                 anchors.verticalCenter: parent.verticalCenter
 
                 background: Rectangle {
@@ -161,16 +162,131 @@ GroupBox {
             }
         }
 
+        // Audio controls
+        Row {
+            id: audioContrller
+            property bool isPlaying: playRecordAudio.playbackState === MediaPlayer.PlayingState
+            width: parent.width
+            height: parent.height / 9
+            spacing: 3
+
+            Button {
+                id: playPauseButton
+                width: parent.width * 0.15
+                height: parent.height
+                anchors.verticalCenter: parent.verticalCenter
+
+                background: Rectangle {
+                    color: parent.hovered ? "#00b3be" : "#009ca6"
+                    radius: parent.width/2
+
+                }
+
+                contentItem: Text {
+                    text: audioContrller.isPlaying ? "Pause" : "Play"
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        if (!audioContrller.isPlaying) {
+                            playRecordAudio.source = "file:" + appPath + audioTextField.text;
+                            playRecordAudio.play();
+                        } else {
+                            playRecordAudio.pause();
+                        }
+                    }
+                }
+            }
+
+            Slider {
+                id: audioSlider
+                enabled: true
+                to: playRecordAudio.duration
+                value: playRecordAudio.position
+                width: parent.width * 0.65
+                height: parent.height
+                anchors.verticalCenter: parent.verticalCenter
+
+                background: Rectangle {
+                    x: audioSlider.leftPadding
+                    y: audioSlider.topPadding + audioSlider.availableHeight / 2 - height / 2
+                    width: audioSlider.availableWidth
+                    height: 4
+                    radius: 2
+                    color: "#1A2327"
+
+                    Rectangle {
+                        width: audioSlider.visualPosition * parent.width
+                        height: parent.height
+                        color: "#009ca6"
+                        radius: 2
+                    }
+                }
+
+                handle: Rectangle {
+                    x: audioSlider.leftPadding + audioSlider.visualPosition * (audioSlider.availableWidth - width)
+                    y: audioSlider.topPadding + audioSlider.availableHeight / 2 - height / 2
+                    color: "#009ca6"
+                    border.color: "white"
+                    border.width: 1
+                    radius: 6
+                    width: 16
+                    height: 16
+                }
+
+                onMoved: {
+                    if (playRecordAudio.seekable) {
+                        playRecordAudio.setPosition(value);
+                    }
+                }
+            }
+
+            Button {
+                id: stopButton
+                width: parent.width * 0.15
+                height: parent.height
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Stop"
+
+                background: Rectangle {
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: parent.width/2
+                }
+
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        playRecordAudio.stop();
+                    }
+                }
+            }
+        }
+
+
         // Save/Delete buttons
         Row {
             spacing: 10
             anchors.horizontalCenter: parent.horizontalCenter
-            height: 36
+            width: parent.width
+            height: parent.height * 0.1
 
             Button {
                 text: "Save"
-                width: 80
-                height: parent.height
+                width: parent.width / 3
+                height: parent.height * .8
 
                 background: Rectangle {
                     color: parent.hovered ? "#00b3be" : "#009ca6"
@@ -194,8 +310,8 @@ GroupBox {
 
             Button {
                 text: "Delete"
-                width: 80
-                height: parent.height
+                width: parent.width / 3
+                height: parent.height * .8
 
                 background: Rectangle {
                     color: parent.hovered ? "#bf4040" : "#a63030"
@@ -215,21 +331,24 @@ GroupBox {
             }
         }
 
+
         // Confirmation dialog
         Rectangle {
             id: confirmBox
-            width: parent.width * 0.8
-            height: 120
+            property string type
+            property int index
             color: "#1A2327"
             border.color: "#a63030"
             border.width: 1
             radius: 6
             visible: false
             anchors.horizontalCenter: parent.horizontalCenter
+            height: parent.height * 0.2
+            width: parent.width * 0.8
 
             Column {
                 anchors.centerIn: parent
-                spacing: 15
+                spacing: 5
 
                 Text {
                     text: "Are you sure you want to delete?"
@@ -293,117 +412,6 @@ GroupBox {
             }
         }
 
-        // Audio controls
-        Row {
-            id: audioContrller
-            property bool isPlaying: playRecordAudio.playbackState === MediaPlayer.PlayingState
-            width: parent.width
-            height: 40
-            spacing: 10
-
-            Button {
-                id: playPauseButton
-                width: 80
-                height: 36
-                anchors.verticalCenter: parent.verticalCenter
-
-                background: Rectangle {
-                    color: parent.hovered ? "#00b3be" : "#009ca6"
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: audioContrller.isPlaying ? "Pause" : "Play"
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        if (!audioContrller.isPlaying) {
-                            playRecordAudio.source = "file:" + appPath + audioTextField.text;
-                            playRecordAudio.play();
-                        } else {
-                            playRecordAudio.pause();
-                        }
-                    }
-                }
-            }
-
-            Slider {
-                id: audioSlider
-                enabled: true
-                to: playRecordAudio.duration
-                value: playRecordAudio.position
-                width: parent.width - playPauseButton.width - stopButton.width - 20
-                height: 36
-                anchors.verticalCenter: parent.verticalCenter
-
-                background: Rectangle {
-                    x: audioSlider.leftPadding
-                    y: audioSlider.topPadding + audioSlider.availableHeight / 2 - height / 2
-                    width: audioSlider.availableWidth
-                    height: 4
-                    radius: 2
-                    color: "#1A2327"
-
-                    Rectangle {
-                        width: audioSlider.visualPosition * parent.width
-                        height: parent.height
-                        color: "#009ca6"
-                        radius: 2
-                    }
-                }
-
-                handle: Rectangle {
-                    x: audioSlider.leftPadding + audioSlider.visualPosition * (audioSlider.availableWidth - width)
-                    y: audioSlider.topPadding + audioSlider.availableHeight / 2 - height / 2
-                    color: "#009ca6"
-                    border.color: "white"
-                    border.width: 1
-                    radius: 6
-                    width: 16
-                    height: 16
-                }
-
-                onMoved: {
-                    if (playRecordAudio.seekable) {
-                        playRecordAudio.setPosition(value);
-                    }
-                }
-            }
-
-            Button {
-                id: stopButton
-                width: 80
-                height: 36
-                anchors.verticalCenter: parent.verticalCenter
-                text: "Stop"
-
-                background: Rectangle {
-                    color: parent.hovered ? "#2A3337" : "#1A2327"
-                    border.color: "#009ca6"
-                    border.width: 1
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        playRecordAudio.stop();
-                    }
-                }
-            }
-        }
     }
 
     MediaPlayer {

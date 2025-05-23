@@ -31,34 +31,37 @@ GroupBox {
 
     Column {
         anchors.fill: parent
-        anchors.leftMargin: 20
-        anchors.rightMargin: 20
-        spacing: 15
+        anchors.leftMargin: 1
+        anchors.rightMargin: 1
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: 5
 
         // Header with title and close button
         Row {
             width: parent.width
-            height: 40
+            height: parent.height * 0.1
             spacing: 10
 
-            Text {
+            FlowText {
                 text: "Draw Matched Lines"
                 color: "white"
-                font.pixelSize: 24
+                width: parent.width * 0.5
                 font.bold: true
                 anchors.verticalCenter: parent.verticalCenter
+                anchors.centerIn: undefined
             }
 
             Item {
-                width: parent.width - closeButton.width - 80
+                width: parent.width * 0.35
                 height: 1
             }
 
             Button {
                 id: closeButton
                 text: "X"
-                width: 32
-                height: 32
+                width: height
+                height: parent.height / 2
                 anchors.verticalCenter: parent.verticalCenter
 
                 background: Rectangle {
@@ -75,7 +78,6 @@ GroupBox {
                     verticalAlignment: Text.AlignVCenter
                     font.pixelSize: 14
                 }
-
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
@@ -86,26 +88,26 @@ GroupBox {
         }
 
         ScrollView {
+            id: scrollView
             width: parent.width
-            height: 500
-            ScrollBar.vertical.interactive: true
+            height: parent.height * 0.6 - parent.spacing * 4
             clip: true
 
             Column {
                 width: parent.width
-                spacing: 10
+                spacing: 5
 
                 ListView {
                     id: rectRepeater
                     width: parent.width
-                    height: 500
+                    height: scrollView.height * 0.9
                     orientation: ListView.Vertical
                     model: root.drawMatchedLineList
                     clip: true
 
                     delegate: ItemDelegate {
                         width: parent.width
-                        height: 50
+                        height: scrollView.height / 9
                         background: Rectangle {
                             color: "#1A2327"
                             border.color: "#445055"
@@ -114,25 +116,26 @@ GroupBox {
                         }
 
                         Row {
-                            width: parent.width - 40
+                            width: parent.width
                             height: parent.height
-                            spacing: 10
+                            spacing: 5
                             anchors.verticalCenter: parent.verticalCenter
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
+                            anchors.leftMargin: 3
+                            anchors.rightMargin: 3
+                            anchors.topMargin: 3
 
                             Text {
                                 text: "Color:"
                                 color: "white"
                                 font.pixelSize: 14
-                                width: 45
+                                width: parent.width * 0.1
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
                             TextField {
                                 id: rectTextField
                                 width: parent.width * 0.25
-                                height: 36
+                                height: parent.height
                                 text: modelData.color
                                 color: "white"
                                 placeholderText: "Ex: #00ff55"
@@ -155,19 +158,24 @@ GroupBox {
                                 text: "Opacity:"
                                 color: "white"
                                 font.pixelSize: 14
-                                width: 60
+                                width: parent.width * 0.15
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
                             TextField {
                                 id: rectTextOpacity
                                 width: parent.width * 0.15
-                                height: 36
+                                height: parent.height * 0.8
                                 text: modelData.opacity
                                 color: "white"
                                 placeholderText: "0.5"
                                 placeholderTextColor: "gray"
                                 horizontalAlignment: Text.AlignHCenter
+
+                                validator: DoubleValidator {
+                                    bottom: 0.0
+                                    top: 1.0
+                                }
 
                                 background: Rectangle {
                                     color: "#1A2327"
@@ -185,8 +193,8 @@ GroupBox {
                             CheckBox {
                                 id: isRoubdCb
                                 text: "Round"
-                                height: parent.height
-                                width: parent.width * 0.2
+                                height: parent.height* 0.8
+                                width: parent.width * 0.20
                                 checked: modelData.isRound
 
                                 contentItem: Text {
@@ -198,8 +206,8 @@ GroupBox {
                                 }
 
                                 indicator: Rectangle {
-                                    implicitWidth: 20
-                                    implicitHeight: 20
+                                    implicitWidth: parent.width * 0.10
+                                    implicitHeight: implicitWidth
                                     x: isRoubdCb.leftPadding
                                     y: parent.height / 2 - height / 2
                                     radius: 4
@@ -223,8 +231,8 @@ GroupBox {
                             }
 
                             Button {
-                                width: 32
-                                height: 32
+                                width: height
+                                height: parent.height * 0.8
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: "X"
 
@@ -257,15 +265,17 @@ GroupBox {
         }
 
         // Save/Delete buttons
+        // Save/Delete buttons
         Row {
             spacing: 10
             anchors.horizontalCenter: parent.horizontalCenter
-            height: 36
+            width: parent.width
+            height: parent.height * 0.1
 
             Button {
                 text: "Save"
-                width: 80
-                height: parent.height
+                width: parent.width / 3
+                height: parent.height * .8
 
                 background: Rectangle {
                     color: parent.hovered ? "#00b3be" : "#009ca6"
@@ -287,8 +297,8 @@ GroupBox {
 
             Button {
                 text: "Delete"
-                width: 80
-                height: parent.height
+                width: parent.width / 3
+                height: parent.height * .8
 
                 background: Rectangle {
                     color: parent.hovered ? "#bf4040" : "#a63030"
@@ -314,18 +324,18 @@ GroupBox {
             id: confirmBox
             property string type
             property int index
-            width: parent.width * 0.8
-            height: 120
             color: "#1A2327"
             border.color: "#a63030"
             border.width: 1
             radius: 6
             visible: false
             anchors.horizontalCenter: parent.horizontalCenter
+            height: parent.height * 0.2
+            width: parent.width * 0.8
 
             Column {
                 anchors.centerIn: parent
-                spacing: 15
+                spacing: 5
 
                 Text {
                     text: "Are you sure you want to delete?"
@@ -358,7 +368,7 @@ GroupBox {
                         onClicked: {
                             if (confirmBox.type === "section") {
                                 root.removeSection(root.sectionIndex);
-                                sideBar.drawMatchedVisible = false;
+                                sideBar.fillVisible = false;
                             } else if (confirmBox.type === "answer") {
                                 root.removeAnswer(confirmBox.index);
                             }
@@ -392,5 +402,7 @@ GroupBox {
                 }
             }
         }
+
+
     }
 }

@@ -36,7 +36,7 @@ Column {
     Row {
         width: parent.width * .9
         spacing: 10
-        height: 40
+        height: parent.height  * .1
         FlowText {
             id: textType
             text: "Type: "
@@ -59,13 +59,12 @@ Column {
     Row {
         width: parent.width * .9
         spacing: 10
-        height: 40
+        height: parent.height * .1
         FlowText {
             text: "Header: "
             color: "white"
             anchors.centerIn: undefined
             width: parent.width * .15
-            font.pixelSize: 15
             verticalAlignment: Text.AlignBottom
         }
 
@@ -94,13 +93,12 @@ Column {
     Row {
         width: parent.width * .9
         spacing: 10
-        height: 40
+        height: parent.height * 0.1
         FlowText {
             text: "Path: "
             color: "white"
             anchors.centerIn: undefined
             width: parent.width * .15
-            font.pixelSize: 15
             verticalAlignment: Text.AlignBottom
         }
 
@@ -123,10 +121,9 @@ Column {
             }
         }
 
-
         Button {
-            width: 36
-            height: 36
+            width: height
+            height: parent.height
             anchors.verticalCenter: parent.verticalCenter
 
             background: Rectangle {
@@ -147,80 +144,95 @@ Column {
                 anchors.fill: parent
                 onClicked: {
                     fileDialog.folder = "file:" + appPath + root.activityModelData.sectionPath;
-                    fileDialog.open();
+                    fileDialog.open()
                 }
             }
         }
     }
+
+
     GroupBox {
         id: wordsGB
         title: "Words"
         width: parent.width * .9
+        height: parent.height * .7
         anchors.horizontalCenter: parent.horizontalCenter
         Column {
             width: parent.width * .9
+            height: parent.height
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 2
-            Repeater {
-                id: wordsRepeater
-                model: root.activityModelData.words
-                Row {
-                    property string wText: tf.text
-                    width: parent.width * .75
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    height: 30
-                    TextField {
-                        id: tf
-                        width: parent.width * .75
-                        height: 30
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        text: modelData
-                        color: "white"
-                        background: Rectangle {
-                            color: "#1A2327"
-                            border.color: parent.focus ? "#009ca6" : "#445055"
-                            border.width: 1
-                            radius: 4
-                        }
-                    }
 
-                    Button {
-                        width: 30
-                        height: 30
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "X"
-
-                        background: Rectangle {
-                            color: parent.hovered ? "#bf4040" : "#a63030"
-                            radius: 4
-                        }
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: "white"
+            ScrollView {
+                id: scrol
+                width: parent.width
+                height: parent.height * 0.9
+                ScrollBar.vertical.interactive: true
+                clip: true
+                ListView {
+                    id: wordsRepeater
+                    width: parent.width
+                    height: parent.height
+                    model: root.activityModelData.words
+                    delegate: Row {
+                        property string wText: tf.text
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        height: 20
+                        width: scrol.width
+                        TextField {
+                            id: tf
+                            width: parent.width * .75
+                            height: 20
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
+                            text: modelData
+                            color: "white"
+                            background: Rectangle {
+                                color: "#1A2327"
+                                border.color: parent.focus ? "#009ca6" : "#445055"
+                                border.width: 1
+                                radius: 4
+                            }
                         }
 
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: {
-                                root.activityModelData.removeWord(index);
+                        Button {
+                            width: 20
+                            height: 20
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "X"
+
+                            background: Rectangle {
+                                color: parent.hovered ? "#bf4040" : "#a63030"
+                                radius: 4
+                            }
+
+                            contentItem: Text {
+                                text: parent.text
+                                color: "white"
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: {
+                                    root.activityModelData.removeWord(index);
+                                }
                             }
                         }
                     }
                 }
             }
-
             Button {
-                text: "Add New"
+                text: "Add"
+                height: parent.height * .1
                 anchors.horizontalCenter: parent.horizontalCenter
                 onClicked: {
                     saveChanges();
-                    root.activityModelData.addNewWord("Dummy");
+                    root.activityModelData.addNewWord("");
                 }
             }
         }
     }
 }
+

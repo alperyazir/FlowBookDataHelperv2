@@ -118,15 +118,19 @@ void PdfProcess::startProcessing(const QString &pdfConfig)
     // Construct the path to the Python script
     QString appDir = QGuiApplication::applicationDirPath();
 #ifdef Q_OS_MAC
-    appDir += "/../../../";
+    appDir += "/../../..";
 #else
     appDir += "/";
 #endif
     QString scriptPath = appDir + "/scripts/smartdatahelper.py";
 
+
+
     // Set up the process arguments
     QStringList arguments;
     arguments << "-u" << scriptPath << tempPath;
+
+     qDebug() << "SCRIPT PATH: " << arguments;
 
     // Start the process with python3 command
     process->start("python", arguments);

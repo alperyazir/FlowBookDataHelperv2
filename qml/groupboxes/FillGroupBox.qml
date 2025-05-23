@@ -13,7 +13,8 @@ GroupBox {
     width: parent.width * .98
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.verticalCenter: parent.verticalCenter
-    padding: 15
+    anchors.margins: 10
+    padding: 10
 
     background: Rectangle {
         color: "#232f34"
@@ -31,18 +32,20 @@ GroupBox {
 
     Column {
         anchors.fill: parent
-        anchors.leftMargin: 20
-        anchors.rightMargin: 20
-        spacing: 15
+        anchors.leftMargin: 5
+        anchors.rightMargin: 5
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: 5
 
         // Header with title and close button
         Row {
             width: parent.width
-            height: 40
+            height: parent.height * 0.1
             spacing: 10
 
             Text {
-                text: "Fills"
+                text: "Fill"
                 color: "white"
                 font.pixelSize: 24
                 font.bold: true
@@ -50,15 +53,15 @@ GroupBox {
             }
 
             Item {
-                width: parent.width - closeButton.width - 80
+                width: parent.width - closeButton.width - parent.width*.2
                 height: 1
             }
 
             Button {
                 id: closeButton
                 text: "X"
-                width: 32
-                height: 32
+                width: height
+                height: parent.height / 2
                 anchors.verticalCenter: parent.verticalCenter
 
                 background: Rectangle {
@@ -86,26 +89,26 @@ GroupBox {
         }
 
         ScrollView {
+            id: scrollView
             width: parent.width
-            height: 500
-            ScrollBar.vertical.interactive: true
+            height: parent.height * 0.6 - parent.spacing * 4
             clip: true
 
             Column {
                 width: parent.width
-                spacing: 10
+                spacing: 5
 
                 ListView {
                     id: rectRepeater
                     width: parent.width
-                    height: 500
+                    height: scrollView.height * 0.9
                     orientation: ListView.Vertical
                     model: root.fillList
                     clip: true
 
                     delegate: ItemDelegate {
                         width: parent.width
-                        height: 50
+                        height: scrollView.height / 9
                         background: Rectangle {
                             color: "#1A2327"
                             border.color: "#445055"
@@ -116,24 +119,16 @@ GroupBox {
                         Row {
                             width: parent.width
                             height: parent.height
-                            spacing: 10
+                            spacing: 5
                             anchors.verticalCenter: parent.verticalCenter
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
+                            anchors.leftMargin: 3
+                            anchors.rightMargin: 3
                             anchors.topMargin: 3
-
-                            Text {
-                                text: "Fill:"
-                                color: "white"
-                                font.pixelSize: 14
-                                width: 30
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
 
                             TextField {
                                 id: rectTextField
-                                width: parent.width * 0.45
-                                height: 33
+                                width: parent.width * 0.40
+                                height: parent.height
                                 text: modelData.text
                                 color: "white"
 
@@ -150,17 +145,17 @@ GroupBox {
                             }
 
                             Text {
-                                text: "Rotation:"
+                                text: "Rot:"
                                 color: "white"
                                 font.pixelSize: 14
-                                width: 60
+                                width: parent.width * 0.15
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
                             SpinBox {
                                 id: rectRotationField
-                                width: parent.width * 0.2
-                                height: 33
+                                width: parent.width * 0.25
+                                height: parent.height
                                 value: modelData.rotation
                                 editable: true
                                 from: -180
@@ -186,8 +181,8 @@ GroupBox {
                             }
 
                             Button {
-                                width: 32
-                                height: 32
+                                width: parent.width * 0.10
+                                height: parent.height * 0.8
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: "X"
 
@@ -223,12 +218,13 @@ GroupBox {
         Row {
             spacing: 10
             anchors.horizontalCenter: parent.horizontalCenter
-            height: 36
+            width: parent.width
+            height: parent.height * 0.1
 
             Button {
                 text: "Save"
-                width: 80
-                height: parent.height
+                width: parent.width / 3
+                height: parent.height * .8
 
                 background: Rectangle {
                     color: parent.hovered ? "#00b3be" : "#009ca6"
@@ -250,8 +246,8 @@ GroupBox {
 
             Button {
                 text: "Delete"
-                width: 80
-                height: parent.height
+                width: parent.width / 3
+                height: parent.height * .8
 
                 background: Rectangle {
                     color: parent.hovered ? "#bf4040" : "#a63030"
@@ -277,18 +273,18 @@ GroupBox {
             id: confirmBox
             property string type
             property int index
-            width: parent.width * 0.8
-            height: 120
             color: "#1A2327"
             border.color: "#a63030"
             border.width: 1
             radius: 6
             visible: false
             anchors.horizontalCenter: parent.horizontalCenter
+            height: parent.height * 0.2
+            width: parent.width * 0.8
 
             Column {
                 anchors.centerIn: parent
-                spacing: 15
+                spacing: 5
 
                 Text {
                     text: "Are you sure you want to delete?"
@@ -355,5 +351,6 @@ GroupBox {
                 }
             }
         }
+
     }
 }

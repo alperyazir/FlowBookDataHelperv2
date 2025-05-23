@@ -7,61 +7,44 @@ Rectangle {
     property var pages: config.bookSets[0].books[0].pages
     property bool outlineEnabled
     property var currentPageDetails
+    property int currentPageIndex: 0 + pages[0].page_number
     height: parent.height
     width: parent.width
     color: "#1A2327" // Dark background
 
-    SwipeView {
+    Rectangle {
         id: pageView
         height: parent.height
         width: parent.width
         clip: true
-        interactive: true
+        color: "#1A2327" // Dark background
+        border.color: "#009ca6" // Turquoise border
+        border.width: 1
 
-        Repeater {
-            id: pagesRepeater
-            model: pages.length
-
-            Loader {
-                id: pageLoader
-                active: Math.abs(index - pageView.currentIndex) <= 1
-                sourceComponent: pageDetailsComponent
-                property var page: pages[index]
-                onLoaded: {
-                    if (item) {
-                        item.page = page;
-                    }
-                }
-            }
-        }
-
-        Component {
-            id: pageDetailsComponent
-            PageDetails {}
-        }
-
-        onCurrentIndexChanged: {
-            var loader = pagesRepeater.itemAt(currentIndex);
-            if (loader && loader.item) {
-                loader.item.setDefaultZoom();
-                root.currentPageDetails = loader.item;
-            }
-            toolBar.currentPageNumber = pageView.currentIndex + pages[0].page_number;
-            toolBar.setModuleText();
+        PageDetails {
+            id: pageDetails
+            page: pages[root.currentPageIndex]
         }
     }
 
+    onCurrentPageIndexChanged: {
+        pageDetails.page = pages[root.currentPageIndex]
+        pageDetails.setDefaultZoom()
+        toolBar.currentPageNumber = root.currentPageIndex + pages[0].page_number;
+        toolBar.setModuleText();
+    }
+
     function goNext() {
-        if (pageView.currentIndex < pagesRepeater.count) {
+        if (root.currentPageIndex < pages.length) {
             sideBar.hideAllComponent();
-            pageView.currentIndex++;
+            root.currentPageIndex++;
         }
     }
 
     function getModuleName() {
         for (var i = 0; i < config.bookSets[0].books[0].modules.length; i++) {
             for (var j in config.bookSets[0].books[0].modules[i].pages) {
-                if (config.bookSets[0].books[0].pages[pageView.currentIndex] === config.bookSets[0].books[0].modules[i].pages[j]) {
+                if (config.bookSets[0].books[0].pages[root.currentPageIndex] === config.bookSets[0].books[0].modules[i].pages[j]) {
                     return config.bookSets[0].books[0].modules[i].name;
                 }
             }
@@ -69,17 +52,16 @@ Rectangle {
     }
 
     function goPrev() {
-        if (pageView.currentIndex > 0) {
+        if (root.currentPageIndex > 0) {
             sideBar.hideAllComponent();
-            pageView.currentIndex--;
+            root.currentPageIndex--;
         }
     }
 
     function goToPage(pageNumber) {
-        print(pageNumber, pagesRepeater.count)
-        if (pageNumber <= pagesRepeater.count && pageNumber >= 0) {
+        if (pageNumber <= pages.length && pageNumber >= 0) {
             sideBar.hideAllComponent();
-            pageView.currentIndex = pageNumber;
+            root.currentPageIndex = pageNumber;
         }
     }
 

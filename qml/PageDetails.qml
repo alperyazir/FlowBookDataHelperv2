@@ -6,7 +6,7 @@ import "newComponents"
 
 Item {
     id: root
-    property real imageHeights: mainwindow.height * 30 / 1080 * flick.zoomLevel
+    property real imageHeights: (mainwindow.height * 30 / 1080) * (flick.contentWidth / flick.width)
     property var page
     property string currentSelectionType: ""
     property size lastSize: Qt.size(100, 50)
@@ -19,6 +19,13 @@ Item {
     property real startRectX: 0
     property real startRectY: 0
     anchors.fill: parent
+
+    Connections {
+        target: page
+        function onSectionsChanged() {
+            print("Section changed", page.sections.length);
+        }
+    }
 
     MouseArea {
         id: mainMouseArea
@@ -33,47 +40,47 @@ Item {
         property real lastY: 0
 
         onPressed: mouse => {
-                       if (mouse.button === Qt.MiddleButton) {
+            if (mouse.button === Qt.MiddleButton) {
                 dragging = true;
                 lastX = mouse.x;
                 lastY = mouse.y;
-                flick.interactive = true; // Enable Flickable interaction
+                //flick.interactive = true; // Enable Flickable interaction
             } else if (mouse.button === Qt.RightButton) {
                 menu.popup(mouse.x, mouse.y);
             } else if ((mouse.button === Qt.LeftButton) && root.fillingModeEnabled)
-                           // drawing = true
-                           // var component = Qt.createComponent("newComponents/NewRectangle.qml")
-                           // root.activeFillRectangle = component.createObject(root, {
-                           //                                                       "x": mouseArea.mouseX,
-                           //                                                       "y": mouseArea.mouseY})
+            // drawing = true
+            // var component = Qt.createComponent("newComponents/NewRectangle.qml")
+            // root.activeFillRectangle = component.createObject(root, {
+            //                                                       "x": mouseArea.mouseX,
+            //                                                       "y": mouseArea.mouseY})
             {}
-                   }
+        }
 
         onReleased: mouse => {
-                        if (mouse.button === Qt.MiddleButton) {
+            if (mouse.button === Qt.MiddleButton) {
                 dragging = false;
-                flick.interactive = false; // Disable Flickable interaction
+                //flick.interactive = false; // Disable Flickable interaction
             } else if (mouse.button === Qt.LeftButton && root.fillingModeEnabled)
-                            // fillList.push(activeFillRectangle)
-                            // sideBar.page = root.page
-                            // sideBar.fillVisible = true
-                            // sideBar.fillList = root.fillList
+            // fillList.push(activeFillRectangle)
+            // sideBar.page = root.page
+            // sideBar.fillVisible = true
+            // sideBar.fillList = root.fillList
 
-                            // var adjustedX = mouseArea.mouseX + flick.contentX
-                            // var adjustedY = mouseArea.mouseY + flick.contentY
+            // var adjustedX = mouseArea.mouseX + flick.contentX
+            // var adjustedY = mouseArea.mouseY + flick.contentY
 
-                            // // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
-                            // var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth)
-                            // var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight)
+            // // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
+            // var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth)
+            // var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight)
 
-                            // config.bookSets[0].saveToJson();
-                            // activeFillRectangle.visible = false
-                            // drawing = false
+            // config.bookSets[0].saveToJson();
+            // activeFillRectangle.visible = false
+            // drawing = false
             {}
-                    }
+        }
 
         onPositionChanged: mouse => {
-                               if (dragging) {
+            if (dragging) {
                 var dx = mouse.x - lastX;
                 var dy = mouse.y - lastY;
                 flick.contentX -= dx;
@@ -84,17 +91,17 @@ Item {
         }
 
         onWheel: event => {
-            if (event.angleDelta.y > 0)
-            //flick.zoomIn()
-            {} else
-            //flick.zoomOut()
-            {}
+            if (event.angleDelta.y > 0) {
+                flick.zoomIn();
+            } else {
+                flick.zoomOut();
+            }
             event.accepted = true;
         }
 
-        onPressAndHold: {
-            var adjustedX = mainMouseArea.mouseX + flick.contentX;
-            var adjustedY = mainMouseArea.mouseY + flick.contentY;
+        onPressAndHold: mouse => {
+            var adjustedX = mouse.x + flick.contentX;
+            var adjustedY = mouse.y + flick.contentY;
 
             // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
             var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
@@ -102,16 +109,16 @@ Item {
             var answer;
             if (currentSelectionType === "fill") {
                 root.activeSession = root.page.getAvailableSection("fill");
-                answer = root.activeSession.createNewAnswer(originalX, originalY, lastSize.width, lastSize.height);
+                answer = root.activeSession.createNewAnswer(originalX, originalY, root.lastSize.width, root.lastSize.height);
             } else if (currentSelectionType === "circle") {
                 root.activeSession = root.page.getAvailableSection("circle");
-                answer = root.activeSession.createNewAnswer(originalX, originalY, lastSize.width, lastSize.height);
+                answer = root.activeSession.createNewAnswer(originalX, originalY, root.lastSize.width, root.lastSize.height);
             } else if (currentSelectionType === "fillWithColor") {
                 root.activeSession = root.page.getAvailableSection("fillWithColor");
-                answer = root.activeSession.createNewAnswer(originalX, originalY, lastSize.width, lastSize.height);
+                answer = root.activeSession.createNewAnswer(originalX, originalY, root.lastSize.width, root.lastSize.height);
             } else if (currentSelectionType === "drawMatchedLine") {
                 root.activeSession = root.page.getAvailableSection("drawMatchedLine");
-                answer = root.activeSession.createNewAnswerDrawMacthedLine(originalX, originalY, lastSize.width, lastSize.height);
+                answer = root.activeSession.createNewAnswerDrawMacthedLine(originalX, originalY, root.lastSize.width, root.lastSize.height);
             }
 
             // if(root.activeSession.answers.length>1) {
@@ -147,15 +154,15 @@ Item {
 
             config.bookSets[0].saveToJson();
             print("Changes Are Saved activity Fill on Triggered");
-                 }
+        }
 
         Menu {
             id: menu
             MenuItem {
                 text: "Audio"
                 onTriggered: {
-                    var adjustedX = mainMouseArea.mouseX + flick.contentX;
-                    var adjustedY = mainMouseArea.mouseY + flick.contentY;
+                    var adjustedX = mainMouseArea.mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                    var adjustedY = mainMouseArea.mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2);
 
                     // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
                     var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
@@ -170,8 +177,8 @@ Item {
             MenuItem {
                 text: "Video"
                 onTriggered: {
-                    var adjustedX = mainMouseArea.mouseX + flick.contentX;
-                    var adjustedY = mainMouseArea.mouseY + flick.contentY;
+                    var adjustedX = mainMouseArea.mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                    var adjustedY = mainMouseArea.mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2);
 
                     // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
                     var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
@@ -190,22 +197,20 @@ Item {
                     root.fillingModeEnabled = true;
                     currentSelectionType = "fill";
 
-                    var adjustedX = mainMouseArea.mouseX + flick.contentX;
-                    var adjustedY = mainMouseArea.mouseY + flick.contentY;
+                    var adjustedX = mainMouseArea.mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                    var adjustedY = mainMouseArea.mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2);
 
                     // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
                     var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
                     var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
                     root.activeSession = root.page.getAvailableSection("fill");
-                    var lastWidth = 100;
-                    var lastHeight = 50;
 
                     // if(root.activeSession.answers.length>1) {
                     //     lastWidth = root.activeSession.answers[root.activeSession.answers.length -2].width
                     //     lastHeight = root.activeSession.answers[root.activeSession.answers.length -2].height
                     // }
-                    var answer = root.activeSession.createNewAnswer(originalX, originalY, lastSize.width, lastSize.height);
+                    var answer = root.activeSession.createNewAnswer(originalX, originalY, root.lastSize.width, root.lastSize.height);
 
                     sideBar.hideAllComponent();
                     sideBar.fillVisible = true;
@@ -221,9 +226,10 @@ Item {
                 text: "Circle"
                 highlighted: currentSelectionType === "circle"
                 onTriggered: {
-                    var adjustedX = mainMouseArea.mouseX + flick.contentX;
-                    var adjustedY = mainMouseArea.mouseY + flick.contentY;
                     currentSelectionType = "circle";
+
+                    var adjustedX = mainMouseArea.mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                    var adjustedY = mainMouseArea.mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2);
 
                     // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
                     var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
@@ -235,7 +241,7 @@ Item {
                     //     lastWidth = root.activeSession.answers[root.activeSession.answers.length -2].width
                     //     lastHeight = root.activeSession.answers[root.activeSession.answers.length -2].height
                     // }
-                    var answer = root.activeSession.createNewAnswer(originalX, originalY, lastSize.width, lastSize.height);
+                    var answer = root.activeSession.createNewAnswer(originalX, originalY, root.lastSize.width, root.lastSize.height);
 
                     sideBar.hideAllComponent();
                     sideBar.circleVisible = true;
@@ -251,9 +257,10 @@ Item {
                 text: "Fill with Color"
                 highlighted: currentSelectionType === "fillWithColor"
                 onTriggered: {
-                    var adjustedX = mainMouseArea.mouseX + flick.contentX;
-                    var adjustedY = mainMouseArea.mouseY + flick.contentY;
                     currentSelectionType = "fillWithColor";
+
+                    var adjustedX = mainMouseArea.mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                    var adjustedY = mainMouseArea.mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2);
 
                     // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
                     var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
@@ -265,7 +272,7 @@ Item {
                     //     lastWidth = root.activeSession.answers[root.activeSession.answers.length -2].width
                     //     lastHeight = root.activeSession.answers[root.activeSession.answers.length -2].height
                     // }
-                    var answer = root.activeSession.createNewAnswer(originalX, originalY, lastSize.width, lastSize.height);
+                    var answer = root.activeSession.createNewAnswer(originalX, originalY, root.lastSize.width, root.lastSize.height);
 
                     sideBar.hideAllComponent();
                     sideBar.fillwColorVisible = true;
@@ -281,9 +288,9 @@ Item {
                 text: "Draw Matched Line"
                 highlighted: currentSelectionType === "drawMatchedLine"
                 onTriggered: {
-                    var adjustedX = mainMouseArea.mouseX + flick.contentX;
-                    var adjustedY = mainMouseArea.mouseY + flick.contentY;
                     currentSelectionType = "drawMatchedLine";
+                    var adjustedX = mainMouseArea.mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                    var adjustedY = mainMouseArea.mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2);
 
                     // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
                     var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
@@ -296,7 +303,7 @@ Item {
                     //     lastWidth = root.activeSession.answers[root.activeSession.answers.length -2].width
                     //     lastHeight = root.activeSession.answers[root.activeSession.answers.length -2].height
                     // }
-                    var answer = root.activeSession.createNewAnswerDrawMacthedLine(originalX, originalY, lastSize.width, lastSize.height);
+                    var answer = root.activeSession.createNewAnswerDrawMacthedLine(originalX, originalY, root.lastSize.width, root.lastSize.height);
 
                     sideBar.hideAllComponent();
                     sideBar.drawMatchedVisible = true;
@@ -315,8 +322,8 @@ Item {
                 MenuItem {
                     text: "Drag Drop Picture"
                     onTriggered: {
-                        var adjustedX = mainMouseArea.mouseX + flick.contentX;
-                        var adjustedY = mainMouseArea.mouseY + flick.contentY;
+                        var adjustedX = mainMouseArea.mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                        var adjustedY = mainMouseArea.mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2);
 
                         // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
                         var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
@@ -432,12 +439,11 @@ Item {
 
     Flickable {
         id: flick
-        property int startX: 0
         anchors.fill: parent
-        clip: true
         contentHeight: parent.height
         contentWidth: parent.width
-        interactive: false
+        interactive: true
+        clip: true
         boundsMovement: Flickable.StopAtBounds
 
         property real lastContentHeight
@@ -450,26 +456,34 @@ Item {
         property real pinchCenter: 1
 
         PinchArea {
-            id: pinchArea
+            id: pinch
             width: Math.max(flick.contentWidth, flick.width)
             height: Math.max(flick.contentHeight, flick.height)
-            pinch.target: flick.picture
-            pinch.maximumScale: 2.0
-            pinch.minimumScale: 1.0
-            pinch.dragAxis: Pinch.XAndYAxis
+
+            property real initialWidth
+            property real initialHeight
+
+            onPinchStarted: {
+                initialWidth = flick.contentWidth;
+                initialHeight = flick.contentHeight;
+            }
 
             onPinchUpdated: {
-                var previousZoomLevel = flick.zoomLevel;
-                flick.zoomLevel = previousZoomLevel + (pinch.scale - pinch.previousScale);
-                flick.pinchCenter = pinch.center;
-                if (flick.zoomLevel < flick.maxZoom && flick.zoomLevel > flick.minZoom) {
-                    flick.resizeContent(flick.width * flick.zoomLevel, flick.height * flick.zoomLevel, flick.pinchCenter);
+                var newWidth = initialWidth * pinch.scale;
+                var newHeight = initialHeight * pinch.scale;
+
+                if (newWidth < flick.width || newHeight < flick.height) {
+                    flick.resizeContent(flick.width, flick.height, Qt.point(flick.width / 2, flick.height / 2));
                 } else {
-                    flick.zoomLevel = previousZoomLevel;
+                    flick.contentX += pinch.previousCenter.x - pinch.center.x;
+                    flick.contentY += pinch.previousCenter.y - pinch.center.y;
+                    flick.resizeContent(initialWidth * pinch.scale, initialHeight * pinch.scale, pinch.center);
                 }
             }
 
-            onPinchFinished: flick.returnToBounds()
+            onPinchFinished: {
+                flick.returnToBounds();
+            }
         }
 
         Image {
@@ -478,6 +492,30 @@ Item {
             fillMode: Image.PreserveAspectFit
             width: Math.max(flick.contentWidth, flick.width)
             height: Math.max(flick.contentHeight, flick.height)
+
+            MouseArea {
+                id: mouseArea
+                anchors.fill: parent
+                propagateComposedEvents: true
+                pressAndHoldInterval: 500
+
+                onPressed: {}
+                onPressAndHold:
+
+                // rootPage.lastMousePos.x = mouseArea.mouseX;
+                // rootPage.lastMousePos.y = mouseArea.mouseY;
+                {}
+
+                onWheel: function (wheel) {
+                    if (wheel.angleDelta.y / 120 * flick.contentWidth * 0.1 + flick.contentWidth > flick.width && wheel.angleDelta.y / 120 * flick.contentHeight * 0.1 + flick.contentHeight > flick.height) {
+                        flick.resizeContent(wheel.angleDelta.y / 120 * flick.contentWidth * 0.1 + flick.contentWidth, wheel.angleDelta.y / 120 * flick.contentHeight * 0.1 + flick.contentHeight, Qt.point(flick.contentX + flick.width / 2, flick.contentY + flick.height / 2));
+                        flick.returnToBounds();
+                    } else {
+                        flick.resizeContent(flick.width, flick.height, Qt.point(flick.width / 2, flick.height / 2));
+                        flick.returnToBounds();
+                    }
+                }
+            }
             Repeater {
                 id: sections
                 model: page.sections
@@ -496,8 +534,8 @@ Item {
                         visible: modelData.type === "audio" ? true : false
                         x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.coords.x * (picture.paintedWidth / picture.sourceSize.width)
                         y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.coords.y * (picture.paintedHeight / picture.sourceSize.height)
-                        width: modelData.coords.width * (picture.paintedWidth / picture.sourceSize.width)
-                        height: modelData.coords.height * (picture.paintedHeight / picture.sourceSize.height)
+                        width: height
+                        height: root.imageHeights
                         Image {
                             id: audioImage
                             source: "qrc:/icons/sound.svg"
@@ -540,8 +578,8 @@ Item {
                         visible: modelData.type === "video" ? true : false
                         x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.coords.x * (picture.paintedWidth / picture.sourceSize.width)
                         y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.coords.y * (picture.paintedHeight / picture.sourceSize.height)
-                        width: modelData.coords.width * (picture.paintedWidth / picture.sourceSize.width)
-                        height: modelData.coords.height * (picture.paintedHeight / picture.sourceSize.height)
+                        width: height
+                        height: root.imageHeights
                         Image {
                             id: videoImg
                             source: "qrc:/icons/video.svg"
@@ -584,11 +622,14 @@ Item {
                         model: modelData.answers
                         Item {
                             id: answerRect
+                            property real originalWidth: modelData.coords.width
+                            property real originalHeight: modelData.coords.height
                             x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.coords.x * (picture.paintedWidth / picture.sourceSize.width)
                             y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.coords.y * (picture.paintedHeight / picture.sourceSize.height)
-                            width: modelData.coords.width * (picture.paintedWidth / picture.sourceSize.width)
-                            height: modelData.coords.height * (picture.paintedHeight / picture.sourceSize.height)
+                            width: originalWidth * (picture.paintedWidth / picture.sourceSize.width)
+                            height: originalHeight * (picture.paintedHeight / picture.sourceSize.height)
                             visible: sectionType === "fill"
+
                             Rectangle {
 
                                 color: "#7bd5bd"
@@ -620,7 +661,7 @@ Item {
                                     sideBar.fillList = sectionItem.sectionAnswers;
                                     sideBar.fillIndex = index;
                                 }
-                                onReleased: answerRect.setStatus()
+                                onReleased: root.setTotalStatus(answerRect, modelData)
                                 onClicked:
                                 // if (mouse.button === Qt.MiddleButton) {
                                 //     sectionItem.currentSection.removeAnswer(index);
@@ -650,38 +691,18 @@ Item {
                                     }
                                     onPositionChanged: {
                                         if (drag.active) {
-                                            var adjustedX = (mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2));
-                                            var adjustedY = (mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2));
-                                            var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
-                                            var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
+                                            answerRect.originalWidth += mouseX / (picture.paintedWidth / picture.sourceSize.width);
+                                            answerRect.originalHeight += mouseY / (picture.paintedHeight / picture.sourceSize.height);
 
-                                            // Mouse hareketini zoom seviyesine göre ölçekle
-                                            answerRect.width = answerRect.width + (originalX);
-                                            answerRect.height = answerRect.height + (originalY);
-
-                                            // Minimum boyutları belirle
-                                            if (answerRect.width < 20)
-                                                answerRect.width = 20;
-                                            if (answerRect.height < 10)
-                                                answerRect.height = 10;
+                                            // Minimum boyutları kontrol et
+                                            if (answerRect.originalWidth < 30 / (picture.paintedWidth / picture.sourceSize.width))
+                                                answerRect.originalWidth = 30 / (picture.paintedWidth / picture.sourceSize.width);
+                                            if (answerRect.originalHeight < 30 / (picture.paintedHeight / picture.sourceSize.height))
+                                                answerRect.originalHeight = 30 / (picture.paintedHeight / picture.sourceSize.height);
                                         }
                                     }
-                                    onReleased: answerRect.setStatus()
+                                    onReleased: root.setTotalStatus(answerRect, modelData)
                                 }
-                            }
-                            function setStatus() {
-                                var adjustedX = (answerRect.x - (flick.contentWidth / 2 - picture.paintedWidth / 2));
-                                var adjustedY = (answerRect.y - (flick.contentHeight / 2 - picture.paintedHeight / 2));
-                                var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
-                                var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
-
-                                var adjustedW = answerRect.width * (picture.sourceSize.width / picture.paintedWidth);
-                                var adjustedH = answerRect.height * (picture.sourceSize.height / picture.paintedHeight);
-                                modelData.coords = Qt.rect(originalX, originalY, adjustedW, adjustedH);
-                                lastSize.width = adjustedW;
-                                lastSize.height = adjustedH;
-                                config.bookSets[0].saveToJson();
-                                print("Changes Are Saved Page Detail set status");
                             }
                         }
                     }
@@ -692,10 +713,12 @@ Item {
 
                         Item {
                             id: answerCircleRect
+                            property real originalWidth: modelData.coords.width
+                            property real originalHeight: modelData.coords.height
                             x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.coords.x * (picture.paintedWidth / picture.sourceSize.width)
                             y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.coords.y * (picture.paintedHeight / picture.sourceSize.height)
-                            width: modelData.coords.width * (picture.paintedWidth / picture.sourceSize.width)
-                            height: modelData.coords.height * (picture.paintedHeight / picture.sourceSize.height)
+                            width: originalWidth * (picture.paintedWidth / picture.sourceSize.width)
+                            height: originalHeight * (picture.paintedHeight / picture.sourceSize.height)
                             visible: sectionType === "circle" || sectionType === "circlewithextras"
                             Rectangle {
 
@@ -718,7 +741,7 @@ Item {
                                     sideBar.circleList = sectionItem.sectionAnswers;
                                     sideBar.circleIndex = index;
                                 }
-                                onReleased: answerCircleRect.setStatus()
+                                onReleased: root.setTotalStatus(answerCircleRect, modelData)
 
                                 onClicked:
                                 // if (mouse.button === Qt.MiddleButton) {
@@ -748,38 +771,18 @@ Item {
                                     }
                                     onPositionChanged: {
                                         if (drag.active) {
-                                            var adjustedX = (mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2));
-                                            var adjustedY = (mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2));
-                                            var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
-                                            var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
+                                            answerCircleRect.originalWidth += mouseX / (picture.paintedWidth / picture.sourceSize.width);
+                                            answerCircleRect.originalHeight += mouseY / (picture.paintedHeight / picture.sourceSize.height);
 
-                                            // Mouse hareketini zoom seviyesine göre ölçekle
-                                            answerCircleRect.width = answerCircleRect.width + (originalX);
-                                            answerCircleRect.height = answerCircleRect.height + (originalY);
-
-                                            // Minimum boyutları belirle
-                                            if (answerCircleRect.width < 20)
-                                                answerCircleRect.width = 20;
-                                            if (answerCircleRect.height < 10)
-                                                answerCircleRect.height = 10;
+                                            // Minimum boyutları kontrol et
+                                            if (answerCircleRect.originalWidth < 30 / (picture.paintedWidth / picture.sourceSize.width))
+                                                answerCircleRect.originalWidth = 30 / (picture.paintedWidth / picture.sourceSize.width);
+                                            if (answerCircleRect.originalHeight < 30 / (picture.paintedHeight / picture.sourceSize.height))
+                                                answerCircleRect.originalHeight = 30 / (picture.paintedHeight / picture.sourceSize.height);
                                         }
                                     }
-                                    onReleased: answerCircleRect.setStatus()
+                                    onReleased: root.setTotalStatus(answerCircleRect, modelData)
                                 }
-                            }
-                            function setStatus() {
-                                var adjustedX = (answerCircleRect.x - (flick.contentWidth / 2 - picture.paintedWidth / 2));
-                                var adjustedY = (answerCircleRect.y - (flick.contentHeight / 2 - picture.paintedHeight / 2));
-                                var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
-                                var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
-
-                                var adjustedW = answerCircleRect.width * (picture.sourceSize.width / picture.paintedWidth);
-                                var adjustedH = answerCircleRect.height * (picture.sourceSize.height / picture.paintedHeight);
-                                modelData.coords = Qt.rect(originalX, originalY, adjustedW, adjustedH);
-                                lastSize.width = adjustedW;
-                                lastSize.height = adjustedH;
-                                config.bookSets[0].saveToJson();
-                                print("Changes Are Saved Page Detail set status circle");
                             }
                         }
                     }
@@ -789,10 +792,12 @@ Item {
                         model: modelData.answers
                         Item {
                             id: answerColorRect
+                            property real originalWidth: modelData.coords.width
+                            property real originalHeight: modelData.coords.height
                             x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.coords.x * (picture.paintedWidth / picture.sourceSize.width)
                             y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.coords.y * (picture.paintedHeight / picture.sourceSize.height)
-                            width: modelData.coords.width * (picture.paintedWidth / picture.sourceSize.width)
-                            height: modelData.coords.height * (picture.paintedHeight / picture.sourceSize.height)
+                            width: originalWidth * (picture.paintedWidth / picture.sourceSize.width)
+                            height: originalHeight * (picture.paintedHeight / picture.sourceSize.height)
                             visible: sectionType === "fillWithColor"
 
                             Rectangle {
@@ -817,7 +822,7 @@ Item {
                                     sideBar.fillWColorList = sectionItem.sectionAnswers;
                                     sideBar.fillIndex = index;
                                 }
-                                onReleased: answerColorRect.setStatus()
+                                onReleased: root.setTotalStatus(answerColorRect, modelData)
                                 onClicked:
                                 // if (mouse.button === Qt.MiddleButton) {
                                 //     sectionItem.currentSection.removeAnswer(index);
@@ -847,38 +852,18 @@ Item {
                                     }
                                     onPositionChanged: {
                                         if (drag.active) {
-                                            var adjustedX = (mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2));
-                                            var adjustedY = (mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2));
-                                            var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
-                                            var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
+                                            answerColorRect.originalWidth += mouseX / (picture.paintedWidth / picture.sourceSize.width);
+                                            answerColorRect.originalHeight += mouseY / (picture.paintedHeight / picture.sourceSize.height);
 
-                                            // Mouse hareketini zoom seviyesine göre ölçekle
-                                            answerColorRect.width = answerColorRect.width + (originalX);
-                                            answerColorRect.height = answerColorRect.height + (originalY);
-
-                                            // Minimum boyutları belirle
-                                            if (answerColorRect.width < 20)
-                                                answerColorRect.width = 20;
-                                            if (answerColorRect.height < 10)
-                                                answerColorRect.height = 10;
+                                            // Minimum boyutları kontrol et
+                                            if (answerColorRect.originalWidth < 30 / (picture.paintedWidth / picture.sourceSize.width))
+                                                answerColorRect.originalWidth = 30 / (picture.paintedWidth / picture.sourceSize.width);
+                                            if (answerColorRect.originalHeight < 30 / (picture.paintedHeight / picture.sourceSize.height))
+                                                answerColorRect.originalHeight = 30 / (picture.paintedHeight / picture.sourceSize.height);
                                         }
                                     }
-                                    onReleased: answerColorRect.setStatus()
+                                    onReleased: root.setTotalStatus(answerColorRect, modelData)
                                 }
-                            }
-                            function setStatus() {
-                                var adjustedX = (answerColorRect.x - (flick.contentWidth / 2 - picture.paintedWidth / 2));
-                                var adjustedY = (answerColorRect.y - (flick.contentHeight / 2 - picture.paintedHeight / 2));
-                                var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
-                                var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
-
-                                var adjustedW = answerColorRect.width * (picture.sourceSize.width / picture.paintedWidth);
-                                var adjustedH = answerColorRect.height * (picture.sourceSize.height / picture.paintedHeight);
-                                modelData.coords = Qt.rect(originalX, originalY, adjustedW, adjustedH);
-                                lastSize.width = adjustedW;
-                                lastSize.height = adjustedH;
-                                config.bookSets[0].saveToJson();
-                                print("Changes Are Saved Page Detail set status");
                             }
                         }
                     }
@@ -899,18 +884,20 @@ Item {
 
                             Item {
                                 id: beginRectItem
+                                property real originalWidth: modelData.rectBegin.width
+                                property real originalHeight: modelData.rectBegin.height
                                 x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.rectBegin.x * (picture.paintedWidth / picture.sourceSize.width)
                                 y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.rectBegin.y * (picture.paintedHeight / picture.sourceSize.height)
-                                width: modelData.rectBegin.width * (picture.paintedWidth / picture.sourceSize.width)
-                                height: modelData.rectBegin.height * (picture.paintedHeight / picture.sourceSize.height)
+                                width: originalWidth * (picture.paintedWidth / picture.sourceSize.width)
+                                height: originalHeight * (picture.paintedHeight / picture.sourceSize.height)
 
                                 Rectangle {
                                     id: beginRect
                                     color: modelData.color !== "" ? modelData.color : myColors.darkBorderColor
                                     visible: true
                                     rotation: modelData.rotation
-                                    height: modelData.rectBegin.height * (picture.paintedHeight / picture.sourceSize.height)
-                                    width: modelData.isRound ? height : modelData.rectBegin.width * (picture.paintedWidth / picture.sourceSize.width)
+                                    height: beginRectItem.originalHeight * (picture.paintedHeight / picture.sourceSize.height)
+                                    width: modelData.isRound ? height : beginRectItem.originalWidth * (picture.paintedWidth / picture.sourceSize.width)
                                     radius: modelData.isRound ? height / 2 : 2
                                     opacity: modelData.opacity ? modelData.opacity : 0.5
                                 }
@@ -934,9 +921,9 @@ Item {
                                         var adjustedW = beginRectItem.width * (picture.sourceSize.width / picture.paintedWidth);
                                         var adjustedH = beginRectItem.height * (picture.sourceSize.height / picture.paintedHeight);
                                         modelData.rectBegin = Qt.rect(originalX, originalY, adjustedW, adjustedH);
-                                        lastSize.width = adjustedW;
-                                        lastSize.height = adjustedH;
-                                config.bookSets[0].saveToJson();
+                                        root.lastSize.width = adjustedW;
+                                        root.lastSize.height = adjustedH;
+                                        config.bookSets[0].saveToJson();
                                         print("Changes Are Saved Page Detail set status");
                                     }
                                 }
@@ -960,23 +947,14 @@ Item {
                                         }
                                         onPositionChanged: {
                                             if (drag.active) {
-                                                var adjustedX = (mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2));
-                                                var adjustedY = (mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2));
-                                                var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
-                                                var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
+                                                beginRectItem.originalWidth += mouseX / (picture.paintedWidth / picture.sourceSize.width);
+                                                beginRectItem.originalHeight += mouseY / (picture.paintedHeight / picture.sourceSize.height);
 
-                                                // Mouse hareketini zoom seviyesine göre ölçekle
-                                                beginRectItem.width = beginRectItem.width + (originalX);
-                                                beginRectItem.height = beginRectItem.height + (originalY);
-
-                                                beginRect.width = beginRectItem.width + (originalX);
-                                                beginRect.height = beginRectItem.height + (originalY);
-
-                                                // Minimum boyutları belirle
-                                                if (beginRectItem.width < 20)
-                                                    beginRectItem.width = 20;
-                                                if (beginRectItem.height < 10)
-                                                    beginRectItem.height = 10;
+                                                // Minimum boyutları kontrol et
+                                                if (beginRectItem.originalWidth < 30 / (picture.paintedWidth / picture.sourceSize.width))
+                                                    beginRectItem.originalWidth = 30 / (picture.paintedWidth / picture.sourceSize.width);
+                                                if (beginRectItem.originalHeight < 30 / (picture.paintedHeight / picture.sourceSize.height))
+                                                    beginRectItem.originalHeight = 30 / (picture.paintedHeight / picture.sourceSize.height);
                                             }
                                         }
                                         onReleased: {
@@ -988,8 +966,8 @@ Item {
                                             var adjustedW = beginRectItem.width * (picture.sourceSize.width / picture.paintedWidth);
                                             var adjustedH = beginRectItem.height * (picture.sourceSize.height / picture.paintedHeight);
                                             modelData.rectBegin = Qt.rect(originalX, originalY, adjustedW, adjustedH);
-                                            lastSize.width = adjustedW;
-                                            lastSize.height = adjustedH;
+                                            root.lastSize.width = adjustedW;
+                                            root.lastSize.height = adjustedH;
                                             config.bookSets[0].saveToJson();
                                             print("Changes Are Saved Page Detail set status");
                                         }
@@ -1098,10 +1076,12 @@ Item {
 
                             Item {
                                 id: endRectItem
+                                property real originalWidth: modelData.rectEnd.width
+                                property real originalHeight: modelData.rectEnd.height
                                 x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.rectEnd.x * (picture.paintedWidth / picture.sourceSize.width)
                                 y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.rectEnd.y * (picture.paintedHeight / picture.sourceSize.height)
-                                width: modelData.rectEnd.width * (picture.paintedWidth / picture.sourceSize.width)
-                                height: modelData.rectEnd.height * (picture.paintedHeight / picture.sourceSize.height)
+                                width: originalWidth * (picture.paintedWidth / picture.sourceSize.width)
+                                height: originalHeight * (picture.paintedHeight / picture.sourceSize.height)
 
                                 Rectangle {
                                     id: endRect
@@ -1109,8 +1089,8 @@ Item {
                                     color: modelData.color !== "" ? modelData.color : myColors.darkBorderColor
                                     visible: true
                                     rotation: modelData.rotation
-                                    height: modelData.rectEnd.height * (picture.paintedHeight / picture.sourceSize.height)
-                                    width: modelData.isRound ? height : modelData.rectEnd.width * (picture.paintedWidth / picture.sourceSize.width)
+                                    height: endRectItem.originalHeight * (picture.paintedHeight / picture.sourceSize.height)
+                                    width: modelData.isRound ? height : endRectItem.originalWidth * (picture.paintedWidth / picture.sourceSize.width)
                                     radius: modelData.isRound ? height / 2 : 2
                                     opacity: modelData.opacity ? modelData.opacity : 0.5
                                 }
@@ -1136,8 +1116,8 @@ Item {
                                         var adjustedW = endRectItem.width * (picture.sourceSize.width / picture.paintedWidth);
                                         var adjustedH = endRectItem.height * (picture.sourceSize.height / picture.paintedHeight);
                                         modelData.rectEnd = Qt.rect(originalX, originalY, adjustedW, adjustedH);
-                                        lastSize.width = adjustedW;
-                                        lastSize.height = adjustedH;
+                                        root.lastSize.width = adjustedW;
+                                        root.lastSize.height = adjustedH;
                                         config.bookSets[0].saveToJson();
                                         print("Changes Are Saved Page Detail set status");
                                     }
@@ -1163,23 +1143,14 @@ Item {
                                         }
                                         onPositionChanged: {
                                             if (drag.active) {
-                                                var adjustedX = (mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2));
-                                                var adjustedY = (mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2));
-                                                var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
-                                                var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
+                                                endRectItem.originalWidth += mouseX / (picture.paintedWidth / picture.sourceSize.width);
+                                                endRectItem.originalHeight += mouseY / (picture.paintedHeight / picture.sourceSize.height);
 
-                                                // Mouse hareketini zoom seviyesine göre ölçekle
-                                                endRectItem.width = endRectItem.width + (originalX);
-                                                endRectItem.height = endRectItem.height + (originalY);
-
-                                                endRect.width = endRectItem.width + (originalX);
-                                                endRect.height = endRectItem.height + (originalY);
-
-                                                // Minimum boyutları belirle
-                                                if (endRectItem.width < 20)
-                                                    endRectItem.width = 20;
-                                                if (endRectItem.height < 10)
-                                                    endRectItem.height = 10;
+                                                // Minimum boyutları kontrol et
+                                                if (endRectItem.originalWidth < 30 / (picture.paintedWidth / picture.sourceSize.width))
+                                                    endRectItem.originalWidth = 30 / (picture.paintedWidth / picture.sourceSize.width);
+                                                if (endRectItem.originalHeight < 30 / (picture.paintedHeight / picture.sourceSize.height))
+                                                    endRectItem.originalHeight = 30 / (picture.paintedHeight / picture.sourceSize.height);
                                             }
                                         }
                                         onReleased: {
@@ -1191,8 +1162,8 @@ Item {
                                             var adjustedW = endRectItem.width * (picture.sourceSize.width / picture.paintedWidth);
                                             var adjustedH = endRectItem.height * (picture.sourceSize.height / picture.paintedHeight);
                                             modelData.rectEnd = Qt.rect(originalX, originalY, adjustedW, adjustedH);
-                                            lastSize.width = adjustedW;
-                                            lastSize.height = adjustedH;
+                                            root.lastSize.width = adjustedW;
+                                            root.lastSize.height = adjustedH;
                                             config.bookSets[0].saveToJson();
                                             print("Changes Are Saved Page Detail set status");
                                         }
@@ -1249,39 +1220,36 @@ Item {
                 }
             }
         }
-
-        function zoomIn() {
-            var newZoom = flick.zoomLevel + zoomStep;
-
-            if (newZoom <= flick.maxZoom) {
-                flick.zoomLevel = newZoom;
-                flick.resizeContent(flick.width * flick.zoomLevel, flick.height * flick.zoomLevel, Qt.point(flick.contentWidth / 2, flick.contentHeight / 2));
-                flick.returnToBounds();
-            } else {
-                flick.zoomLevel = flick.maxZoom;
-            }
-        }
-
-        function zoomOut() {
-            var newZoom = flick.zoomLevel - zoomStep;
-
-            if (newZoom >= flick.minZoom) {
-                flick.zoomLevel = newZoom;
-                flick.resizeContent(flick.width * flick.zoomLevel, flick.height * flick.zoomLevel, Qt.point(flick.contentWidth / 2, flick.contentHeight / 2));
-                flick.returnToBounds();
-            } else {
-                flick.zoomLevel = flick.minZoom;
-            }
-        }
     }
 
     function setDefaultZoom() {
-        flick.zoomLevel = 1.0;
-        flick.zoomIn();
-        flick.zoomOut();
+        // İçeriği orijinal boyutuna (1x zoom) döndür
+        flick.resizeContent(flick.width, flick.height, Qt.point(flick.width / 2, flick.height / 2));
+        flick.returnToBounds();
+
+        // İçeriği merkeze al
+        flick.contentX = 0;
+        flick.contentY = 0;
     }
 
     function enableRightClick(enabled) {
         mainMouseArea.enabled = enabled;
+    }
+
+    function setTotalStatus(rect, modelData) {
+        var adjustedX = (rect.x - (flick.contentWidth / 2 - picture.paintedWidth / 2));
+        var adjustedY = (rect.y - (flick.contentHeight / 2 - picture.paintedHeight / 2));
+        var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
+        var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
+
+        var adjustedW = rect.width * (picture.sourceSize.width / picture.paintedWidth);
+        var adjustedH = rect.height * (picture.sourceSize.height / picture.paintedHeight);
+
+        modelData.coords = Qt.rect(originalX, originalY, adjustedW, adjustedH);
+        root.lastSize.width = adjustedW;
+        root.lastSize.height = adjustedH;
+
+        config.bookSets[0].saveToJson();
+        print("Changes Are Saved Page Detail set status");
     }
 }

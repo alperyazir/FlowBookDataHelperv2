@@ -178,8 +178,11 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
             auto sctns = cObj["sections"].toArray();
 
             for (const auto &s : sctns) {
+
+
                 auto sObj = s.toObject();
                 Section *section = new Section;
+
                 section->_title = sObj["title"].toString();
                 section->_type = sObj["type"].toString();
                 section->_audio_path = sObj["audio_path"].toString();

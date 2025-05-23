@@ -5,11 +5,9 @@ import QtQuick.Dialogs
 
 Dialog {
     property var additionalFiles: []
-    id: newProjectDialog
+    id: root
 
     title: "New project"
-    width: 600
-    height: 900
     modal: true
     closePolicy: Popup.NoAutoClose // Prevents dialog from closing when clicking outside
     anchors.centerIn: parent
@@ -17,7 +15,7 @@ Dialog {
     // Custom header
     header: Rectangle {
         color: "#1A2327"
-        height: 40
+        height: parent.height * .07
         border.color: "#009ca6"
         border.width: 1
 
@@ -34,8 +32,9 @@ Dialog {
 
     // Custom footer for buttons
     footer: Rectangle {
+        id: footRect
         color: "#1A2327"
-        height: 60
+        height: parent.height * .07
         border.color: "#009ca6"
         border.width: 1
 
@@ -48,7 +47,7 @@ Dialog {
             Button {
                 text: "Cancel"
                 Layout.preferredWidth: 80
-                Layout.preferredHeight: 32
+                Layout.preferredHeight: footRect.height * 0.6
 
                 background: Rectangle {
                     color: parent.hovered ? "#2A3337" : "#1A2327"
@@ -64,16 +63,17 @@ Dialog {
                     verticalAlignment: Text.AlignVCenter
                 }
 
-                onClicked: newProjectDialog.reject()
+                onClicked: root.reject()
             }
 
             Button {
                 text: "OK"
                 Layout.preferredWidth: 80
-                Layout.preferredHeight: 32
+                Layout.preferredHeight: footRect.height * 0.6
+                enabled: isPdfValid
 
                 background: Rectangle {
-                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    color: parent.enabled ? (parent.hovered ? "#2A3337" : "#1A2327") : "darkgray"
                     border.color: "#009ca6"
                     border.width: 1
                     radius: 2
@@ -81,12 +81,12 @@ Dialog {
 
                 contentItem: Text {
                     text: parent.text
-                    color: "white"
+                    color: parent.enabled ?"white" : "black"
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
-                onClicked: newProjectDialog.accept()
+                onClicked: root.accept()
             }
         }
     }
@@ -285,7 +285,7 @@ Dialog {
         Rectangle {
             id: validPdfContent
             Layout.fillWidth: true
-            Layout.preferredHeight: 650
+            Layout.preferredHeight: root.height * 0.8
             visible: isPdfValid
             border.width: 1
             border.color: "#009ca6"
@@ -294,8 +294,8 @@ Dialog {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 10
-                spacing: 5
+                anchors.margins: 5
+                spacing: 1
 
                 // Publisher Name
                 RowLayout {
@@ -778,12 +778,13 @@ Dialog {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: false
-                    Layout.preferredHeight: 350
+                    Layout.preferredHeight: parent.height * 0.35
                     Layout.topMargin: 5
                     border.width: 1
                     border.color: "#009ca6"
                     color: "#1A2327"
                     radius: 4
+                    id: moduleRect
 
                     ColumnLayout {
                         id: colm
@@ -931,7 +932,7 @@ Dialog {
                         // Add button
                         Item {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 50
+                            Layout.preferredHeight: moduleRect * 0.3
                             Layout.topMargin: 10
 
                             Button {
@@ -939,7 +940,7 @@ Dialog {
                                 anchors.centerIn: parent
                                 text: "+"
                                 width: 240 // Buton genişliğini daha fazla artırdık
-                                height: 40
+                                height: 20
                                 onClicked: {
                                     // Son eklenen modülün bilgilerini alalım
                                     var lastIndex = modulesModel.count - 1;
@@ -1038,7 +1039,7 @@ Dialog {
         }
 
         var pdfPath = pdfPathTextField.text
-        var bookCoverPath = pdfPathTextField.text
+        var bookCoverPath = coverPathTextField.text
         var audioPath = audioFolderTextField.text
         var videoPath = videoFolderTextField.text
 

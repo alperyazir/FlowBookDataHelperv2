@@ -65,11 +65,11 @@
         <file>icons/tick.svg</file>
         <file>icons/puzzle.png</file>
         <file>icons/selectCirclle.png</file>
-	<file>logo/logo.png</file>
+        <file>logo/logo.png</file>
         <file>qml/FlowSideBar.qml</file>
-	<file>qml/NewProjectDialog.qml</file>
-	<file>qml/FlowProgress.qml</file>
-            <file>qml/OpenProject.qml</file>
+        <file>qml/NewProjectDialog.qml</file>
+        <file>qml/FlowProgress.qml</file>
+        <file>qml/OpenProject.qml</file>
         <file>qml/TestDialog.qml</file>
         <file>qml/PackageDialog.qml</file>
         <file>qml/groupboxes/AudioGroupBox.qml</file>
@@ -98,7 +98,8 @@
         <file>qml/activities/ActivityCircle.qml</file>
         <file>qml/activities/ActivityMarkWithX.qml</file>
         <file>qml/groupboxes/activities/MarkWithX.qml</file>
-         <file>qml/groupboxes/FillWithColorGroupBox.qml</file>
-         <file>qml/groupboxes/DrawMatchedLineGroupBox.qml</file>
+        <file>qml/groupboxes/FillWithColorGroupBox.qml</file>
+        <file>qml/groupboxes/DrawMatchedLineGroupBox.qml</file>
+        <file>qml/qtquickcontrols2.conf</file>
     </qresource>
 </RCC>

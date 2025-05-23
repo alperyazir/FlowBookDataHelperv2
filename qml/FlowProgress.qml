@@ -7,7 +7,7 @@ Dialog {
     id: flowProgress
     title: "Processing"
     width: 600
-    height: detailsExpanded ? 500 : 200
+    height: detailsExpanded ? 500 : 250
     modal: true
     closePolicy: Popup.NoAutoClose
     anchors.centerIn: parent
@@ -26,10 +26,56 @@ Dialog {
         }
     }
 
-    // Background
+    header: Rectangle {
+        color: "#1A2327"
+        height: 40
+        border.color: "#009ca6"
+        border.width: 1
+        Label {
+            text: "Processing"
+            color: "white"
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: parent.left
+            anchors.leftMargin: 10
+            font.pixelSize: 16
+            font.bold: true
+        }
+    }
+
+    footer: Rectangle {
+        color: "#1A2327"
+        height: 60
+        border.color: "#009ca6"
+        border.width: 1
+        RowLayout {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.rightMargin: 10
+            spacing: 10
+            Button {
+                text: "Cancel"
+                Layout.preferredWidth: 80
+                Layout.preferredHeight: 32
+                background: Rectangle {
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 2
+                }
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                onClicked: flowProgress.reject()
+            }
+        }
+    }
+
     background: Rectangle {
-        color: "#2c2a2a"
-        border.color: "gray"
+        color: "#232f34"
+        border.color: "#009ca6"
         border.width: 1
     }
 
@@ -58,8 +104,8 @@ Dialog {
             background: Rectangle {
                 implicitWidth: 200
                 implicitHeight: 24
-                color: "#3a3a3a"
-                border.color: "#505050"
+                color: "#1A2327"
+                border.color: "#009ca6"
                 radius: 2
             }
 
@@ -71,7 +117,7 @@ Dialog {
                     width: progressBar.visualPosition * parent.width
                     height: parent.height
                     radius: 2
-                    color: "#4CAF50"  // Green color
+                    color: "#009ca6"  // Green color
                 }
 
                 Text {
@@ -95,9 +141,10 @@ Dialog {
             }
 
             background: Rectangle {
-                color: "#505050"
-                border.color: "gray"
-                radius: 3
+                color: parent.hovered ? "#2A3337" : "#1A2327"
+                border.color: "#009ca6"
+                border.width: 1
+                radius: 2
             }
 
             contentItem: Text {
