@@ -10,26 +10,29 @@ Rectangle {
     property var secretWords: []
     signal closed()
     id: root
-    width: parent.width -10
+    width: parent.width
     height: parent.height
-    radius: 30
+    color: "#232f34"
 
     Rectangle {
-       id: header
-       width: parent.width
-       height: 40
-       anchors.horizontalCenter: parent.horizontalCenter
-       anchors.top: parent.top
+        id: header
+        width: parent.width
+        height: 40
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        color: "#232f34"
+        border.color: "#009ca6"
+        border.width: 1
 
-       FlowText {
-           width: parent.width
-           height: parent.height
-           text: root.headerText
-           anchors.centerIn: parent
-           font.pixelSize: 25
-           font.bold: true
-       }
-   }
+        FlowText {
+            width: parent.width
+            height: parent.height
+            text: root.headerText
+            font.pixelSize: 25
+            font.bold: true
+            color: "#009ca6"
+        }
+    }
 
     Rectangle {
         id: actColumn
@@ -38,6 +41,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.margins: 20
+        color: "#232f34"
 
         Column {
             anchors.left: parent.left
@@ -73,7 +77,7 @@ Rectangle {
             width: height
             height: parent.height
             radius: 5
-            color:myColors.highlightColor
+            color: "#232f34"
             z: 1
             border.color: "black"
             anchors.horizontalCenter: parent.horizontalCenter
@@ -222,42 +226,35 @@ Rectangle {
         }
     }
 
-    Rectangle {
+    Button {
+        property bool show: false
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.margins: 10
         width: 50
         height: 40
-        color: "gray"
-        FlowText {
-            text: qsTr("Answers")
+        text: !show ? "Show" : "Hide"
+        background: Rectangle {
+            color: parent.hovered ? "#2A3337" : "#1A2327"
+            border.color: "#009ca6"
+            border.width: 1
+            radius: 2
+        }
+        contentItem: Text {
+            text: parent.text
             color: "white"
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
         }
-        MouseArea {
-            anchors.fill: parent
-            onClicked: showAnswer(true)
-        }
-    }
-
-    Rectangle {
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.margins: 10
-        width: 40
-        height: 40
-        color: "red"
-        FlowText {
-            text: qsTr("X")
-            color: "white"
-        }
-
         MouseArea {
             anchors.fill: parent
             onClicked: {
-                activityDialog.visible = false
+                parent.show  = !parent.show
+                showAnswer(parent.show)
             }
         }
     }
+
 
     function showAnswer(eyeState) {
         for (var i = 0; i < PuzzleLogic.allWordsCoordinates.length; i++) {

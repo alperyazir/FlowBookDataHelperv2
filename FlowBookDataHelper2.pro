@@ -5,10 +5,12 @@ QT += quick concurrent quickcontrols2
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 HEADERS += \
+    clipboardhelper.h \
     config/configparser.h \
     pdfprocess/pdfprocess.h
 
 SOURCES += \
+    clipboardhelper.cpp \
     config/configparser.cpp \
     main.cpp \
     pdfprocess/pdfprocess.cpp

@@ -22,26 +22,30 @@ Rectangle {
     property real lastHeight: 100
     property real lastWidth: 100
     id: root
-    width: parent.width -10
+    width: parent.width
     height: parent.height
-    color: "gray"
-    z: 10
-     Rectangle {
+    color: "#232f34"
+
+    Rectangle {
         id: header
         width: parent.width
         height: 40
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
+        color: "#232f34"
+        border.color: "#009ca6"
+        border.width: 1
 
         FlowText {
             width: parent.width
             height: parent.height
             text: root.headerText
-            anchors.centerIn: parent
             font.pixelSize: 25
             font.bold: true
+            color: "#009ca6"
         }
     }
+
 
     Column {
         property real biggestWidth: 50
@@ -74,13 +78,21 @@ Rectangle {
                     Rectangle {
                         width: 100
                         height: 30
-                        color: "transparent"
-                        border.color: "blue"
+                        color: "#2A3337"
+                        border.color: "#009ca6"
                         border.width: 1
                         FlowText{
+                            id: txt
                             width: parent.width
                             height: parent.height
                             text: modelData
+                            color: "#009ca6"
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: {
+                                    clipboardHelper.copyText(txt.text)
+                                }
+                            }
                         }
                     }
                 }
@@ -265,24 +277,4 @@ Rectangle {
         }
     }
 
-
-    Rectangle {
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.margins: 10
-        width: 40
-        height: 40
-        color: "red"
-        FlowText {
-            text: qsTr("X")
-            color: "white"
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            onClicked: {
-                activityDialog.visible = false
-            }
-        }
-    }
 }

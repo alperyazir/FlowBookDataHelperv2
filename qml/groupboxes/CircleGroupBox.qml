@@ -303,7 +303,7 @@ GroupBox {
                         onClicked: {
                             if (confirmBox.type === "section") {
                                 root.removeSection(root.sectionIndex);
-                                sideBar.fillVisible = false;
+                                sideBar.circleVisible = false;
                             } else if (confirmBox.type === "answer") {
                                 root.removeAnswer(confirmBox.index);
                             }

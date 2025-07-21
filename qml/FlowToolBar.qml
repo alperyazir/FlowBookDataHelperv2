@@ -231,7 +231,7 @@ Rectangle {
     CheckBox {
         id: moduleSideListCB
         text: "isModuleSideLeft"
-        checked: false
+        checked: config.bookSets[0].books[0].isModuleSideLeft
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: moduleBtn.right
         anchors.leftMargin: 30

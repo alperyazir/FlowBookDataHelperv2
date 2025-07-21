@@ -112,6 +112,7 @@ Column {
                 ScrollBar.vertical.interactive: true
                 clip: true
                 ListView {
+                    property var data: ({})
                     id: wordsRepeater
                     width: parent.width
                     height: parent.height
@@ -223,9 +224,9 @@ Column {
                 text: "Add New"
                 anchors.horizontalCenter: parent.horizontalCenter
                 onClicked: {
-                    saveChanges();
-
+                    saveChanges()
                     root.activityModelData.createMatchWord("", "");
+                    config.bookSets[0].saveToJson();
                 }
             }
         }
@@ -374,8 +375,8 @@ Column {
                 text: "Add New"
                 anchors.horizontalCenter: parent.horizontalCenter
                 onClicked: {
-                    saveChanges();
-
+                    saveChanges()
+                    config.bookSets[0].saveToJson();
                     root.activityModelData.createSentences("", "", "");
                 }
             }
@@ -389,4 +390,5 @@ Column {
         }
         return "";
     }
+
 }

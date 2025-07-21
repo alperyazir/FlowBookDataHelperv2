@@ -21,8 +21,7 @@ GroupBox {
             if (selectedFilePath) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
                 if (newPath) {
-                    audioTextField.text = newPath
-                    root.sectionModelData.audioExtra.path = newPath
+                    root.sectionModelData.createAudioExtra(newPath)
                 } else {
                     console.log("Books klasörü bulunamadı.");
                 }
@@ -184,12 +183,11 @@ GroupBox {
                 anchors.verticalCenter: parent.verticalCenter
             }
 
-
             TextField {
                 id: audioTextField
                 width: parent.width - 100
                 height: parent.height
-                text: root.sectionModelData.audioExtra.path
+                text: root.sectionModelData.audioExtra !== null ? root.sectionModelData.audioExtra.path : ""
                 placeholderText: "audio extra path "
                 placeholderTextColor: "gray"
                 color: "white"
@@ -224,7 +222,7 @@ GroupBox {
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
-                        fileDialog.folder = "file:" + appPath + root.sectionModelData.audioExtra.path;
+                        fileDialog.folder = "file:" + appPath;
                         fileDialog.open();
                     }
                 }
@@ -395,14 +393,13 @@ GroupBox {
                     verticalAlignment: Text.AlignVCenter
                 }
                 onClicked: {
-                    activityDialog.visible = true
+
                     activityDialog.wordLists = root.activityModelData.words
                     activityDialog.imageSource = root.activityModelData.sectionPath
                     activityDialog.headerText = root.activityModelData.headerText
                     activityDialog.answers = root.activityModelData.answers
                     activityDialog.activityModelData = root.activityModelData
 
-                    print(root.activityModelData.type)
 
                     if (root.activityModelData.type === "matchTheWords")
                         activityDialog.createActivityMatchTheWord()
@@ -426,7 +423,7 @@ GroupBox {
                         activityDialog.createActivityMarkWithX()
 
 
-
+                    activityDialog.open()
                 }
             }
 
@@ -558,38 +555,62 @@ GroupBox {
     function saveChanges() {
 
         // drag drop picture
-        for ( var i = 0; i < ddpicture.words.length; i++) {
-            root.activityModelData.words[i] =  ddpicture.words.itemAt(i).wText
+        for ( var i = 0; i < ddpicture.words.count; i++) {
+            var item = ddpicture.words.itemAtIndex(i)
+            if (item !== null) {
+                root.activityModelData.words[i] =  item.wText
+            }
         }
         // drag drop picture group
-        for ( var i = 0; i < ddppicturegroup.words.length; i++) {
-            root.activityModelData.words[i] =  ddppicturegroup.words.itemAt(i).wText
+        for ( var i = 0; i < ddppicturegroup.words.count; i++) {
+            var item = ddppicturegroup.words.itemAtIndex(i)
+            if (item !== null) {
+                root.activityModelData.words[i] =  item.wText
+            }
         }
         // fill picture
-        for ( var i = 0; i < fillpicture.words.length; i++) {
-            root.activityModelData.words[i] =  fillpicture.words.itemAt(i).wText
+        for ( var i = 0; i < fillpicture.words.count; i++) {
+            var item = fillpicture.words.itemAtIndex(i)
+            if (item !== null) {
+                root.activityModelData.words[i] =  item.wText
+            }
         }
 
         // Match Word
-        for ( var i = 0; i < matchthewords.words.length; i++) {
-            root.activityModelData.matchWord[i].word =  matchthewords.words.itemAt(i).wordText
-            root.activityModelData.matchWord[i].imagePath =  matchthewords.words.itemAt(i).imagePathText
+        for ( var i = 0; i < matchthewords.words.count; i++) {
+            var item = matchthewords.words.itemAtIndex(i)
+            if (item !== null) {
+                root.activityModelData.matchWord[i].word = item.wordText
+                root.activityModelData.matchWord[i].imagePath =item.imagePathText
+            }
         }
+
         // Match sentence
-        for ( var i = 0; i < matchthewords.sentences.length; i++) {
-            root.activityModelData.sentences[i].word =  matchthewords.words.itemAt(parseInt(matchthewords.sentences.itemAt(i).wordText)).wordText
-            root.activityModelData.sentences[i].imagePath =  matchthewords.sentences.itemAt(i).imagePathText
-            root.activityModelData.sentences[i].sentence =  matchthewords.sentences.itemAt(i).sentenceText
+        for ( var i = 0; i < matchthewords.sentences.count; i++) {
+
+            var item = matchthewords.sentences.itemAtIndex(i)
+            if (item !== null) {
+                root.activityModelData.sentences[i].imagePath =  item.imagePathText
+                root.activityModelData.sentences[i].sentence =  item.sentenceText
+                var witem = matchthewords.words.itemAtIndex(parseInt(item.wordText))
+                if (witem !== null) {
+                    root.activityModelData.sentences[i].word =  witem.wordText
+                }
+            }
         }
 
         // find puzzle
-        for ( var i = 0; i < findPuzzle.words.length; i++) {
-            root.activityModelData.words[i] =  findPuzzle.words.itemAt(i).wText
+        for ( var i = 0; i < findPuzzle.words.count; i++) {
+            var item = findPuzzle.words.itemAtIndex(i)
+            if (item !== null) {
+                root.activityModelData.words[i] =  item.wText
+            }
         }
 
         config.bookSets[0].saveToJson();
         toast.show("Changes are saved to File!")
     }
+
 
 }
 

@@ -7,7 +7,7 @@ Rectangle {
     property var pages: config.bookSets[0].books[0].pages
     property bool outlineEnabled
     property var currentPageDetails
-    property int currentPageIndex: 0 + pages[0].page_number
+    property int currentPageIndex: 0
     height: parent.height
     width: parent.width
     color: "#1A2327" // Dark background
@@ -68,4 +68,6 @@ Rectangle {
     function enableRightClick(enabled) {
         currentPageDetails.enableRightClick(enabled);
     }
+
+
 }

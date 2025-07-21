@@ -360,12 +360,16 @@ bool PdfProcess::launchTestFlowBook(const QString &testVersion) {
     
     // Platform specific launch
     QStringList arguments;
+    arguments << "/../../";
 #ifdef Q_OS_MAC
     arguments << flowBookPath;
     process->start("open", arguments);
 #else
     // On Windows, directly execute the .exe
+
     process->start(flowBookPath, arguments);
+
+    qDebug() << "Arguments" << flowBookPath << process->arguments();;
 #endif
 
     // Connect to error handling

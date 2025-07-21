@@ -23,11 +23,9 @@ Rectangle {
     property real lastWidth: 100
 
     id: root
-    width: parent.width -10
+    width: parent.width
     height: parent.height
-    color: "gray"
-    z: 10
-
+    color: "#232f34"
 
     Rectangle {
         id: header
@@ -35,16 +33,20 @@ Rectangle {
         height: 40
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
+        color: "#232f34"
+        border.color: "#009ca6"
+        border.width: 1
 
         FlowText {
             width: parent.width
             height: parent.height
             text: root.headerText
-            anchors.centerIn: parent
             font.pixelSize: 25
             font.bold: true
+            color: "#009ca6"
         }
     }
+
 
     Column {
         property real biggestWidth: 50
@@ -185,6 +187,7 @@ Rectangle {
                             wrapMode: Text.WordWrap
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
+                            text: modelData.isCorrect ? "x" : ""
                             onAccepted: {
                                 visible = false
                                 if (text !== "") {
@@ -274,24 +277,4 @@ Rectangle {
         }
     }
 
-
-    Rectangle {
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.margins: 10
-        width: 40
-        height: 40
-        color: "red"
-        FlowText {
-            text: qsTr("X")
-            color: "white"
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            onClicked: {
-                activityDialog.visible = false
-            }
-        }
-    }
 }

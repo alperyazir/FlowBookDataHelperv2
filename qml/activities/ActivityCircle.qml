@@ -21,25 +21,30 @@ Rectangle {
     property var activityModelData
     property real lastHeight: 100
     property real lastWidth: 100
-    width: parent.width - 10
-    height: parent.height
-    color: "gray"
-    z: 10
 
+
+    width: parent.width
+    height: parent.height
+    color: "#232f34"
+    z: 10
     Rectangle {
         id: header
         width: parent.width
         height: 40
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
+        color: "#232f34"
+        border.color: "#009ca6"
+        border.width: 1
 
         FlowText {
             width: parent.width
             height: parent.height
             text: root.headerText
-            anchors.centerIn: parent
             font.pixelSize: 25
             font.bold: true
+            color: "#009ca6"
+
         }
     }
 
@@ -180,6 +185,7 @@ Rectangle {
                             wrapMode: Text.WordWrap
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
+                            text: modelData.isCorrect  ? "x" : ""
                             onAccepted: {
                                 visible = false;
                                 if (text !== "") {
@@ -234,8 +240,8 @@ Rectangle {
                                     answerRect.height = answerRect.height + (originalY);
 
                                     // Minimum boyutları belirle
-                                    if (answerRect.width < 20)
-                                        answerRect.width = 20;
+                                    if (answerRect.width < 10)
+                                        answerRect.width = 10;
                                     if (answerRect.height < 10)
                                         answerRect.height = 10;
                                     //}
@@ -260,26 +266,6 @@ Rectangle {
                         }
                     }
                 }
-            }
-        }
-    }
-
-    Rectangle {
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.margins: 10
-        width: 40
-        height: 40
-        color: "red"
-        FlowText {
-            text: qsTr("X")
-            color: "white"
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            onClicked: {
-                activityDialog.visible = false
             }
         }
     }

@@ -6,7 +6,7 @@ import QtQuick.Controls.Basic
 
 ApplicationWindow {
     id: mainwindow
-    //visibility: Window.Maximized
+    visibility: Window.Maximized
     width: 1920// Screen.width
     height: 1080 //Screen.height
     visible: true
@@ -113,6 +113,7 @@ ApplicationWindow {
         target: config
         function onBookSetsChanged() {
             print("Book is changed");
+            content.currentPageIndex++; content.currentPageIndex--;
         }
     }
 
@@ -123,4 +124,65 @@ ApplicationWindow {
     //     anchors.centerIn: parent
     // }
 
+
+
+    Rectangle {
+        id: versionRect
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.margins: 20
+        width: versionText.width + 20
+        height: 40
+        color: "#1A2327"
+        border.color: "#009ca6"
+        border.width: 1
+        radius: 2
+
+        Text {
+            id: versionText
+            text: "v2.0.0"  // versiyon numaranızı buraya yazın
+            color: "#009ca6"
+            anchors.centerIn: parent
+            font.pixelSize: 14
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            onDoubleClicked: {
+                emojiAnimation.restart()
+                emoji.visible = true
+                hideTimer.restart()
+            }
+        }
+    }
+
+    // Emoji için Text component'i
+    Text {
+        id: emoji
+        text: "🤗"  // kucaklayan emoji
+        font.pixelSize: 48
+        visible: false
+        anchors.left: versionRect.right
+        anchors.leftMargin: 5
+        anchors.verticalCenter: versionRect.verticalCenter
+
+        NumberAnimation {
+            id: emojiAnimation
+            target: emoji
+            property: "scale"
+            from: 0
+            to: 1
+            duration: 200
+            easing.type: Easing.OutBack
+        }
+
+        Timer {
+            id: hideTimer
+            interval: 2000
+            onTriggered: {
+                emoji.visible = false
+                emoji.scale = 0
+            }
+        }
+    }
 }

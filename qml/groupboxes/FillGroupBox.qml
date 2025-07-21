@@ -144,12 +144,13 @@ GroupBox {
                                 }
                             }
 
-                            Text {
+                            FlowText {
                                 text: "Rot:"
                                 color: "white"
-                                font.pixelSize: 14
                                 width: parent.width * 0.15
+                                height: parent.height
                                 anchors.verticalCenter: parent.verticalCenter
+                                anchors.centerIn: undefined
                             }
 
                             SpinBox {

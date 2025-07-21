@@ -5,6 +5,7 @@ import argparse
 import subprocess
 import sys
 import string
+import re
 
 import os
 
@@ -42,6 +43,8 @@ def normalize_filename(filename):
 
     # Boşlukları alt çizgi yap
     name = name.replace(" ", "_")
+
+    name = re.sub(r"[^a-z0-9_]", "", name)
 
     # Uzantıyı geri ekle
     return name + ext
@@ -145,6 +148,20 @@ def process_pdf_with_config(config_file, dpi=150):
         print(f"PDF kopyalanıyor: {book_pdf_path} -> {raw_folder}", flush=True)
         shutil.copy2(book_pdf_path, os.path.join(raw_folder, pdf_filename))
         print(f"PDF kopyalandı.", flush=True)
+        
+         # Aynı klasördeki diğer PDF dosyalarını da kopyala
+        pdf_dir = os.path.dirname(book_pdf_path)
+
+        for filename in os.listdir(pdf_dir):
+            if filename.lower().endswith(".pdf"):
+                full_path = os.path.join(pdf_dir, filename)
+                target_path = os.path.join(raw_folder, filename)
+
+                # Zaten kopyaladığımız ana PDF'i tekrar kopyalama
+                if full_path != book_pdf_path:
+                    print(f"Ek PDF kopyalanıyor: {full_path} -> {target_path}", flush=True)
+                    shutil.copy2(full_path, target_path)
+                    print(f"   ↳ Kopyalandı.", flush=True)
     else:
         print(f"Hata: {book_pdf_path} bulunamadı!", flush=True)
         return
@@ -342,7 +359,7 @@ def process_pdf_with_config(config_file, dpi=150):
 
             pages_config.append(
                 {
-                    "page_number": page_idx,
+                    "page_number": page_num + 1,
                     "image_path": f"./books/{pdf_name}/images/{module_folder_name}/{page_num+1}.png",
                     "sections": [],
                 }
@@ -361,11 +378,7 @@ def process_pdf_with_config(config_file, dpi=150):
         "publisher_logo_path": "./publisher_logo/publisher_logo.png",
         "publisher_full_logo_path": "./rsc/images/publisher_full_logo.png",
         "book_title": book_title if book_title else pdf_name,
-        "book_cover": (
-            book_cover_path
-            if book_cover_path
-            else f"./books/{pdf_name}/images/book_cover.png"
-        ),
+        "book_cover": "./books/{pdf_name}/images/book_cover.png",
         "language": language,
         "fullscreen": False,
         "books": [{"modules": modules_config}],

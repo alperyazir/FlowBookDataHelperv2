@@ -20,13 +20,6 @@ Item {
     property real startRectY: 0
     anchors.fill: parent
 
-    Connections {
-        target: page
-        function onSectionsChanged() {
-            print("Section changed", page.sections.length);
-        }
-    }
-
     MouseArea {
         id: mainMouseArea
         anchors.fill: parent
@@ -40,68 +33,68 @@ Item {
         property real lastY: 0
 
         onPressed: mouse => {
-            if (mouse.button === Qt.MiddleButton) {
-                dragging = true;
-                lastX = mouse.x;
-                lastY = mouse.y;
-                //flick.interactive = true; // Enable Flickable interaction
-            } else if (mouse.button === Qt.RightButton) {
-                menu.popup(mouse.x, mouse.y);
-            } else if ((mouse.button === Qt.LeftButton) && root.fillingModeEnabled)
-            // drawing = true
-            // var component = Qt.createComponent("newComponents/NewRectangle.qml")
-            // root.activeFillRectangle = component.createObject(root, {
-            //                                                       "x": mouseArea.mouseX,
-            //                                                       "y": mouseArea.mouseY})
-            {}
-        }
+                       if (mouse.button === Qt.MiddleButton) {
+                           dragging = true;
+                           lastX = mouse.x;
+                           lastY = mouse.y;
+                           //flick.interactive = true; // Enable Flickable interaction
+                       } else if (mouse.button === Qt.RightButton) {
+                           menu.popup(mouse.x, mouse.y);
+                       } else if ((mouse.button === Qt.LeftButton) && root.fillingModeEnabled)
+                       // drawing = true
+                       // var component = Qt.createComponent("newComponents/NewRectangle.qml")
+                       // root.activeFillRectangle = component.createObject(root, {
+                       //                                                       "x": mouseArea.mouseX,
+                       //                                                       "y": mouseArea.mouseY})
+                       {}
+                   }
 
         onReleased: mouse => {
-            if (mouse.button === Qt.MiddleButton) {
-                dragging = false;
-                //flick.interactive = false; // Disable Flickable interaction
-            } else if (mouse.button === Qt.LeftButton && root.fillingModeEnabled)
-            // fillList.push(activeFillRectangle)
-            // sideBar.page = root.page
-            // sideBar.fillVisible = true
-            // sideBar.fillList = root.fillList
+                        if (mouse.button === Qt.MiddleButton) {
+                            dragging = false;
+                            //flick.interactive = false; // Disable Flickable interaction
+                        } else if (mouse.button === Qt.LeftButton && root.fillingModeEnabled)
+                        // fillList.push(activeFillRectangle)
+                        // sideBar.page = root.page
+                        // sideBar.fillVisible = true
+                        // sideBar.fillList = root.fillList
 
-            // var adjustedX = mouseArea.mouseX + flick.contentX
-            // var adjustedY = mouseArea.mouseY + flick.contentY
+                        // var adjustedX = mouseArea.mouseX + flick.contentX
+                        // var adjustedY = mouseArea.mouseY + flick.contentY
 
-            // // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
-            // var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth)
-            // var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight)
+                        // // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
+                        // var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth)
+                        // var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight)
 
-            // config.bookSets[0].saveToJson();
-            // activeFillRectangle.visible = false
-            // drawing = false
-            {}
-        }
+                        // config.bookSets[0].saveToJson();
+                        // activeFillRectangle.visible = false
+                        // drawing = false
+                        {}
+                    }
 
         onPositionChanged: mouse => {
-            if (dragging) {
-                var dx = mouse.x - lastX;
-                var dy = mouse.y - lastY;
-                flick.contentX -= dx;
-                flick.contentY -= dy;
-                lastX = mouse.x;
-                lastY = mouse.y;
-            }
-        }
+                               if (dragging) {
+                                   var dx = mouse.x - lastX;
+                                   var dy = mouse.y - lastY;
+                                   flick.contentX -= dx;
+                                   flick.contentY -= dy;
+                                   lastX = mouse.x;
+                                   lastY = mouse.y;
+                               }
+                           }
 
         onWheel: event => {
-            if (event.angleDelta.y > 0) {
-                flick.zoomIn();
-            } else {
-                flick.zoomOut();
-            }
-            event.accepted = true;
-        }
+                     if (event.angleDelta.y > 0) {
+                         flick.zoomIn();
+                     } else {
+                         flick.zoomOut();
+                     }
+                     event.accepted = true;
+                 }
 
         onPressAndHold: mouse => {
-            var adjustedX = mouse.x + flick.contentX;
-            var adjustedY = mouse.y + flick.contentY;
+            var adjustedX = mainMouseArea.mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+            var adjustedY = mainMouseArea.mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2);
 
             // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
             var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
@@ -446,6 +439,7 @@ Item {
         clip: true
         boundsMovement: Flickable.StopAtBounds
 
+
         property real lastContentHeight
         property real lastContentWidth
 
@@ -499,13 +493,6 @@ Item {
                 propagateComposedEvents: true
                 pressAndHoldInterval: 500
 
-                onPressed: {}
-                onPressAndHold:
-
-                // rootPage.lastMousePos.x = mouseArea.mouseX;
-                // rootPage.lastMousePos.y = mouseArea.mouseY;
-                {}
-
                 onWheel: function (wheel) {
                     if (wheel.angleDelta.y / 120 * flick.contentWidth * 0.1 + flick.contentWidth > flick.width && wheel.angleDelta.y / 120 * flick.contentHeight * 0.1 + flick.contentHeight > flick.height) {
                         flick.resizeContent(wheel.angleDelta.y / 120 * flick.contentWidth * 0.1 + flick.contentWidth, wheel.angleDelta.y / 120 * flick.contentHeight * 0.1 + flick.contentHeight, Qt.point(flick.contentX + flick.width / 2, flick.contentY + flick.height / 2));
@@ -534,8 +521,8 @@ Item {
                         visible: modelData.type === "audio" ? true : false
                         x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.coords.x * (picture.paintedWidth / picture.sourceSize.width)
                         y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.coords.y * (picture.paintedHeight / picture.sourceSize.height)
-                        width: height
-                        height: root.imageHeights
+                        width: modelData.coords.width * (picture.paintedWidth / picture.sourceSize.width)
+                        height: modelData.coords.height * (picture.paintedHeight / picture.sourceSize.height)
                         Image {
                             id: audioImage
                             source: "qrc:/icons/sound.svg"
@@ -578,8 +565,8 @@ Item {
                         visible: modelData.type === "video" ? true : false
                         x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.coords.x * (picture.paintedWidth / picture.sourceSize.width)
                         y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.coords.y * (picture.paintedHeight / picture.sourceSize.height)
-                        width: height
-                        height: root.imageHeights
+                        width: modelData.coords.width * (picture.paintedWidth / picture.sourceSize.width)
+                        height: modelData.coords.height * (picture.paintedHeight / picture.sourceSize.height)
                         Image {
                             id: videoImg
                             source: "qrc:/icons/video.svg"
@@ -660,14 +647,15 @@ Item {
                                     sideBar.section = sectionData;
                                     sideBar.fillList = sectionItem.sectionAnswers;
                                     sideBar.fillIndex = index;
+                                    sideBar.sectionIndex = sectionItem.sectionIndex
                                 }
                                 onReleased: root.setTotalStatus(answerRect, modelData)
                                 onClicked:
-                                // if (mouse.button === Qt.MiddleButton) {
-                                //     sectionItem.currentSection.removeAnswer(index);
-                                //     config.bookSets[0].saveToJson();
-                                //     toast.show("Changes are saved to File!");
-                                // }
+                                    // if (mouse.button === Qt.MiddleButton) {
+                                    //     sectionItem.currentSection.removeAnswer(index);
+                                    //     config.bookSets[0].saveToJson();
+                                    //     toast.show("Changes are saved to File!");
+                                    // }
                                 {}
                             }
 
@@ -740,15 +728,16 @@ Item {
                                     sideBar.section = sectionData;
                                     sideBar.circleList = sectionItem.sectionAnswers;
                                     sideBar.circleIndex = index;
+                                    sideBar.sectionIndex = sectionItem.sectionIndex
                                 }
                                 onReleased: root.setTotalStatus(answerCircleRect, modelData)
 
                                 onClicked:
-                                // if (mouse.button === Qt.MiddleButton) {
-                                //     sectionItem.currentSection.removeAnswer(index);
-                                //     config.bookSets[0].saveToJson();
-                                //     toast.show("Changes are saved to File!");
-                                // }
+                                    // if (mouse.button === Qt.MiddleButton) {
+                                    //     sectionItem.currentSection.removeAnswer(index);
+                                    //     config.bookSets[0].saveToJson();
+                                    //     toast.show("Changes are saved to File!");
+                                    // }
                                 {}
                             }
 
@@ -821,14 +810,15 @@ Item {
                                     sideBar.section = sectionData;
                                     sideBar.fillWColorList = sectionItem.sectionAnswers;
                                     sideBar.fillIndex = index;
+                                    sideBar.sectionIndex = sectionItem.sectionIndex
                                 }
                                 onReleased: root.setTotalStatus(answerColorRect, modelData)
                                 onClicked:
-                                // if (mouse.button === Qt.MiddleButton) {
-                                //     sectionItem.currentSection.removeAnswer(index);
-                                //     config.bookSets[0].saveToJson();
-                                //     toast.show("Changes are saved to File!");
-                                // }
+                                    // if (mouse.button === Qt.MiddleButton) {
+                                    //     sectionItem.currentSection.removeAnswer(index);
+                                    //     config.bookSets[0].saveToJson();
+                                    //     toast.show("Changes are saved to File!");
+                                    // }
                                 {}
                             }
 
@@ -911,6 +901,7 @@ Item {
                                         sideBar.section = sectionData;
                                         sideBar.drawMatchedLineList = sectionItem.sectionAnswers;
                                         sideBar.fillIndex = index;
+                                        sideBar.sectionIndex = sectionItem.sectionIndex
                                     }
                                     onReleased: {
                                         var adjustedX = (beginRectItem.x - (flick.contentWidth / 2 - picture.paintedWidth / 2));
@@ -998,6 +989,7 @@ Item {
                                         sideBar.section = sectionData;
                                         sideBar.drawMatchedLineList = sectionItem.sectionAnswers;
                                         sideBar.fillIndex = index;
+                                        sideBar.sectionIndex = sectionItem.sectionIndex
                                     }
 
                                     onPositionChanged: {
@@ -1036,6 +1028,7 @@ Item {
                                         sideBar.section = sectionData;
                                         sideBar.drawMatchedLineList = sectionItem.sectionAnswers;
                                         sideBar.fillIndex = index;
+                                        sideBar.sectionIndex = sectionItem.sectionIndex
                                     }
 
                                     onPositionChanged: {
@@ -1105,6 +1098,7 @@ Item {
                                         sideBar.section = sectionData;
                                         sideBar.drawMatchedLineList = sectionItem.sectionAnswers;
                                         sideBar.fillIndex = index;
+                                        sideBar.sectionIndex = sectionItem.sectionIndex
                                     }
 
                                     onReleased: {

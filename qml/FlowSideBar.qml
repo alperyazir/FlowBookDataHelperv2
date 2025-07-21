@@ -110,7 +110,7 @@ Rectangle {
             config.bookSets[0].saveToJson();
             toast.show("Answer Removed!");
 
-            root.fillList = root.section.answers;
+            root.circleList = root.section.answers;
         }
     }
 

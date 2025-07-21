@@ -24,9 +24,10 @@ Rectangle {
 
     id: root
     //clip: true
-    width: parent.width -10
+    width: parent.width
     height: parent.height
     anchors.centerIn: parent
+    color: "#232f34"
 
     property int startX: 0
     property int startY: 0
@@ -40,21 +41,24 @@ Rectangle {
     // }
 
     Rectangle {
-        id: headerRect
-        width: parent.width
-        height: 40
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
+       id: header
+       width: parent.width
+       height: 40
+       anchors.horizontalCenter: parent.horizontalCenter
+       anchors.top: parent.top
+       color: "#232f34"
+       border.color: "#009ca6"
+       border.width: 1
 
-        FlowText {
-            width: parent.width
-            height: parent.height
-            text: root.headerText
-            anchors.centerIn: parent
-            font.pixelSize: 25
-            font.bold: true
-        }
-    }
+       FlowText {
+           width: parent.width
+           height: parent.height
+           text: root.headerText
+           font.pixelSize: 25
+           font.bold: true
+           color: "#009ca6"
+       }
+   }
 
     Canvas {
         id: canvas
@@ -124,6 +128,7 @@ Rectangle {
                                     horizontalAlignment:  Text.AlignRight
                                     font.pixelSize: root.textFontSize / Screen.devicePixelRatio
                                     fontSizeMode: Text.FixedSize
+                                    color: "#009ca6"
                                     //font.pixelSize: 25
                                 }
 
@@ -349,6 +354,7 @@ Rectangle {
                                     horizontalAlignment: Text.AlignLeft
                                     font.pixelSize: root.textFontSize / Screen.devicePixelRatio
                                     fontSizeMode: Text.FixedSize
+                                    color: "#009ca6"
                                 }
                             }
 
@@ -384,6 +390,7 @@ Rectangle {
                                     horizontalAlignment: Text.AlignLeft
                                     font.pixelSize: root.textFontSize / Screen.devicePixelRatio
                                     fontSizeMode: Text.FixedSize
+                                    color: "#009ca6"
                                 }
                             }
                         }
@@ -471,41 +478,28 @@ Rectangle {
 
 
 
-    Rectangle {
+    Button {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.margins: 10
         width: 50
         height: 40
-        color: "gray"
-        FlowText {
-            text: qsTr("Answers")
+        text: "Show"
+        background: Rectangle {
+            color: parent.hovered ? "#2A3337" : "#1A2327"
+            border.color: "#009ca6"
+            border.width: 1
+            radius: 2
+        }
+        contentItem: Text {
+            text: parent.text
             color: "white"
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
         }
         MouseArea {
             anchors.fill: parent
-            onClicked:showAnswer()
-        }
-    }
-
-
-    Rectangle {
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.margins: 10
-        width: 40
-        height: 40
-        color: "red"
-        FlowText {
-            text: qsTr("X")
-            color: "white"
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            onClicked: {
-                activityDialog.visible = false
-            }
+            onClicked: showAnswer()
         }
     }
 }

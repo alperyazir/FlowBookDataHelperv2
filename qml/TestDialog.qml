@@ -80,10 +80,10 @@ Dialog {
                 }
                 onClicked: {
                     if (versionList.model.count > 0) {
-                        flowProgress.reset();
-                        flowProgress.statusText = "Copying book files...";
-                        flowProgress.open();
-                        pdfProcess.copyBookToTestVersion(selectedVersion, currentProject);
+                        // flowProgress.reset();
+                        // flowProgress.statusText = "Copying book files...";
+                        // flowProgress.open();
+                        pdfProcess.launchTestFlowBook(selectedVersion);
                     }
                 }
             }

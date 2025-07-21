@@ -132,6 +132,10 @@ Column {
                                 border.width: 1
                                 radius: 4
                             }
+                            onAccepted: {
+                                saveChanges();
+                                root.activityModelData.addNewWord("");
+                            }
                         }
 
                         Button {

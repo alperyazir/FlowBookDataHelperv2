@@ -1341,11 +1341,8 @@ public:
 
     QRect coords() const { return _coords; }
     void setCoords(const QRect &coords) {
-        qDebug() << "COORDS CHANGED1";
-
         if (_coords != coords) {
             _coords = coords;
-            qDebug() << "COORDS CHANGED2";
             emit coordsChanged();
         }
     }
@@ -1457,6 +1454,14 @@ public:
             _audio_extra = newAudioExtra;
             emit audioExtraChanged();
         }
+    }
+
+    Q_INVOKABLE AudioExtra* createAudioExtra(const QString &text = "" ) {
+        AudioExtra *newAudioExtra = new AudioExtra;
+        newAudioExtra->setPath(text);
+        _audio_extra = newAudioExtra;
+        emit audioExtraChanged();
+        return newAudioExtra;
     }
 
     QVariantList freeTextFields() const {

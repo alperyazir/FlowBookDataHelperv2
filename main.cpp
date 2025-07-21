@@ -9,6 +9,7 @@
 
 #include "config/configparser.h"
 #include "pdfprocess/pdfprocess.h"
+#include "clipboardhelper.h"
 
 
 
@@ -34,6 +35,10 @@ int main(int argc, char *argv[])
     QQmlApplicationEngine engine;
     config->setEngine(&engine);
 
+
+    ClipboardHelper clipboardHelper;
+
+
     QString appPath;
 
 
@@ -50,6 +55,7 @@ int main(int argc, char *argv[])
     rootContext->setContextProperty("config", config);
     rootContext->setContextProperty("appPath", appPath);
     rootContext->setContextProperty("pdfProcess", pdfProcess);
+    rootContext->setContextProperty("clipboardHelper", &clipboardHelper);
 
     const QUrl url(u"qrc:/qml/main.qml"_qs);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreated,
