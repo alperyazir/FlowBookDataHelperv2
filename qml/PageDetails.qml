@@ -33,64 +33,64 @@ Item {
         property real lastY: 0
 
         onPressed: mouse => {
-                       if (mouse.button === Qt.MiddleButton) {
-                           dragging = true;
-                           lastX = mouse.x;
-                           lastY = mouse.y;
-                           //flick.interactive = true; // Enable Flickable interaction
-                       } else if (mouse.button === Qt.RightButton) {
-                           menu.popup(mouse.x, mouse.y);
-                       } else if ((mouse.button === Qt.LeftButton) && root.fillingModeEnabled)
-                       // drawing = true
-                       // var component = Qt.createComponent("newComponents/NewRectangle.qml")
-                       // root.activeFillRectangle = component.createObject(root, {
-                       //                                                       "x": mouseArea.mouseX,
-                       //                                                       "y": mouseArea.mouseY})
-                       {}
-                   }
+            if (mouse.button === Qt.MiddleButton) {
+                dragging = true;
+                lastX = mouse.x;
+                lastY = mouse.y;
+                //flick.interactive = true; // Enable Flickable interaction
+            } else if (mouse.button === Qt.RightButton) {
+                menu.popup(mouse.x, mouse.y);
+            } else if ((mouse.button === Qt.LeftButton) && root.fillingModeEnabled)
+            // drawing = true
+            // var component = Qt.createComponent("newComponents/NewRectangle.qml")
+            // root.activeFillRectangle = component.createObject(root, {
+            //                                                       "x": mouseArea.mouseX,
+            //                                                       "y": mouseArea.mouseY})
+            {}
+        }
 
         onReleased: mouse => {
-                        if (mouse.button === Qt.MiddleButton) {
-                            dragging = false;
-                            //flick.interactive = false; // Disable Flickable interaction
-                        } else if (mouse.button === Qt.LeftButton && root.fillingModeEnabled)
-                        // fillList.push(activeFillRectangle)
-                        // sideBar.page = root.page
-                        // sideBar.fillVisible = true
-                        // sideBar.fillList = root.fillList
+            if (mouse.button === Qt.MiddleButton) {
+                dragging = false;
+                //flick.interactive = false; // Disable Flickable interaction
+            } else if (mouse.button === Qt.LeftButton && root.fillingModeEnabled)
+            // fillList.push(activeFillRectangle)
+            // sideBar.page = root.page
+            // sideBar.fillVisible = true
+            // sideBar.fillList = root.fillList
 
-                        // var adjustedX = mouseArea.mouseX + flick.contentX
-                        // var adjustedY = mouseArea.mouseY + flick.contentY
+            // var adjustedX = mouseArea.mouseX + flick.contentX
+            // var adjustedY = mouseArea.mouseY + flick.contentY
 
-                        // // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
-                        // var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth)
-                        // var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight)
+            // // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
+            // var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth)
+            // var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight)
 
-                        // config.bookSets[0].saveToJson();
-                        // activeFillRectangle.visible = false
-                        // drawing = false
-                        {}
-                    }
+            // config.bookSets[0].saveToJson();
+            // activeFillRectangle.visible = false
+            // drawing = false
+            {}
+        }
 
         onPositionChanged: mouse => {
-                               if (dragging) {
-                                   var dx = mouse.x - lastX;
-                                   var dy = mouse.y - lastY;
-                                   flick.contentX -= dx;
-                                   flick.contentY -= dy;
-                                   lastX = mouse.x;
-                                   lastY = mouse.y;
-                               }
-                           }
+            if (dragging) {
+                var dx = mouse.x - lastX;
+                var dy = mouse.y - lastY;
+                flick.contentX -= dx;
+                flick.contentY -= dy;
+                lastX = mouse.x;
+                lastY = mouse.y;
+            }
+        }
 
         onWheel: event => {
-                     if (event.angleDelta.y > 0) {
-                         flick.zoomIn();
-                     } else {
-                         flick.zoomOut();
-                     }
-                     event.accepted = true;
-                 }
+            // if (event.angleDelta.y > 0) {
+            //     flick.zoomIn();
+            // } else {
+            //     flick.zoomOut();
+            // }
+            event.accepted = true;
+        }
 
         onPressAndHold: mouse => {
             var adjustedX = mainMouseArea.mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2);
@@ -439,7 +439,6 @@ Item {
         clip: true
         boundsMovement: Flickable.StopAtBounds
 
-
         property real lastContentHeight
         property real lastContentWidth
 
@@ -647,15 +646,15 @@ Item {
                                     sideBar.section = sectionData;
                                     sideBar.fillList = sectionItem.sectionAnswers;
                                     sideBar.fillIndex = index;
-                                    sideBar.sectionIndex = sectionItem.sectionIndex
+                                    sideBar.sectionIndex = sectionItem.sectionIndex;
                                 }
                                 onReleased: root.setTotalStatus(answerRect, modelData)
                                 onClicked:
-                                    // if (mouse.button === Qt.MiddleButton) {
-                                    //     sectionItem.currentSection.removeAnswer(index);
-                                    //     config.bookSets[0].saveToJson();
-                                    //     toast.show("Changes are saved to File!");
-                                    // }
+                                // if (mouse.button === Qt.MiddleButton) {
+                                //     sectionItem.currentSection.removeAnswer(index);
+                                //     config.bookSets[0].saveToJson();
+                                //     toast.show("Changes are saved to File!");
+                                // }
                                 {}
                             }
 
@@ -728,16 +727,16 @@ Item {
                                     sideBar.section = sectionData;
                                     sideBar.circleList = sectionItem.sectionAnswers;
                                     sideBar.circleIndex = index;
-                                    sideBar.sectionIndex = sectionItem.sectionIndex
+                                    sideBar.sectionIndex = sectionItem.sectionIndex;
                                 }
                                 onReleased: root.setTotalStatus(answerCircleRect, modelData)
 
                                 onClicked:
-                                    // if (mouse.button === Qt.MiddleButton) {
-                                    //     sectionItem.currentSection.removeAnswer(index);
-                                    //     config.bookSets[0].saveToJson();
-                                    //     toast.show("Changes are saved to File!");
-                                    // }
+                                // if (mouse.button === Qt.MiddleButton) {
+                                //     sectionItem.currentSection.removeAnswer(index);
+                                //     config.bookSets[0].saveToJson();
+                                //     toast.show("Changes are saved to File!");
+                                // }
                                 {}
                             }
 
@@ -810,15 +809,15 @@ Item {
                                     sideBar.section = sectionData;
                                     sideBar.fillWColorList = sectionItem.sectionAnswers;
                                     sideBar.fillIndex = index;
-                                    sideBar.sectionIndex = sectionItem.sectionIndex
+                                    sideBar.sectionIndex = sectionItem.sectionIndex;
                                 }
                                 onReleased: root.setTotalStatus(answerColorRect, modelData)
                                 onClicked:
-                                    // if (mouse.button === Qt.MiddleButton) {
-                                    //     sectionItem.currentSection.removeAnswer(index);
-                                    //     config.bookSets[0].saveToJson();
-                                    //     toast.show("Changes are saved to File!");
-                                    // }
+                                // if (mouse.button === Qt.MiddleButton) {
+                                //     sectionItem.currentSection.removeAnswer(index);
+                                //     config.bookSets[0].saveToJson();
+                                //     toast.show("Changes are saved to File!");
+                                // }
                                 {}
                             }
 
@@ -901,7 +900,7 @@ Item {
                                         sideBar.section = sectionData;
                                         sideBar.drawMatchedLineList = sectionItem.sectionAnswers;
                                         sideBar.fillIndex = index;
-                                        sideBar.sectionIndex = sectionItem.sectionIndex
+                                        sideBar.sectionIndex = sectionItem.sectionIndex;
                                     }
                                     onReleased: {
                                         var adjustedX = (beginRectItem.x - (flick.contentWidth / 2 - picture.paintedWidth / 2));
@@ -989,7 +988,7 @@ Item {
                                         sideBar.section = sectionData;
                                         sideBar.drawMatchedLineList = sectionItem.sectionAnswers;
                                         sideBar.fillIndex = index;
-                                        sideBar.sectionIndex = sectionItem.sectionIndex
+                                        sideBar.sectionIndex = sectionItem.sectionIndex;
                                     }
 
                                     onPositionChanged: {
@@ -1028,7 +1027,7 @@ Item {
                                         sideBar.section = sectionData;
                                         sideBar.drawMatchedLineList = sectionItem.sectionAnswers;
                                         sideBar.fillIndex = index;
-                                        sideBar.sectionIndex = sectionItem.sectionIndex
+                                        sideBar.sectionIndex = sectionItem.sectionIndex;
                                     }
 
                                     onPositionChanged: {
@@ -1098,7 +1097,7 @@ Item {
                                         sideBar.section = sectionData;
                                         sideBar.drawMatchedLineList = sectionItem.sectionAnswers;
                                         sideBar.fillIndex = index;
-                                        sideBar.sectionIndex = sectionItem.sectionIndex
+                                        sideBar.sectionIndex = sectionItem.sectionIndex;
                                     }
 
                                     onReleased: {

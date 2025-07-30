@@ -4,11 +4,11 @@ import QtQuick.Layouts
 import Qt.labs.platform
 import QtMultimedia
 
-
 import "../../qml"
 import "activities"
 
 GroupBox {
+    id: root
 
     // FileDialog bileşeni
     FileDialog {
@@ -21,7 +21,12 @@ GroupBox {
             if (selectedFilePath) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
                 if (newPath) {
-                    root.sectionModelData.createAudioExtra(newPath)
+                    if (root.sectionModelData.audioExtra === null) {
+                        print("audio extra is null creating new one");
+                        root.sectionModelData.createAudioExtra(newPath);
+                    } else {
+                        root.sectionModelData.audioExtra.path = newPath;
+                    }
                 } else {
                     console.log("Books klasörü bulunamadı.");
                 }
@@ -31,20 +36,18 @@ GroupBox {
         }
 
         onRejected: {
-            console.log("File selection was canceled")
+            console.log("File selection was canceled");
         }
     }
 
     property var activityModelData: undefined
     property var sectionModelData: undefined
-    signal removeSection()
-    id: root
+    signal removeSection
     title: qsTr("")
     width: parent.width * .98
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.verticalCenter: parent.verticalCenter
-    onActivityModelDataChanged: {
-    }
+    onActivityModelDataChanged: {}
 
     background: Rectangle {
         color: "#232f34"
@@ -77,7 +80,7 @@ GroupBox {
             }
 
             Item {
-                width: parent.width - closeButton.width - parent.width*.5
+                width: parent.width - closeButton.width - parent.width * .5
                 height: 1
             }
 
@@ -105,7 +108,7 @@ GroupBox {
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
-                        sideBar.activityVisible = false
+                        sideBar.activityVisible = false;
                     }
                 }
             }
@@ -133,7 +136,6 @@ GroupBox {
             enabled: visible
             width: parent.width
             height: parent.height * 0.5
-
         }
 
         FillPicture {
@@ -142,7 +144,6 @@ GroupBox {
             enabled: visible
             width: parent.width
             height: parent.height * 0.5
-
         }
 
         PuzzleFindWords {
@@ -151,7 +152,6 @@ GroupBox {
             enabled: visible
             width: parent.width
             height: parent.height * 0.5
-
         }
 
         Circle {
@@ -197,6 +197,17 @@ GroupBox {
                     border.color: parent.focus ? "#009ca6" : "#445055"
                     border.width: 1
                     radius: 4
+                }
+                onAccepted: {
+                    //Audio Extra
+                    if (root.sectionModelData.audioExtra === null) {
+                        print("audio extra is null creating new one");
+                        root.sectionModelData.createAudioExtra(audioTextField.text);
+                    } else {
+                        root.sectionModelData.audioExtra.path = audioTextField.text;
+                    }
+
+                    config.bookSets[0].saveToJson();
                 }
             }
 
@@ -348,7 +359,6 @@ GroupBox {
                 PropertyChanges {
                     playPauseButton.text: "Pause"
                 }
-
             },
             State {
                 name: "paused"
@@ -362,11 +372,11 @@ GroupBox {
 
         MediaPlayer {
             id: playRecordAudio
-            audioOutput: AudioOutput {
-                //volume: volumeSlider.value / 100.0
-            }
+            audioOutput:
+            //volume: volumeSlider.value / 100.0
+            AudioOutput {}
             onSourceChanged: {
-                play()
+                play();
             }
         }
 
@@ -393,40 +403,30 @@ GroupBox {
                     verticalAlignment: Text.AlignVCenter
                 }
                 onClicked: {
-
-                    activityDialog.wordLists = root.activityModelData.words
-                    activityDialog.imageSource = root.activityModelData.sectionPath
-                    activityDialog.headerText = root.activityModelData.headerText
-                    activityDialog.answers = root.activityModelData.answers
-                    activityDialog.activityModelData = root.activityModelData
-
+                    activityDialog.wordLists = root.activityModelData.words;
+                    activityDialog.imageSource = root.activityModelData.sectionPath;
+                    activityDialog.headerText = root.activityModelData.headerText;
+                    activityDialog.answers = root.activityModelData.answers;
+                    activityDialog.activityModelData = root.activityModelData;
 
                     if (root.activityModelData.type === "matchTheWords")
-                        activityDialog.createActivityMatchTheWord()
-
+                        activityDialog.createActivityMatchTheWord();
                     else if (root.activityModelData.type === "dragdroppicture")
-                        activityDialog.createActivityDragDropPicture()
-
+                        activityDialog.createActivityDragDropPicture();
                     else if (root.activityModelData.type === "dragdroppicturegroup")
-                        activityDialog.createActivityDragDropPictureGroup()
-
+                        activityDialog.createActivityDragDropPictureGroup();
                     else if (root.activityModelData.type === "fillpicture")
-                        activityDialog.createActivityFillPicture()
-
+                        activityDialog.createActivityFillPicture();
                     else if (root.activityModelData.type === "puzzleFindWords")
-                        activityDialog.createActivityFindPuzzle()
-
+                        activityDialog.createActivityFindPuzzle();
                     else if (root.activityModelData.type === "circle")
-                        activityDialog.createActivityCircle()
-
+                        activityDialog.createActivityCircle();
                     else if (root.activityModelData.type === "markwithx")
-                        activityDialog.createActivityMarkWithX()
+                        activityDialog.createActivityMarkWithX();
 
-
-                    activityDialog.open()
+                    activityDialog.open();
                 }
             }
-
 
             Button {
                 text: "Save"
@@ -446,7 +446,7 @@ GroupBox {
                 }
 
                 onClicked: {
-                    saveChanges()
+                    saveChanges();
                 }
             }
 
@@ -468,8 +468,7 @@ GroupBox {
                 }
 
                 onClicked: {
-
-                    confirmBox.visible = true
+                    confirmBox.visible = true;
                 }
             }
         }
@@ -519,9 +518,9 @@ GroupBox {
                             verticalAlignment: Text.AlignVCenter
                         }
                         onClicked: {
-                            removeSection()
-                            confirmBox.visible = false
-                            sideBar.activityVisible = false
+                            removeSection();
+                            confirmBox.visible = false;
+                            sideBar.activityVisible = false;
                         }
                     }
 
@@ -544,7 +543,7 @@ GroupBox {
                             verticalAlignment: Text.AlignVCenter
                         }
                         onClicked: {
-                            confirmBox.visible = false
+                            confirmBox.visible = false;
                         }
                     }
                 }
@@ -555,62 +554,57 @@ GroupBox {
     function saveChanges() {
 
         // drag drop picture
-        for ( var i = 0; i < ddpicture.words.count; i++) {
-            var item = ddpicture.words.itemAtIndex(i)
+        for (var i = 0; i < ddpicture.words.count; i++) {
+            var item = ddpicture.words.itemAtIndex(i);
             if (item !== null) {
-                root.activityModelData.words[i] =  item.wText
+                root.activityModelData.words[i] = item.wText;
             }
         }
         // drag drop picture group
-        for ( var i = 0; i < ddppicturegroup.words.count; i++) {
-            var item = ddppicturegroup.words.itemAtIndex(i)
+        for (var i = 0; i < ddppicturegroup.words.count; i++) {
+            var item = ddppicturegroup.words.itemAtIndex(i);
             if (item !== null) {
-                root.activityModelData.words[i] =  item.wText
+                root.activityModelData.words[i] = item.wText;
             }
         }
         // fill picture
-        for ( var i = 0; i < fillpicture.words.count; i++) {
-            var item = fillpicture.words.itemAtIndex(i)
+        for (var i = 0; i < fillpicture.words.count; i++) {
+            var item = fillpicture.words.itemAtIndex(i);
             if (item !== null) {
-                root.activityModelData.words[i] =  item.wText
+                root.activityModelData.words[i] = item.wText;
             }
         }
 
         // Match Word
-        for ( var i = 0; i < matchthewords.words.count; i++) {
-            var item = matchthewords.words.itemAtIndex(i)
+        for (var i = 0; i < matchthewords.words.count; i++) {
+            var item = matchthewords.words.itemAtIndex(i);
             if (item !== null) {
-                root.activityModelData.matchWord[i].word = item.wordText
-                root.activityModelData.matchWord[i].imagePath =item.imagePathText
+                root.activityModelData.matchWord[i].word = item.wordText;
+                root.activityModelData.matchWord[i].imagePath = item.imagePathText;
             }
         }
-
         // Match sentence
-        for ( var i = 0; i < matchthewords.sentences.count; i++) {
-
-            var item = matchthewords.sentences.itemAtIndex(i)
+        for (var i = 0; i < matchthewords.sentences.count; i++) {
+            var item = matchthewords.sentences.itemAtIndex(i);
             if (item !== null) {
-                root.activityModelData.sentences[i].imagePath =  item.imagePathText
-                root.activityModelData.sentences[i].sentence =  item.sentenceText
-                var witem = matchthewords.words.itemAtIndex(parseInt(item.wordText))
+                root.activityModelData.sentences[i].imagePath = item.imagePathText;
+                root.activityModelData.sentences[i].sentence = item.sentenceText;
+                var witem = matchthewords.words.itemAtIndex(parseInt(item.wordText));
                 if (witem !== null) {
-                    root.activityModelData.sentences[i].word =  witem.wordText
+                    root.activityModelData.sentences[i].word = witem.wordText;
                 }
             }
         }
 
         // find puzzle
-        for ( var i = 0; i < findPuzzle.words.count; i++) {
-            var item = findPuzzle.words.itemAtIndex(i)
+        for (var i = 0; i < findPuzzle.words.count; i++) {
+            var item = findPuzzle.words.itemAtIndex(i);
             if (item !== null) {
-                root.activityModelData.words[i] =  item.wText
+                root.activityModelData.words[i] = item.wText;
             }
         }
 
         config.bookSets[0].saveToJson();
-        toast.show("Changes are saved to File!")
+        toast.show("Changes are saved to File!");
     }
-
-
 }
-

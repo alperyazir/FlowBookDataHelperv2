@@ -27,7 +27,7 @@ ApplicationWindow {
         id: content
         anchors.top: toolBar.bottom
         anchors.bottom: parent.bottom
-        width: parent.width /2
+        width: parent.width / 2
         anchors.left: parent.left
         anchors.leftMargin: parent.width / 5.5
     }
@@ -47,11 +47,7 @@ ApplicationWindow {
         height: parent.height / 6
         anchors.centerIn: parent
         standardButtons: Dialog.Ok | Dialog.Cancel
-        background: Rectangle {
-            color: myColors.surfaceColor
-            border.color: myColors.borderColor
-            border.width: 1
-        }
+
         FlowText {
             text: "Are you sure to exit? \n Changes will be saved!"
             wrapMode: Text.NoWrap
@@ -82,7 +78,7 @@ ApplicationWindow {
 
     NewProjectDialog {
         id: newProjectDialog
-        width: parent.width/2
+        width: parent.width / 2
         height: parent.height / 6 * 5
         onAccepted: {
             // Show progress dialog when starting processing
@@ -109,11 +105,16 @@ ApplicationWindow {
         id: packageDialog
     }
 
+    GamesDialog {
+        id: gamesDialog
+    }
+
     Connections {
         target: config
         function onBookSetsChanged() {
             print("Book is changed");
-            content.currentPageIndex++; content.currentPageIndex--;
+            content.currentPageIndex++;
+            content.currentPageIndex--;
         }
     }
 
@@ -123,8 +124,6 @@ ApplicationWindow {
     //     height: 1000
     //     anchors.centerIn: parent
     // }
-
-
 
     Rectangle {
         id: versionRect
@@ -149,9 +148,9 @@ ApplicationWindow {
         MouseArea {
             anchors.fill: parent
             onDoubleClicked: {
-                emojiAnimation.restart()
-                emoji.visible = true
-                hideTimer.restart()
+                emojiAnimation.restart();
+                emoji.visible = true;
+                hideTimer.restart();
             }
         }
     }
@@ -180,8 +179,8 @@ ApplicationWindow {
             id: hideTimer
             interval: 2000
             onTriggered: {
-                emoji.visible = false
-                emoji.scale = 0
+                emoji.visible = false;
+                emoji.scale = 0;
             }
         }
     }

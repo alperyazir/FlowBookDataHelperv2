@@ -10,6 +10,7 @@
 #include "config/configparser.h"
 #include "pdfprocess/pdfprocess.h"
 #include "clipboardhelper.h"
+#include "games/gamesparser.h"
 
 
 
@@ -56,6 +57,7 @@ int main(int argc, char *argv[])
     rootContext->setContextProperty("appPath", appPath);
     rootContext->setContextProperty("pdfProcess", pdfProcess);
     rootContext->setContextProperty("clipboardHelper", &clipboardHelper);
+    rootContext->setContextProperty("gamesParser", new GamesParser());
 
     const QUrl url(u"qrc:/qml/main.qml"_qs);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreated,

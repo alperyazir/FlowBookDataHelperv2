@@ -4,8 +4,8 @@ import QtQuick.Layouts
 import QtQuick.Dialogs
 
 Dialog {
-    property var additionalFiles: []
     id: root
+    property var additionalFiles: []
 
     title: "New project"
     modal: true
@@ -81,7 +81,7 @@ Dialog {
 
                 contentItem: Text {
                     text: parent.text
-                    color: parent.enabled ?"white" : "black"
+                    color: parent.enabled ? "white" : "black"
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -117,10 +117,10 @@ Dialog {
 
         // Sadece tek bir modül ekle
         modulesModel.append({
-                                name: "Module 1",
-                                startPage: "1",
-                                endPage: "10"
-                            });
+            name: "Module 1",
+            startPage: "1",
+            endPage: "10"
+        });
     }
 
     // File dialog for selecting files
@@ -175,9 +175,7 @@ Dialog {
         fileMode: FileDialog.OpenFiles // Birden fazla dosya seçimi
 
         // Son seçilen klasörü kullan
-        currentFolder: lastSelectedFolder !== "" ?
-                           "file://" + lastSelectedFolder :
-                           StandardPaths.standardLocations(StandardPaths.DocumentsLocation)[0]
+        currentFolder: lastSelectedFolder !== "" ? "file://" + lastSelectedFolder : StandardPaths.standardLocations(StandardPaths.DocumentsLocation)[0]
 
         onAccepted: {
             // Seçilen dosyaları additionalFiles modeline ekle
@@ -203,17 +201,16 @@ Dialog {
                 }
 
                 newFiles.push({
-                                  fileUrl: fileUrl,
-                                  filePath: filePath,
-                                  fileName: fileName
-                              });
+                    fileUrl: fileUrl,
+                    filePath: filePath,
+                    fileName: fileName
+                });
             }
 
             additionalFiles = newFiles;
             console.log("Additional files:", additionalFiles.length);
         }
     }
-
 
     // Function to validate PDF
     function validatePdf() {
@@ -524,7 +521,7 @@ Dialog {
                             onReleased: parent.background.color = containsMouse ? "#2A3337" : "#1A2327"
                             onClicked: {
                                 audioFolderDialog.currentFolder = selectedPdfPath.replace("file://", "");
-                                audioFolderDialog.open()
+                                audioFolderDialog.open();
                             }
                         }
                     }
@@ -581,7 +578,7 @@ Dialog {
                             onReleased: parent.background.color = containsMouse ? "#2A3337" : "#1A2327"
                             onClicked: {
                                 videoFolderDialog.currentFolder = selectedPdfPath.replace("file://", "");
-                                videoFolderDialog.open()
+                                videoFolderDialog.open();
                             }
                         }
                     }
@@ -776,6 +773,7 @@ Dialog {
                 */
                 // Modules and Pages section
                 Rectangle {
+                    id: moduleRect
                     Layout.fillWidth: true
                     Layout.fillHeight: false
                     Layout.preferredHeight: parent.height * 0.35
@@ -784,7 +782,6 @@ Dialog {
                     border.color: "#009ca6"
                     color: "#1A2327"
                     radius: 4
-                    id: moduleRect
 
                     ColumnLayout {
                         id: colm
@@ -981,10 +978,10 @@ Dialog {
 
                                     // Yeni modül ekle
                                     modulesModel.append({
-                                                            name: newName,
-                                                            startPage: newStartPage.toString(),
-                                                            endPage: ""
-                                                        });
+                                        name: newName,
+                                        startPage: newStartPage.toString(),
+                                        endPage: ""
+                                    });
                                 }
                                 background: Rectangle {
                                     color: "#1A2327"
@@ -1016,7 +1013,6 @@ Dialog {
                         }
                     }
                 }
-
             }
         }
     }
@@ -1032,16 +1028,16 @@ Dialog {
         for (var i = 0; i < modulesModel.count; i++) {
             var module = modulesModel.get(i);
             modulesArray.push({
-                                  "module_name": module.name,
-                                  "start": parseInt(module.startPage),
-                                  "end": parseInt(module.endPage)
-                              });
+                "module_name": module.name,
+                "start": parseInt(module.startPage),
+                "end": parseInt(module.endPage)
+            });
         }
 
-        var pdfPath = pdfPathTextField.text
-        var bookCoverPath = coverPathTextField.text
-        var audioPath = audioFolderTextField.text
-        var videoPath = videoFolderTextField.text
+        var pdfPath = pdfPathTextField.text;
+        var bookCoverPath = coverPathTextField.text;
+        var audioPath = audioFolderTextField.text;
+        var videoPath = videoFolderTextField.text;
 
         // Build the complete JSON object
         var projectData = {

@@ -101,5 +101,13 @@
         <file>qml/groupboxes/FillWithColorGroupBox.qml</file>
         <file>qml/groupboxes/DrawMatchedLineGroupBox.qml</file>
         <file>qml/qtquickcontrols2.conf</file>
+        <file>qml/GamesDialog.qml</file>
+        <file>qml/games/QuizQuestionCard.qml</file>
+        <file>qml/games/MemoryQuestionCard.qml</file>
+        <file>qml/games/OrderQuestionCard.qml</file>
+        <file>qml/games/SelectorQuestionCard.qml</file>
+        <file>qml/games/BuilderQuestionCard.qml</file>
+        <file>qml/games/CrosspuzzleQuestionCard.qml</file>
+        <file>qml/games/RaceQuestionCard.qml</file>
     </qresource>
 </RCC>

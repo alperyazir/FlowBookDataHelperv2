@@ -117,6 +117,28 @@ Rectangle {
                 packageDialog.open();
             }
         }
+
+        Button {
+            anchors.verticalCenter: parent.verticalCenter
+            text: "Games"
+            width: 80
+            height: 40
+            background: Rectangle {
+                color: "#009ca6"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                color: "white"
+                font.bold: true
+                anchors.centerIn: parent
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            onClicked: {
+                gamesDialog.open();
+            }
+        }
         // CheckBox {
         //     id: checkOutline
         //     checked: false
@@ -248,13 +270,13 @@ Rectangle {
         }
 
         contentItem: Text {
-                text: parent.text
-                color: "white"  // Turkuaz renk
-                font.pixelSize: 16
-                anchors.verticalCenter: parent.verticalCenter
-                horizontalAlignment: Text.AlignRight
-                verticalAlignment: Text.AlignVCenter
-            }
+            text: parent.text
+            color: "white"  // Turkuaz renk
+            font.pixelSize: 16
+            anchors.verticalCenter: parent.verticalCenter
+            horizontalAlignment: Text.AlignRight
+            verticalAlignment: Text.AlignVCenter
+        }
         onCheckedChanged: {
             config.bookSets[0].books[0].isModuleSideLeft = checked;
             config.bookSets[0].saveToJson();

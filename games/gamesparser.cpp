@@ -1,0 +1,647 @@
+#include "gamesparser.h"
+#include <QFile>
+#include <QDir>
+#include <QJsonParseError>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QGuiApplication>
+#include <QDebug>
+
+GamesParser::GamesParser(QObject *parent) : QObject(parent) {
+    // Constructor implementation
+}
+
+bool GamesParser::loadFromFile(const QString &filePath) {
+    QString actualPath = filePath;
+    
+    // If it's just a filename, construct the full path like ConfigParser does
+    if (!filePath.contains('/') && !filePath.contains('\\')) {
+        QString appDir = QGuiApplication::applicationDirPath();
+#ifdef Q_OS_MAC
+        appDir += "/../../../books/";
+#else
+        appDir += "/books/";
+#endif
+        
+        // If we have a current project, use that specific book directory
+        if (!_currentProjectName.isEmpty()) {
+            actualPath = appDir + _currentProjectName + "/" + filePath;
+        } else {
+            actualPath = appDir + filePath;
+        }
+    }
+
+    
+    QFile file(actualPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        qWarning() << "Could not open games file:" << actualPath;
+        return false;
+    }
+    qDebug() << "Games Path:" << actualPath;
+
+    QByteArray data = file.readAll();
+    file.close();
+
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson(data, &error);
+    if (error.error != QJsonParseError::NoError) {
+        qWarning() << "JSON parse error:" << error.errorString();
+        return false;
+    }
+
+    fromJson(doc.object());
+    return true;
+}
+
+bool GamesParser::saveToFile(const QString &filePath) {
+    try {
+        static QMutex mutex;
+        QMutexLocker locker(&mutex);
+        
+        QString actualPath = filePath;
+        
+        // If it's just a filename, construct the full path like ConfigParser does
+        if (!filePath.contains('/') && !filePath.contains('\\')) {
+            QString appDir = QGuiApplication::applicationDirPath();
+    #ifdef Q_OS_MAC
+            appDir += "/../../../books/";
+    #else
+            appDir += "/books/";
+    #endif
+            
+            // If we have a current project, use that specific book directory
+            if (!_currentProjectName.isEmpty()) {
+                actualPath = appDir + _currentProjectName + "/" + filePath;
+            } else {
+                actualPath = appDir + filePath;
+            }
+        }
+        
+        // Create directory if it doesn't exist
+        QFileInfo fileInfo(actualPath);
+        QDir dir = fileInfo.dir();
+        if (!dir.exists()) {
+            if (!dir.mkpath(".")) {
+                qWarning() << "Couldn't create directory:" << dir.path();
+                return false;
+            }
+        }
+        
+        QString tempFilePath = actualPath + ".tmp";
+        
+        // First write to a temporary file
+        QFile tempFile(tempFilePath);
+        if (!tempFile.open(QIODevice::WriteOnly)) {
+            qWarning() << "Could not open temporary file for writing:" << tempFilePath;
+            return false;
+        }
+        
+        QJsonDocument doc(toJson());
+        QByteArray jsonData = doc.toJson();
+        
+        // Write to temporary file
+        qint64 bytesWritten = tempFile.write(jsonData);
+        if (bytesWritten != jsonData.size()) {
+            qWarning() << "Failed to write complete data to temporary file";
+            tempFile.close();
+            QFile::remove(tempFilePath);
+            return false;
+        }
+        
+        // Ensure all data is written to disk
+        if (!tempFile.flush()) {
+            qWarning() << "Failed to flush data to temporary file";
+            tempFile.close();
+            QFile::remove(tempFilePath);
+            return false;
+        }
+        tempFile.close();
+        
+        // Create backup of existing file if it exists
+        QFile existingFile(actualPath);
+        if (existingFile.exists()) {
+            QString backupPath = actualPath + ".bak";
+            QFile::remove(backupPath);
+            if (!QFile::copy(actualPath, backupPath)) {
+                qWarning() << "Couldn't create backup file:" << backupPath;
+                QFile::remove(tempFilePath);
+                return false;
+            }
+        }
+        
+        // Replace the original file with the temporary file
+        if (existingFile.exists() && !QFile::remove(actualPath)) {
+            qWarning() << "Couldn't remove original file:" << actualPath;
+            QFile::remove(tempFilePath);
+            return false;
+        }
+        
+        if (!QFile::rename(tempFilePath, actualPath)) {
+            qWarning() << "Couldn't rename temporary file to original:" << actualPath;
+            // Try to restore from backup
+            if (QFile::exists(actualPath + ".bak")) {
+                QFile::copy(actualPath + ".bak", actualPath);
+            }
+            return false;
+        }
+        
+        // Verify the written data
+        QFile verifyFile(actualPath);
+        if (verifyFile.open(QIODevice::ReadOnly)) {
+            QByteArray verifyData = verifyFile.readAll();
+            verifyFile.close();
+            
+            if (verifyData != jsonData) {
+                qWarning() << "Data verification failed, restoring backup";
+                QFile::remove(actualPath);
+                QFile::copy(actualPath + ".bak", actualPath);
+                return false;
+            }
+        }
+        
+        return true;
+    } catch (const std::exception& e) {
+        qWarning() << "Exception while saving games file:" << e.what();
+        return false;
+    } catch (...) {
+        qWarning() << "Unknown exception while saving games file";
+        return false;
+    }
+}
+
+QJsonObject GamesParser::toJson() const {
+    QJsonObject obj;
+    
+    if (!_levels.isEmpty()) {
+        QJsonArray levelsArray;
+        for (const Level *level : _levels) {
+            levelsArray.append(level->toJson());
+        }
+        obj["levels"] = levelsArray;
+    }
+    
+    return obj;
+}
+
+void GamesParser::fromJson(const QJsonObject &obj) {
+    QJsonArray levelsArray = obj["levels"].toArray();
+    
+    // Clear existing levels
+    qDeleteAll(_levels);
+    _levels.clear();
+    
+    for (const QJsonValue &value : levelsArray) {
+        Level *level = new Level(this);
+        level->fromJson(value.toObject());
+        _levels.append(level);
+    }
+    
+    emit levelsChanged();
+}
+
+Level* GamesParser::createLevel(int levelNumber, const QString &title) {
+    Level *level = new Level(this);
+    level->setLevel(levelNumber);
+    level->setTitle(title);
+    _levels.append(level);
+    emit levelsChanged();
+    return level;
+}
+
+// Factory methods for creating specific game types
+QuizGame* GamesParser::createQuizGame() {
+    QuizGame *game = new QuizGame();
+    // Initialize with empty questions array
+    emit game->questionsChanged();
+    return game;
+}
+
+MemoryGame* GamesParser::createMemoryGame() {
+    MemoryGame *game = new MemoryGame();
+    // Initialize with empty questions array
+    emit game->questionsChanged();
+    return game;
+}
+
+OrderGame* GamesParser::createOrderGame() {
+    OrderGame *game = new OrderGame();
+    // Initialize with empty questions array
+    emit game->questionsChanged();
+    return game;
+}
+
+SelectorGame* GamesParser::createSelectorGame() {
+    SelectorGame *game = new SelectorGame();
+    // Initialize with empty questions array
+    emit game->questionsChanged();
+    return game;
+}
+
+BuilderGame* GamesParser::createBuilderGame() {
+    BuilderGame *game = new BuilderGame();
+    // Initialize with empty questions array
+    emit game->questionsChanged();
+    return game;
+}
+
+CrosspuzzleGame* GamesParser::createCrosspuzzleGame() {
+    CrosspuzzleGame *game = new CrosspuzzleGame();
+    // Initialize with empty questions array
+    emit game->questionsChanged();
+    return game;
+}
+
+RaceGame* GamesParser::createRaceGame() {
+    RaceGame *game = new RaceGame();
+    // Initialize with empty questions array
+    emit game->questionsChanged();
+    return game;
+}
+
+// Methods for managing quiz questions and answers
+QuizAnswer* GamesParser::createQuizAnswer(const QString &text, bool isCorrect) {
+    QuizAnswer *answer = new QuizAnswer();
+    answer->setText(text);
+    answer->setIsCorrect(isCorrect);
+    return answer;
+}
+
+QuizQuestion* GamesParser::createQuizQuestion(const QString &question, const QString &image) {
+    QuizQuestion *quizQuestion = new QuizQuestion();
+    quizQuestion->setQuestion(question);
+    quizQuestion->setImage(image);
+    
+    // Create default 3 answers
+    QuizAnswer *answer1 = createQuizAnswer("", false);
+    QuizAnswer *answer2 = createQuizAnswer("", false);
+    QuizAnswer *answer3 = createQuizAnswer("", false);
+    
+    quizQuestion->_answers.append(answer1);
+    quizQuestion->_answers.append(answer2);
+    quizQuestion->_answers.append(answer3);
+    
+    emit quizQuestion->answersChanged();
+    return quizQuestion;
+}
+
+void GamesParser::addQuestionToGame(QuizGame* game, QuizQuestion* question) {
+    if (game && question) {
+        game->_questions.append(question);
+        emit game->questionsChanged();
+    }
+}
+
+void GamesParser::removeQuestionFromGame(QuizGame* game, int index) {
+    if (game && index >= 0 && index < game->_questions.size()) {
+        QuizQuestion* question = game->_questions.takeAt(index);
+        if (question) {
+            question->deleteLater();
+        }
+        emit game->questionsChanged();
+    }
+}
+
+void GamesParser::addAnswerToQuestion(QuizQuestion* question, QuizAnswer* answer) {
+    if (question && answer) {
+        question->_answers.append(answer);
+        emit question->answersChanged();
+    }
+}
+
+void GamesParser::removeAnswerFromQuestion(QuizQuestion* question, int index) {
+    if (question && index >= 0 && index < question->_answers.size()) {
+        QuizAnswer* answer = question->_answers.takeAt(index);
+        if (answer) {
+            answer->deleteLater();
+        }
+        emit question->answersChanged();
+    }
+}
+
+// Methods for managing memory questions
+MemoryQuestion* GamesParser::createMemoryQuestion(const QString &image) {
+    MemoryQuestion *memoryQuestion = new MemoryQuestion();
+    memoryQuestion->setImage(image);
+    return memoryQuestion;
+}
+
+void GamesParser::addQuestionToMemoryGame(MemoryGame* game, MemoryQuestion* question) {
+    if (game && question) {
+        game->_questions.append(question);
+        emit game->questionsChanged();
+    }
+}
+
+void GamesParser::removeQuestionFromMemoryGame(MemoryGame* game, int index) {
+    qDebug() << "removeQuestionFromMemoryGame called with index:" << index;
+    if (game && index >= 0 && index < game->_questions.size()) {
+        qDebug() << "Removing memory question at index" << index << "from" << game->_questions.size() << "questions";
+        MemoryQuestion* question = game->_questions.takeAt(index);
+        if (question) {
+            question->deleteLater();
+        }
+        emit game->questionsChanged();
+        qDebug() << "Memory question removed. New count:" << game->_questions.size();
+    } else {
+        qDebug() << "removeQuestionFromMemoryGame failed - game:" << (game ? "valid" : "null") 
+                 << "index:" << index << "questions count:" << (game ? game->_questions.size() : -1);
+    }
+}
+
+// Methods for managing order questions
+OrderQuestion* GamesParser::createOrderQuestion(const QVariantList &words) {
+    OrderQuestion *orderQuestion = new OrderQuestion();
+    orderQuestion->setWords(words);
+    return orderQuestion;
+}
+
+void GamesParser::addQuestionToOrderGame(OrderGame* game, OrderQuestion* question) {
+    if (game && question) {
+        game->_questions.append(question);
+        emit game->questionsChanged();
+    }
+}
+
+void GamesParser::removeQuestionFromOrderGame(OrderGame* game, int index) {
+    qDebug() << "removeQuestionFromOrderGame called with index:" << index;
+    if (game && index >= 0 && index < game->_questions.size()) {
+        qDebug() << "Removing order question at index" << index << "from" << game->_questions.size() << "questions";
+        OrderQuestion* question = game->_questions.takeAt(index);
+        if (question) {
+            question->deleteLater();
+        }
+        emit game->questionsChanged();
+        qDebug() << "Order question removed. New count:" << game->_questions.size();
+    } else {
+        qDebug() << "removeQuestionFromOrderGame failed - game:" << (game ? "valid" : "null") 
+                 << "index:" << index << "questions count:" << (game ? game->_questions.size() : -1);
+    }
+}
+
+// Methods for managing selector questions and answers
+SelectorAnswer* GamesParser::createSelectorAnswer(const QString &text, const QString &image, bool isCorrect) {
+    SelectorAnswer *selectorAnswer = new SelectorAnswer();
+    selectorAnswer->setText(text);
+    selectorAnswer->setImage(image);
+    selectorAnswer->setIsCorrect(isCorrect);
+    return selectorAnswer;
+}
+
+SelectorQuestion* GamesParser::createSelectorQuestion(const QString &image, const QString &audio, const QString &video) {
+    SelectorQuestion *selectorQuestion = new SelectorQuestion();
+    selectorQuestion->setImage(image);
+    selectorQuestion->setAudio(audio);
+    selectorQuestion->setVideo(video);
+    return selectorQuestion;
+}
+
+void GamesParser::addQuestionToSelectorGame(SelectorGame* game, SelectorQuestion* question) {
+    if (game && question) {
+        game->_questions.append(question);
+        emit game->questionsChanged();
+        qDebug() << "Selector question added. Total questions:" << game->_questions.size();
+    }
+}
+
+void GamesParser::removeQuestionFromSelectorGame(SelectorGame* game, int index) {
+    qDebug() << "removeQuestionFromSelectorGame called with index:" << index;
+    if (game && index >= 0 && index < game->_questions.size()) {
+        qDebug() << "Removing selector question at index" << index << "from" << game->_questions.size() << "questions";
+        SelectorQuestion* question = game->_questions.takeAt(index);
+        if (question) {
+            question->deleteLater();
+        }
+        emit game->questionsChanged();
+        qDebug() << "Selector question removed. New count:" << game->_questions.size();
+    } else {
+        qDebug() << "removeQuestionFromSelectorGame failed - game:" << (game ? "valid" : "null") 
+                 << "index:" << index << "questions count:" << (game ? game->_questions.size() : -1);
+    }
+}
+
+void GamesParser::addAnswerToSelectorQuestion(SelectorQuestion* question, SelectorAnswer* answer) {
+    if (question && answer) {
+        question->_answers.append(answer);
+        emit question->answersChanged();
+        qDebug() << "Selector answer added. Total answers:" << question->_answers.size();
+    }
+}
+
+void GamesParser::removeAnswerFromSelectorQuestion(SelectorQuestion* question, int index) {
+    if (question && index >= 0 && index < question->_answers.size()) {
+        SelectorAnswer* answer = question->_answers.takeAt(index);
+        if (answer) {
+            answer->deleteLater();
+        }
+        emit question->answersChanged();
+        qDebug() << "Selector answer removed. Total answers:" << question->_answers.size();
+    }
+}
+
+// Methods for managing builder questions
+BuilderQuestion* GamesParser::createBuilderQuestion(const QString &question, const QString &image, const QString &audio, const QString &video, const QVariantList &words) {
+    BuilderQuestion *builderQuestion = new BuilderQuestion();
+    builderQuestion->setQuestion(question);
+    builderQuestion->setImage(image);
+    builderQuestion->setAudio(audio);
+    builderQuestion->setVideo(video);
+    builderQuestion->setWords(words);
+    return builderQuestion;
+}
+
+void GamesParser::addQuestionToBuilderGame(BuilderGame* game, BuilderQuestion* question) {
+    if (game && question) {
+        game->_questions.append(question);
+        emit game->questionsChanged();
+        qDebug() << "Builder question added. Total questions:" << game->_questions.size();
+    }
+}
+
+void GamesParser::removeQuestionFromBuilderGame(BuilderGame* game, int index) {
+    qDebug() << "removeQuestionFromBuilderGame called with index:" << index;
+    if (game && index >= 0 && index < game->_questions.size()) {
+        qDebug() << "Removing builder question at index" << index << "from" << game->_questions.size() << "questions";
+        BuilderQuestion* question = game->_questions.takeAt(index);
+        if (question) {
+            question->deleteLater();
+        }
+        emit game->questionsChanged();
+        qDebug() << "Builder question removed. New count:" << game->_questions.size();
+    } else {
+        qDebug() << "removeQuestionFromBuilderGame failed - game:" << (game ? "valid" : "null") 
+                 << "index:" << index << "questions count:" << (game ? game->_questions.size() : -1);
+    }
+}
+
+// Methods for managing crosspuzzle questions and answers
+CrosspuzzleAnswer* GamesParser::createCrosspuzzleAnswer(const QString &text) {
+    CrosspuzzleAnswer *crosspuzzleAnswer = new CrosspuzzleAnswer();
+    crosspuzzleAnswer->setText(text);
+    return crosspuzzleAnswer;
+}
+
+CrosspuzzleQuestion* GamesParser::createCrosspuzzleQuestion(const QString &question) {
+    CrosspuzzleQuestion *crosspuzzleQuestion = new CrosspuzzleQuestion();
+    crosspuzzleQuestion->setQuestion(question);
+    return crosspuzzleQuestion;
+}
+
+void GamesParser::addQuestionToCrosspuzzleGame(CrosspuzzleGame* game, CrosspuzzleQuestion* question) {
+    if (game && question) {
+        game->_questions.append(question);
+        emit game->questionsChanged();
+        qDebug() << "Crosspuzzle question added. Total questions:" << game->_questions.size();
+    }
+}
+
+void GamesParser::removeQuestionFromCrosspuzzleGame(CrosspuzzleGame* game, int index) {
+    qDebug() << "removeQuestionFromCrosspuzzleGame called with index:" << index;
+    if (game && index >= 0 && index < game->_questions.size()) {
+        qDebug() << "Removing crosspuzzle question at index" << index << "from" << game->_questions.size() << "questions";
+        CrosspuzzleQuestion* question = game->_questions.takeAt(index);
+        if (question) {
+            question->deleteLater();
+        }
+        emit game->questionsChanged();
+        qDebug() << "Crosspuzzle question removed. New count:" << game->_questions.size();
+    } else {
+        qDebug() << "removeQuestionFromCrosspuzzleGame failed - game:" << (game ? "valid" : "null") 
+                 << "index:" << index << "questions count:" << (game ? game->_questions.size() : -1);
+    }
+}
+
+void GamesParser::addAnswerToCrosspuzzleQuestion(CrosspuzzleQuestion* question, CrosspuzzleAnswer* answer) {
+    if (question && answer) {
+        question->_answers.append(answer);
+        emit question->answersChanged();
+        qDebug() << "Crosspuzzle answer added. Total answers:" << question->_answers.size();
+    }
+}
+
+void GamesParser::removeAnswerFromCrosspuzzleQuestion(CrosspuzzleQuestion* question, int index) {
+    if (question && index >= 0 && index < question->_answers.size()) {
+        CrosspuzzleAnswer* answer = question->_answers.takeAt(index);
+        if (answer) {
+            answer->deleteLater();
+        }
+        emit question->answersChanged();
+        qDebug() << "Crosspuzzle answer removed. Total answers:" << question->_answers.size();
+    }
+}
+
+// Methods for managing race questions and answers
+RaceAnswer* GamesParser::createRaceAnswer(const QString &text, const QString &image, bool isCorrect) {
+    RaceAnswer *raceAnswer = new RaceAnswer();
+    raceAnswer->setText(text);
+    raceAnswer->setImage(image);
+    raceAnswer->setIsCorrect(isCorrect);
+    return raceAnswer;
+}
+
+RaceQuestion* GamesParser::createRaceQuestion(const QString &question, const QString &image, const QString &audio) {
+    RaceQuestion *raceQuestion = new RaceQuestion();
+    raceQuestion->setQuestion(question);
+    raceQuestion->setImage(image);
+    raceQuestion->setAudio(audio);
+    return raceQuestion;
+}
+
+void GamesParser::addQuestionToRaceGame(RaceGame* game, RaceQuestion* question) {
+    if (game && question) {
+        game->_questions.append(question);
+        emit game->questionsChanged();
+        qDebug() << "Race question added. Total questions:" << game->_questions.size();
+    }
+}
+
+void GamesParser::removeQuestionFromRaceGame(RaceGame* game, int index) {
+    qDebug() << "removeQuestionFromRaceGame called with index:" << index;
+    if (game && index >= 0 && index < game->_questions.size()) {
+        qDebug() << "Removing race question at index" << index << "from" << game->_questions.size() << "questions";
+        RaceQuestion* question = game->_questions.takeAt(index);
+        if (question) {
+            question->deleteLater();
+        }
+        emit game->questionsChanged();
+        qDebug() << "Race question removed. New count:" << game->_questions.size();
+    } else {
+        qDebug() << "removeQuestionFromRaceGame failed - game:" << (game ? "valid" : "null") 
+                 << "index:" << index << "questions count:" << (game ? game->_questions.size() : -1);
+    }
+}
+
+void GamesParser::addAnswerToRaceQuestion(RaceQuestion* question, RaceAnswer* answer) {
+    if (question && answer) {
+        question->_answers.append(answer);
+        emit question->answersChanged();
+        qDebug() << "Race answer added. Total answers:" << question->_answers.size();
+    }
+}
+
+void GamesParser::removeAnswerFromRaceQuestion(RaceQuestion* question, int index) {
+    if (question && index >= 0 && index < question->_answers.size()) {
+        RaceAnswer* answer = question->_answers.takeAt(index);
+        if (answer) {
+            answer->deleteLater();
+        }
+        emit question->answersChanged();
+        qDebug() << "Race answer removed from question at index:" << index;
+    }
+}
+
+// Add games to level methods
+void GamesParser::addQuizGameToLevel(Level* level, QuizGame* game) {
+    if (level && game) {
+        level->_quizGames.append(game);
+        emit level->quizGamesChanged();
+        qDebug() << "Quiz game added to level";
+    }
+}
+
+void GamesParser::addRaceGameToLevel(Level* level, RaceGame* game) {
+    if (level && game) {
+        level->_raceGames.append(game);
+        emit level->raceGamesChanged();
+        qDebug() << "Race game added to level";
+    }
+}
+
+void GamesParser::addMemoryGameToLevel(Level* level, MemoryGame* game) {
+    if (level && game) {
+        level->_memoryGames.append(game);
+        emit level->memoryGamesChanged();
+        qDebug() << "Memory game added to level";
+    }
+}
+
+void GamesParser::addOrderGameToLevel(Level* level, OrderGame* game) {
+    if (level && game) {
+        level->_orderGames.append(game);
+        emit level->orderGamesChanged();
+        qDebug() << "Order game added to level";
+    }
+}
+
+void GamesParser::addSelectorGameToLevel(Level* level, SelectorGame* game) {
+    if (level && game) {
+        level->_selectorGames.append(game);
+        emit level->selectorGamesChanged();
+        qDebug() << "Selector game added to level";
+    }
+}
+
+void GamesParser::addBuilderGameToLevel(Level* level, BuilderGame* game) {
+    if (level && game) {
+        level->_builderGames.append(game);
+        emit level->builderGamesChanged();
+        qDebug() << "Builder game added to level";
+    }
+}
+
+void GamesParser::addCrosspuzzleGameToLevel(Level* level, CrosspuzzleGame* game) {
+    if (level && game) {
+        level->_crosspuzzleGames.append(game);
+        emit level->crosspuzzleGamesChanged();
+        qDebug() << "Crosspuzzle game added to level";
+    }
+} 

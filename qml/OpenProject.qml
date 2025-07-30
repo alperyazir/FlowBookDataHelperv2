@@ -119,7 +119,6 @@ Dialog {
         try {
             // This would be connected to a C++ method that returns the directory list
             projects = config.recentProject;
-            print("Here ", config.recentProject);
         } catch (e) {
             console.error("Error loading projects: " + e);
             // Add some example projects for demonstration
@@ -251,7 +250,7 @@ Dialog {
                             onEntered: parent.hovered = true
                             onExited: parent.hovered = false
                             onClicked: {
-                                print(appPath, model.name)
+                                print(appPath, model.name);
                                 var projectDir = appPath + "books/" + model.name;
                                 currentProject = model.name;
                                 selectedProjectPath = projectDir;
@@ -277,8 +276,19 @@ Dialog {
     // Handle dialog result
     onAccepted: {
         if (!isNullOrWhitespace(selectedProjectPath)) {
-            config.initialize(true,  selectedProjectPath);
-            print("Project is loading",  selectedProjectPath);
+            config.initialize(true, selectedProjectPath);
+            print("Project is loading", selectedProjectPath);
+
+            // Load games.json for the current project
+            if (gamesParser && currentProject) {
+                print("Loading games.json for project:", currentProject);
+                gamesParser.currentProjectName = currentProject;
+                if (gamesParser.loadFromFile("games.json")) {
+                    print("Successfully loaded games.json for project:", currentProject);
+                } else {
+                    print("Failed to load games.json for project:", currentProject);
+                }
+            }
         }
     }
 }

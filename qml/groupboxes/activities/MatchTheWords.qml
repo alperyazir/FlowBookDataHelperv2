@@ -39,7 +39,7 @@ Column {
     Row {
         width: parent.width * .9
         spacing: 10
-        height: parent.height  * .1
+        height: parent.height * .1
         FlowText {
             id: textType
             text: "Type: "
@@ -112,8 +112,8 @@ Column {
                 ScrollBar.vertical.interactive: true
                 clip: true
                 ListView {
-                    property var data: ({})
                     id: wordsRepeater
+                    property var data: ({})
                     width: parent.width
                     height: parent.height
                     model: root.activityModelData.matchWord
@@ -224,7 +224,7 @@ Column {
                 text: "Add New"
                 anchors.horizontalCenter: parent.horizontalCenter
                 onClicked: {
-                    saveChanges()
+                    saveChanges();
                     root.activityModelData.createMatchWord("", "");
                     config.bookSets[0].saveToJson();
                 }
@@ -364,7 +364,8 @@ Column {
                             MouseArea {
                                 anchors.fill: parent
                                 onClicked: {
-                                    root.activityModelData.removeSentences(index);                                                }
+                                    root.activityModelData.removeSentences(index);
+                                }
                             }
                         }
                     }
@@ -375,7 +376,7 @@ Column {
                 text: "Add New"
                 anchors.horizontalCenter: parent.horizontalCenter
                 onClicked: {
-                    saveChanges()
+                    saveChanges();
                     config.bookSets[0].saveToJson();
                     root.activityModelData.createSentences("", "", "");
                 }
@@ -390,5 +391,4 @@ Column {
         }
         return "";
     }
-
 }

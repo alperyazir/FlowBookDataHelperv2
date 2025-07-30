@@ -28,8 +28,8 @@ Rectangle {
     }
 
     onCurrentPageIndexChanged: {
-        pageDetails.page = pages[root.currentPageIndex]
-        pageDetails.setDefaultZoom()
+        pageDetails.page = pages[root.currentPageIndex];
+        pageDetails.setDefaultZoom();
         toolBar.currentPageNumber = root.currentPageIndex + pages[0].page_number;
         toolBar.setModuleText();
     }
@@ -68,6 +68,4 @@ Rectangle {
     function enableRightClick(enabled) {
         currentPageDetails.enableRightClick(enabled);
     }
-
-
 }

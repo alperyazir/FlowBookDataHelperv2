@@ -36,7 +36,7 @@ Column {
     Row {
         width: parent.width * .9
         spacing: 10
-        height: parent.height  * .1
+        height: parent.height * .1
         FlowText {
             id: textType
             text: "Type: "
@@ -48,7 +48,7 @@ Column {
         }
 
         FlowText {
-            text: activityModelData.type
+            text: activityModelData && activityModelData.type
             color: "white"
             anchors.centerIn: undefined
             font.pixelSize: 15
@@ -144,12 +144,11 @@ Column {
                 anchors.fill: parent
                 onClicked: {
                     fileDialog.folder = "file:" + appPath + root.activityModelData.sectionPath;
-                    fileDialog.open()
+                    fileDialog.open();
                 }
             }
         }
     }
-
 
     GroupBox {
         id: wordsGB
@@ -235,4 +234,3 @@ Column {
         }
     }
 }
-

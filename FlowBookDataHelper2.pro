@@ -7,13 +7,15 @@ QT += quick concurrent quickcontrols2
 HEADERS += \
     clipboardhelper.h \
     config/configparser.h \
-    pdfprocess/pdfprocess.h
+    pdfprocess/pdfprocess.h \
+    games/gamesparser.h
 
 SOURCES += \
     clipboardhelper.cpp \
     config/configparser.cpp \
     main.cpp \
-    pdfprocess/pdfprocess.cpp
+    pdfprocess/pdfprocess.cpp \
+    games/gamesparser.cpp
 
 RESOURCES += qml.qrc
 

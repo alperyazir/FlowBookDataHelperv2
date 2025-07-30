@@ -661,8 +661,8 @@ struct Activity : public QObject {
 public:
     explicit Activity(QObject *parent = nullptr) :
         QObject(parent),
-        _circleCount(0),
-        _markCount(0),
+        _circleCount(2),
+        _markCount(2),
         _isTrueFalseEnabled(false),
         _isTextOnLeft(false),
         _textFontSize(0) {}
@@ -923,11 +923,11 @@ public:
             activityObj["headerText"] = _header_text;
         }
         
-        if (_circleCount != 0) {
+        if (_circleCount != 2) {
             activityObj["circleCount"] = _circleCount;
         }
         
-        if (_markCount != 0) {
+        if (_markCount != 2) {
             activityObj["markCount"] = _markCount;
         }
         

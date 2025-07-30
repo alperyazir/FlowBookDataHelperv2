@@ -128,13 +128,25 @@ Rectangle {
                     id: answersDropRepeater
                     model: activityModelData.answers
                     Item {
-                        property real xScale : activityImage.paintedWidth / activityImage.sourceSize.width
-                        property real yScale : activityImage.paintedHeight / activityImage.sourceSize.height
                         id: answerRect
-                        x: (sentencesRect.width/2 - activityImage.paintedWidth/2) + modelData.coords.x * xScale
-                        y: (sentencesRect.height/2 - activityImage.paintedHeight/2)+ modelData.coords.y * yScale
-                        width: modelData.coords.width * xScale
-                        height: modelData.coords.height * yScale
+                        property real xScale: activityImage.paintedWidth / activityImage.sourceSize.width
+                        property real yScale: activityImage.paintedHeight / activityImage.sourceSize.height
+                        property real originalWidth: modelData.coords.width
+                        property real originalHeight: modelData.coords.height
+                        x: (flick.contentWidth / 2 - activityImage.paintedWidth / 2) + modelData.coords.x * xScale
+                        y: (flick.contentHeight / 2 - activityImage.paintedHeight / 2) + modelData.coords.y * yScale
+                        width: originalWidth * activityImage.paintedWidth / activityImage.sourceSize.width
+                        height: originalHeight * activityImage.paintedHeight / activityImage.sourceSize.height
+
+                        Connections {
+                            target: activityImage
+                            onPaintedWidthChanged: {
+                                answerRect.width = originalWidth * activityImage.paintedWidth / activityImage.sourceSize.width
+                            }
+                            onPaintedHeightChanged : {
+                                answerRect.height = originalHeight * activityImage.paintedWidth / activityImage.sourceSize.width
+                            }
+                        }
                         Rectangle {
 
                             color: "#7bd5bd"

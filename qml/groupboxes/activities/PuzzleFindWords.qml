@@ -36,7 +36,7 @@ Column {
     Row {
         width: parent.width * .9
         spacing: 10
-        height: parent.height  * .1
+        height: parent.height * .1
         FlowText {
             id: textType
             text: "Type: "

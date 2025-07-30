@@ -64,7 +64,7 @@ GroupBox {
             }
 
             Item {
-                width: parent.width - closeButton.width - parent.width*.2
+                width: parent.width - closeButton.width - parent.width * .2
                 height: 1
             }
 
@@ -89,7 +89,6 @@ GroupBox {
                     verticalAlignment: Text.AlignVCenter
                     font.pixelSize: 14
                 }
-
 
                 MouseArea {
                     anchors.fill: parent
@@ -178,8 +177,7 @@ GroupBox {
 
                 background: Rectangle {
                     color: parent.hovered ? "#00b3be" : "#009ca6"
-                    radius: parent.width/2
-
+                    radius: parent.width / 2
                 }
 
                 contentItem: Text {
@@ -256,7 +254,7 @@ GroupBox {
                     color: parent.hovered ? "#2A3337" : "#1A2327"
                     border.color: "#009ca6"
                     border.width: 1
-                    radius: parent.width/2
+                    radius: parent.width / 2
                 }
 
                 contentItem: Text {
@@ -274,7 +272,6 @@ GroupBox {
                 }
             }
         }
-
 
         // Save/Delete buttons
         Row {
@@ -330,7 +327,6 @@ GroupBox {
                 }
             }
         }
-
 
         // Confirmation dialog
         Rectangle {
@@ -411,7 +407,6 @@ GroupBox {
                 }
             }
         }
-
     }
 
     MediaPlayer {

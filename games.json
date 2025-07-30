@@ -1,0 +1,554 @@
+{
+    "levels": [
+        {
+            "level": 1,
+            "title": "Module 1",
+            "games": [
+                {
+                    "type": "quiz",
+                    "questions": [
+                        {
+                            "question": "What is the capital of France?",
+                            "image": "./books/Countdown 1 SB/assets/eyfel.jpg",
+                            "answers": [
+                                {
+                                    "text": "Paris",
+                                    "isCorrect": true
+                                },
+                                {
+                                    "text": "London",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Berlin",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Berlin",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Berlin",
+                                    "isCorrect": false
+                                }    
+
+                            ]
+                        },
+                        {
+                            "question": "What is the capital of Germany?",
+                            "image": "./books/Countdown 1 SB/assets/berlin.jpeg",
+                            "answers": [
+                                {
+                                    "text": "Paris",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "London",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "London",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Berlin",
+                                    "isCorrect": true
+                                }
+                            ]
+                        },
+                        {
+                            "question": "What is the capital of Turkey?",
+                            "image": "./books/Countdown 1 SB/assets/ankara.jpg",
+                            "answers": [
+                                {
+                                    "text": "Paris",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "London",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Ankara",
+                                    "isCorrect": true
+                                }
+                            ]
+                        },
+                        {
+                            "question": "What is the capital of Italy?",
+                            "answers": [
+                                {
+                                    "text": "Paris",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Roma",
+                                    "isCorrect": true
+                                },
+                                {
+                                    "text": "Berlin",
+                                    "isCorrect": false
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "memory",
+                    "questions": [
+                        {
+                            "image": "./books/Countdown 1 SB/assets/1.png"
+                        },
+                        {
+                            "image": "./books/Countdown 1 SB/assets/2.png"
+                        },
+                        {
+                            "image": "./books/Countdown 1 SB/assets/3.png"
+                        },
+                        {
+                            "image": "./books/Countdown 1 SB/assets/4.png"
+                        },
+                        {
+                            "image": "./books/Countdown 1 SB/assets/5.png"
+                        },
+                        {
+                            "image": "./books/Countdown 1 SB/assets/6.png"
+                        },
+                        {
+                            "image": "./books/Countdown 1 SB/assets/7.png"
+                        },
+                        {
+                            "image": "./books/Countdown 1 SB/assets/8.png"
+                        }
+                    ]
+                },
+                {
+                    "type": "order",
+                    "questions": [
+                        {
+                            "words": [
+                                "Dream",
+                                "is",
+                                "the",
+                                "best"
+                            ]
+                        },
+                        {
+                            "words": [
+                                "FlowBook",
+                                "is",
+                                "fun",
+                                "for",
+                                "learning"
+                            ]
+                        },
+                        {
+                            "words": [
+                                "I",
+                                "love",
+                                "to",
+                                "play",
+                                "games"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "selector",
+                    "questions": [
+                        {
+                            "image": "./books/Countdown 1 SB/assets/ankara.jpg",
+                            "audio": "./books/Countdown 1 SB/audio/6.2.mp3",
+                            "answers": [
+                                {
+                                    "text": "Test1",
+                                    "image": "./books/Countdown 1 SB/assets/1.png",
+                                    "isCorrect": true
+                                },
+                                {
+                                    "text": "Test2",
+                                    "image": "./books/Countdown 1 SB/assets/2.png",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Test3",
+                                    "image": "./books/Countdown 1 SB/assets/3.png",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Test4",
+                                    "image": "./books/Countdown 1 SB/assets/4.png",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Test5",
+                                    "image": "./books/Countdown 1 SB/assets/5.png",
+                                    "isCorrect": false
+                                }
+                            ]
+                        },
+                        {
+                            "image": "./books/Countdown 1 SB/assets/berlin.jpeg",
+                            "audio": "./books/Countdown 1 SB/audio/6.2.mp3",
+                            "answers": [
+                                {
+                                    "text": "Test1",
+                                    "image": "./books/Countdown 1 SB/assets/1.png",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Test2",
+                                    "image": "./books/Countdown 1 SB/assets/2.png",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Test1",
+                                    "image": "./books/Countdown 1 SB/assets/1.png",
+                                    "isCorrect": true
+                                },
+                                {
+                                    "text": "Test3",
+                                    "image": "./books/Countdown 1 SB/assets/3.png",
+                                    "isCorrect": false
+                                }
+                            ]
+                        },
+                        {
+                            "video": "./books/Countdown 1 SB/videos/1.4.mp4",
+                            "answers": [
+                                {
+                                    "text": "Test6",
+                                    "image": "./books/Countdown 1 SB/assets/6.png",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Test7",
+                                    "image": "./books/Countdown 1 SB/assets/7.png",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Test8",
+                                    "image": "./books/Countdown 1 SB/assets/8.png",
+                                    "isCorrect": true
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "level": 2,
+            "title": "Module 2",
+            "games": [
+                {
+                    "type": "builder",
+                    "questions": [
+                        {
+                            "image": "./books/Countdown 1 SB/assets/berlin.jpeg",
+                            "audio": "./books/Countdown 1 SB/audio/6.2.mp3",
+                            "question": "Who is the most attractive ?",
+                            "words": [
+                                "Oğuzhan",
+                                "is",
+                                "the",
+                                "most",
+                                "handsome",
+                                "in",
+                                "Dream"
+                            ]
+                        },
+                        {
+                            "audio": "./books/Countdown 1 SB/audio/6.2.mp3",
+                            "question": "Who is the most funny?",
+                            "words": [
+                                "Görkem",
+                                "is",
+                                "the",
+                                "most",
+                                "funny"
+                            ]
+                        },
+                        {
+                            "video": "./books/Countdown 1 SB/videos/1.4.mp4",
+                            "question": "Hard worker?",
+                            "words": [
+                                "Deniz",
+                                "is",
+                                "the",
+                                "hardworker",
+                                "friend"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "crosspuzzle",
+                    "questions": [
+                        {
+                            "question": "What is the capital of France?",
+                            "answers": [
+                                {
+                                    "text": "Paris"                                
+                                }
+                            ]
+                        },
+                        {
+                            "question": "What is the capital of Germany?",
+                            "answers": [
+                                {
+                                    "text": "Berlin"
+                                }
+                            ]
+                        },
+                        {
+                            "question": "What is the capital of Turkey?",
+                            "answers": [
+                                {
+                                    "text": "Ankara"
+                                }
+                            ]
+                        },
+                        {
+                            "question": "What is the capital of Italy?",
+                            "answers": [
+                                {
+                                    "text": "Rome"
+                                }
+                            ]
+                        },
+                        {   
+                            "question": "What is the capital of Spain?",
+                            "answers": [
+                                {
+                                    "text": "Madrid"
+                                }
+                            ]
+                        },
+                        {
+                            "question": "What is the capital of Portugal?",
+                            "answers": [
+                                {
+                                    "text": "Lisbon"
+                                }
+                            ]
+                        },
+                        {
+                            "question": "What is the capital of Greece?",
+                                "answers": [
+                                {
+                                    "text": "Athens"
+                                }
+                            ]
+                        },
+                        {
+                            "question": "What is the capital of Switzerland?",
+                            "answers": [
+                                {
+                                    "text": "Bern"
+                                }
+                            ]
+                        },
+                        {   
+                            "question": "What is the capital of Austria?",
+                            "answers": [
+                                {
+                                    "text": "Vienna"
+                                }
+                            ]
+                        },
+                        {
+                            "question": "What is the capital of Netherlands?",
+                            "answers": [
+                                {
+                                    "text": "Amsterdam"
+                                }
+                            ]
+                        },
+                        {
+                            "question": "What is the capital of Belgium?",
+                            "answers": [
+                                {
+                                    "text": "Brussels"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "race",
+                    "questions": [
+                        {
+                            "audio": "./books/Countdown 1 SB/audio/6.2.mp3",
+                            "question": "1. What is the capital of France?",
+                            "image": "./books/Countdown 1 SB/assets/1.png",
+                            "answers": [
+                                {
+                                    "text": "Paris",
+                                    "isCorrect": true
+                                },
+                                {
+                                    "text": "London",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Berlin",
+                                    "isCorrect": false,
+                                    "image": "./books/Countdown 1 SB/assets/1.png"
+                                },
+                                {
+                                    "text": "Madrid",
+                                    "isCorrect": false,
+                                    "image": "./books/Countdown 1 SB/assets/1.png"
+                                }
+                            ]
+                        },
+                        {
+                            "question": "2. What is the capital of Germany?",
+                            "answers": [
+                                {
+                                    "text": "Berlin",
+                                    "isCorrect": true,
+                                    "image": "./books/Countdown 1 SB/assets/1.png"
+                                },
+                                {
+                                    "text": "Paris",
+                                    "isCorrect": false,
+                                    "image": "./books/Countdown 1 SB/assets/1.png"
+                                },
+                                {
+                                    "text": "Ankara",
+                                    "isCorrect": false,
+                                    "image": "./books/Countdown 1 SB/assets/1.png"
+                                },
+                                {
+                                    "text": "Rome",
+                                    "isCorrect": false
+                                }
+                            ]
+                        },
+                        {
+                            "image": "./books/games/images/2.png",
+                            "question": "3. What is the capital of Spain?",
+                            "answers": [
+                                {
+                                    "text": "Paris",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Madrid",
+                                    "isCorrect": true                                },
+                                {
+                                    "text": "Berlin",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Ankara",
+                                    "isCorrect": false
+                                }
+                            ]
+                        },
+                        {
+                            "question": "4. What is the capital of Russia?",
+                            "answers": [
+                                {
+                                    "text": "Berlin",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Paris",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Ankara",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Moscow",
+                                    "isCorrect": true
+                                }
+                            ]
+                        },
+                        {
+                            "question": "5. What is the capital of Italy?",
+                            "answers": [
+                                {
+                                    "text": "Paris",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "London",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Berlin",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Rome",
+                                    "isCorrect": true
+                                }
+                            ]
+                        },
+                        {
+                            "question": "6. What is the capital of Turkey?",
+                            "answers": [
+                                {
+                                    "text": "Berlin",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Paris",
+                                    "isCorrect": false
+                                },
+                                {
+                                    "text": "Ankara",
+                                    "isCorrect": true
+                                },
+                                {
+                                    "text": "Rome",
+                                    "isCorrect": false
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "level": 3,
+            "title": "Module 3",
+            "games": []
+        },
+        {
+            "level": 4,
+            "title": "Module 4",
+            "games": []
+        },
+        {
+            "level": 5,
+            "title": "Module 5",
+            "games": []
+        },
+        {
+            "level": 6,
+            "title": "Module 6",
+            "games": []
+        },
+        {
+            "level": 7,
+            "title": "Module 7",
+            "games": []
+        },
+        {
+            "level": 8,
+            "title": "Module 8",
+            "games": []
+        },
+        {
+            "level": 9,
+            "title": "Module 9",
+            "games": []
+        }
+    ]
+}

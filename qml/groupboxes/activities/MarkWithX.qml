@@ -123,7 +123,6 @@ Column {
             }
         }
 
-
         Button {
             width: 36
             height: 36
@@ -166,18 +165,45 @@ Column {
             verticalAlignment: Text.AlignBottom
         }
 
-        SpinBox {
+        TextField {
             id: cbCircleCount
-            width: height * 2
+            width: parent.height * 2
             height: parent.height
             font.pixelSize: 15
-            value: 2
-            editable: true
+            text: root.activityModelData.markCount === 0 ? 2 : root.activityModelData.markCount
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            color: "white"
 
-            onValueChanged: {
-                root.activityModelData.markCount = value;
-                config.bookSets[0].saveToJson();
-                print("mark count changed to:", value);
+            property var allowedValues: [-1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+            validator: RegularExpressionValidator {
+                regularExpression: /^(-1|[2-9])$/
+            }
+
+            background: Rectangle {
+                color: "#1A2327"
+                border.color: parent.focus ? "#009ca6" : "#445055"
+                border.width: 1
+                radius: 4
+            }
+
+            onTextChanged: {
+                var numValue = parseInt(text);
+                if (allowedValues.includes(numValue)) {
+                    root.activityModelData.markCount = numValue;
+                    config.bookSets[0].saveToJson();
+                    print("mark count changed to:", numValue);
+                }
+            }
+
+            onFocusChanged: {
+                if (!focus) {
+                    var numValue = parseInt(text);
+                    if (!allowedValues.includes(numValue)) {
+                        text = root.activityModelData.circleCount.toString();
+                    }
+                }
             }
         }
     }
