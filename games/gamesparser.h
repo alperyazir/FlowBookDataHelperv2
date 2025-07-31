@@ -1422,6 +1422,7 @@ class GamesParser : public QObject {
 
 public:
     explicit GamesParser(QObject *parent = nullptr);
+    QString _bookDirectoryName;
 
     QVector<Level*> _levels;
     QString _currentProjectName;
@@ -1457,7 +1458,7 @@ public:
     Q_INVOKABLE bool loadFromFile(const QString &filePath);
     
     // Save to JSON file
-    Q_INVOKABLE bool saveToFile(const QString &filePath);
+    Q_INVOKABLE void saveToFile();
     
     // Convert to JSON object
     QJsonObject toJson() const;

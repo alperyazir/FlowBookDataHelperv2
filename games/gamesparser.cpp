@@ -6,6 +6,7 @@
 #include <QJsonDocument>
 #include <QGuiApplication>
 #include <QDebug>
+#include <QException>
 
 GamesParser::GamesParser(QObject *parent) : QObject(parent) {
     // Constructor implementation
@@ -14,22 +15,22 @@ GamesParser::GamesParser(QObject *parent) : QObject(parent) {
 bool GamesParser::loadFromFile(const QString &filePath) {
     QString actualPath = filePath;
     
-    // If it's just a filename, construct the full path like ConfigParser does
-    if (!filePath.contains('/') && !filePath.contains('\\')) {
-        QString appDir = QGuiApplication::applicationDirPath();
-#ifdef Q_OS_MAC
-        appDir += "/../../../books/";
-#else
-        appDir += "/books/";
-#endif
+//     // If it's just a filename, construct the full path like ConfigParser does
+//     if (!filePath.contains('/') && !filePath.contains('\\')) {
+//         QString appDir = QGuiApplication::applicationDirPath();
+// #ifdef Q_OS_MAC
+//         appDir += "/../../../books/";
+// #else
+//         appDir += "/books/";
+// #endif
         
-        // If we have a current project, use that specific book directory
-        if (!_currentProjectName.isEmpty()) {
-            actualPath = appDir + _currentProjectName + "/" + filePath;
-        } else {
-            actualPath = appDir + filePath;
-        }
-    }
+//         // If we have a current project, use that specific book directory
+//         if (!_currentProjectName.isEmpty()) {
+//             actualPath = appDir + _currentProjectName + "/" + filePath;
+//         } else {
+//             actualPath = appDir + filePath;
+//         }
+//     }
 
     
     QFile file(actualPath);
@@ -49,123 +50,101 @@ bool GamesParser::loadFromFile(const QString &filePath) {
         return false;
     }
 
+    _bookDirectoryName = filePath;
+
     fromJson(doc.object());
     return true;
 }
 
-bool GamesParser::saveToFile(const QString &filePath) {
+void GamesParser::saveToFile() {
     try {
         static QMutex mutex;
         QMutexLocker locker(&mutex);
-        
-        QString actualPath = filePath;
-        
-        // If it's just a filename, construct the full path like ConfigParser does
-        if (!filePath.contains('/') && !filePath.contains('\\')) {
-            QString appDir = QGuiApplication::applicationDirPath();
-    #ifdef Q_OS_MAC
-            appDir += "/../../../books/";
-    #else
-            appDir += "/books/";
-    #endif
-            
-            // If we have a current project, use that specific book directory
-            if (!_currentProjectName.isEmpty()) {
-                actualPath = appDir + _currentProjectName + "/" + filePath;
-            } else {
-                actualPath = appDir + filePath;
-            }
-        }
-        
+
+        QString appDir = QGuiApplication::applicationDirPath();
+#ifdef Q_OS_MAC
+        appDir += "/../../../books";
+#else
+        appDir += "/books";
+#endif
+
         // Create directory if it doesn't exist
-        QFileInfo fileInfo(actualPath);
-        QDir dir = fileInfo.dir();
+        QDir dir(_bookDirectoryName);
         if (!dir.exists()) {
             if (!dir.mkpath(".")) {
-                qWarning() << "Couldn't create directory:" << dir.path();
-                return false;
+                qWarning("Couldn't create directory: %s", qPrintable(_bookDirectoryName));
+                return;
             }
         }
-        
-        QString tempFilePath = actualPath + ".tmp";
-        
+
+        QString filePath = _bookDirectoryName + "/games.json";
+        QString tempFilePath = filePath + ".tmp";
+
         // First write to a temporary file
         QFile tempFile(tempFilePath);
         if (!tempFile.open(QIODevice::WriteOnly)) {
-            qWarning() << "Could not open temporary file for writing:" << tempFilePath;
-            return false;
+            qWarning("Couldn't open temporary file for writing: %s", qPrintable(tempFilePath));
+            return;
         }
-        
-        QJsonDocument doc(toJson());
-        QByteArray jsonData = doc.toJson();
-        
+
+        QJsonDocument saveDoc(toJson());
+        QByteArray jsonData = saveDoc.toJson();
+
         // Write to temporary file
-        qint64 bytesWritten = tempFile.write(jsonData);
-        if (bytesWritten != jsonData.size()) {
-            qWarning() << "Failed to write complete data to temporary file";
+        if (tempFile.write(jsonData) != jsonData.size()) {
+            qWarning("Failed to write complete data to temporary file");
             tempFile.close();
             QFile::remove(tempFilePath);
-            return false;
+            return;
         }
-        
+
         // Ensure all data is written to disk
-        if (!tempFile.flush()) {
-            qWarning() << "Failed to flush data to temporary file";
-            tempFile.close();
-            QFile::remove(tempFilePath);
-            return false;
-        }
+        tempFile.flush();
         tempFile.close();
-        
+
         // Create backup of existing file if it exists
-        QFile existingFile(actualPath);
+        QFile existingFile(filePath);
         if (existingFile.exists()) {
-            QString backupPath = actualPath + ".bak";
+            QString backupPath = filePath + ".bak";
             QFile::remove(backupPath);
-            if (!QFile::copy(actualPath, backupPath)) {
-                qWarning() << "Couldn't create backup file:" << backupPath;
+            if (!QFile::copy(filePath, backupPath)) {
+                qWarning("Couldn't create backup file: %s", qPrintable(backupPath));
                 QFile::remove(tempFilePath);
-                return false;
+                return;
             }
         }
-        
+
         // Replace the original file with the temporary file
-        if (existingFile.exists() && !QFile::remove(actualPath)) {
-            qWarning() << "Couldn't remove original file:" << actualPath;
+        if (!QFile::remove(filePath)) {
+            qWarning("Couldn't remove original file: %s", qPrintable(filePath));
             QFile::remove(tempFilePath);
-            return false;
+            return;
         }
-        
-        if (!QFile::rename(tempFilePath, actualPath)) {
-            qWarning() << "Couldn't rename temporary file to original:" << actualPath;
+
+        if (!QFile::rename(tempFilePath, filePath)) {
+            qWarning("Couldn't rename temporary file to original: %s", qPrintable(filePath));
             // Try to restore from backup
-            if (QFile::exists(actualPath + ".bak")) {
-                QFile::copy(actualPath + ".bak", actualPath);
+            if (QFile::exists(filePath + ".bak")) {
+                QFile::copy(filePath + ".bak", filePath);
             }
-            return false;
+            return;
         }
-        
+
+
         // Verify the written data
-        QFile verifyFile(actualPath);
+        QFile verifyFile(filePath);
         if (verifyFile.open(QIODevice::ReadOnly)) {
             QByteArray verifyData = verifyFile.readAll();
             verifyFile.close();
-            
+
             if (verifyData != jsonData) {
-                qWarning() << "Data verification failed, restoring backup";
-                QFile::remove(actualPath);
-                QFile::copy(actualPath + ".bak", actualPath);
-                return false;
+                qWarning("Data verification failed, restoring backup");
+                QFile::remove(filePath);
+                QFile::copy(filePath + ".bak", filePath);
             }
         }
-        
-        return true;
-    } catch (const std::exception& e) {
-        qWarning() << "Exception while saving games file:" << e.what();
-        return false;
-    } catch (...) {
-        qWarning() << "Unknown exception while saving games file";
-        return false;
+    } catch(const QException & ex) {
+        qDebug() << "Exception catched while saving "  <<  ex.what();
     }
 }
 

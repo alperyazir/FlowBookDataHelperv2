@@ -683,7 +683,7 @@ Dialog {
                 }
                 onClicked: {
                     // Save games to JSON file
-                    if (!gamesParser.saveToFile("games.json")) {
+                    if (!gamesParser.saveToFile()) {
                         console.error("Failed to save games.json");
                     } else {
                         console.log("Games saved successfully");
@@ -780,7 +780,7 @@ Dialog {
                     anchors.fill: parent
                     onClicked: {
                         // Save games.json file
-                        if (gamesParser.saveToFile("games.json")) {
+                        if (gamesParser.saveToFile()) {
                             console.log("Games saved successfully to games.json");
 
                             // Show a brief save confirmation
@@ -2633,7 +2633,7 @@ Dialog {
                     }
                     onClicked: {
                         // Save and close
-                        if (gamesParser.saveToFile("games.json")) {
+                        if (gamesParser.saveToFile()) {
                             console.log("Games saved successfully before closing");
                         } else {
                             console.error("Failed to save games.json before closing");

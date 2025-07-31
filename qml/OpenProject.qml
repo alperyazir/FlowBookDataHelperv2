@@ -277,18 +277,8 @@ Dialog {
     onAccepted: {
         if (!isNullOrWhitespace(selectedProjectPath)) {
             config.initialize(true, selectedProjectPath);
+            gamesParser.loadFromFile(selectedProjectPath);
             print("Project is loading", selectedProjectPath);
-
-            // Load games.json for the current project
-            if (gamesParser && currentProject) {
-                print("Loading games.json for project:", currentProject);
-                gamesParser.currentProjectName = currentProject;
-                if (gamesParser.loadFromFile("games.json")) {
-                    print("Successfully loaded games.json for project:", currentProject);
-                } else {
-                    print("Failed to load games.json for project:", currentProject);
-                }
-            }
         }
     }
 }
