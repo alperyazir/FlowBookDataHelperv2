@@ -1458,7 +1458,7 @@ public:
     Q_INVOKABLE bool loadFromFile(const QString &filePath);
     
     // Save to JSON file
-    Q_INVOKABLE void saveToFile();
+    Q_INVOKABLE bool saveToFile();
     
     // Convert to JSON object
     QJsonObject toJson() const;

@@ -33,7 +33,20 @@ bool GamesParser::loadFromFile(const QString &filePath) {
 //     }
 
     
-    QFile file(actualPath);
+    QFile file(actualPath + "/games.json");
+    if (!file.exists()) {
+        qWarning() << "Games file does not exist, creating:" << actualPath;
+
+        if (!file.open(QIODevice::WriteOnly)) {
+            qWarning() << "Could not create games file:" << actualPath;
+            return false;
+        }
+
+        // İstersen başlangıç içeriği yazabilirsin:
+        file.write("{}");  // Örneğin boş bir JSON
+        file.close();
+    }
+
     if (!file.open(QIODevice::ReadOnly)) {
         qWarning() << "Could not open games file:" << actualPath;
         return false;
@@ -56,7 +69,7 @@ bool GamesParser::loadFromFile(const QString &filePath) {
     return true;
 }
 
-void GamesParser::saveToFile() {
+bool GamesParser::saveToFile() {
     try {
         static QMutex mutex;
         QMutexLocker locker(&mutex);
@@ -73,7 +86,7 @@ void GamesParser::saveToFile() {
         if (!dir.exists()) {
             if (!dir.mkpath(".")) {
                 qWarning("Couldn't create directory: %s", qPrintable(_bookDirectoryName));
-                return;
+                return false;
             }
         }
 
@@ -84,7 +97,7 @@ void GamesParser::saveToFile() {
         QFile tempFile(tempFilePath);
         if (!tempFile.open(QIODevice::WriteOnly)) {
             qWarning("Couldn't open temporary file for writing: %s", qPrintable(tempFilePath));
-            return;
+            return false;
         }
 
         QJsonDocument saveDoc(toJson());
@@ -95,7 +108,7 @@ void GamesParser::saveToFile() {
             qWarning("Failed to write complete data to temporary file");
             tempFile.close();
             QFile::remove(tempFilePath);
-            return;
+            return false;
         }
 
         // Ensure all data is written to disk
@@ -110,7 +123,7 @@ void GamesParser::saveToFile() {
             if (!QFile::copy(filePath, backupPath)) {
                 qWarning("Couldn't create backup file: %s", qPrintable(backupPath));
                 QFile::remove(tempFilePath);
-                return;
+                return false;
             }
         }
 
@@ -118,7 +131,7 @@ void GamesParser::saveToFile() {
         if (!QFile::remove(filePath)) {
             qWarning("Couldn't remove original file: %s", qPrintable(filePath));
             QFile::remove(tempFilePath);
-            return;
+            return false;
         }
 
         if (!QFile::rename(tempFilePath, filePath)) {
@@ -127,7 +140,7 @@ void GamesParser::saveToFile() {
             if (QFile::exists(filePath + ".bak")) {
                 QFile::copy(filePath + ".bak", filePath);
             }
-            return;
+            return false;
         }
 
 
@@ -145,7 +158,9 @@ void GamesParser::saveToFile() {
         }
     } catch(const QException & ex) {
         qDebug() << "Exception catched while saving "  <<  ex.what();
+        return false;
     }
+    return true;
 }
 
 QJsonObject GamesParser::toJson() const {
