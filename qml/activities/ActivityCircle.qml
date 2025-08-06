@@ -232,7 +232,7 @@ Rectangle {
                                 var originalY = adjustedY * (activityImage.sourceSize.height / activityImage.paintedHeight);
 
                                 root.activityModelData.createNewAnswer(originalX, originalY, root.lastWidth, root.lastHeight);
-                                config.bookSets[0].saveToJson();
+                                // config.bookSets[0].saveToJson();
                             }
 
                             onWheel: function (wheel) {
@@ -306,7 +306,7 @@ Rectangle {
                                         if (mouse.button === Qt.MiddleButton) {
                                             activityModelData.removeAnswer(index);
                                             print("answer silindi");
-                                            config.bookSets[0].saveToJson();
+                                            // config.bookSets[0].saveToJson();
                                         }
                                     }
                                 }
@@ -329,7 +329,7 @@ Rectangle {
                                             modelData.isCorrect = false;
 
                                         answer.visible = true;
-                                        config.bookSets[0].saveToJson();
+                                        // config.bookSets[0].saveToJson();
                                     }
                                     onEditingFinished: {
                                         visible = false;
@@ -339,7 +339,7 @@ Rectangle {
                                             modelData.isCorrect = false;
 
                                         answer.visible = true;
-                                        config.bookSets[0].saveToJson();
+                                        // config.bookSets[0].saveToJson();
                                     }
                                 }
 
@@ -389,7 +389,7 @@ Rectangle {
                                     root.lastHeight = adjustedH;
                                     root.lastWidth = adjustedW;
                                     modelData.coords = Qt.rect(originalX, originalY, adjustedW, adjustedH);
-                                    config.bookSets[0].saveToJson();
+                                    // config.bookSets[0].saveToJson();
                                     print("Changes Are Saved Page Detail set status");
                                 }
                             }

@@ -130,6 +130,15 @@ GroupBox {
                     border.width: 1
                     radius: 4
                 }
+
+                onAccepted: {
+                    root.audioModelData.audioPath = audioTextField.text;
+                    audioTextField.focus = false;
+                }
+
+                onTextChanged: {
+                    root.audioModelData.audioPath = audioTextField.text;
+                }
             }
 
             Button {
@@ -279,31 +288,6 @@ GroupBox {
             anchors.horizontalCenter: parent.horizontalCenter
             width: parent.width
             height: parent.height * 0.1
-
-            Button {
-                text: "Save"
-                width: parent.width / 3
-                height: parent.height * .8
-
-                background: Rectangle {
-                    color: parent.hovered ? "#00b3be" : "#009ca6"
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                onClicked: {
-                    root.audioModelData.audioPath = audioTextField.text;
-                    config.bookSets[0].saveToJson();
-                    audioTextField.focus = false;
-                    toast.show("Changes are saved to File!");
-                }
-            }
 
             Button {
                 text: "Delete"

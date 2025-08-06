@@ -6,7 +6,7 @@ import Qt.labs.platform
 import "../../../qml"
 
 Column {
-    property var words: wordsRepeater
+
     width: parent.width
 
     FileDialog {
@@ -192,6 +192,11 @@ Column {
                                 border.width: 1
                                 radius: 4
                             }
+
+                            onAccepted: {
+                                updateData()
+                                focus = false
+                            }
                         }
 
                         Button {
@@ -227,9 +232,23 @@ Column {
                 height: parent.height * .1
                 anchors.horizontalCenter: parent.horizontalCenter
                 onClicked: {
-                    saveChanges();
+
+                    updateData()
                     root.activityModelData.addNewWord("");
+
                 }
+            }
+
+
+        }
+    }
+
+    function updateData() {
+        for (var i = 0; i < wordsRepeater.count; i++) {
+            var item = wordsRepeater.itemAtIndex(i);
+            if (item !== null) {
+                print(item.wText);
+                root.activityModelData.words[i] = item.wText;
             }
         }
     }

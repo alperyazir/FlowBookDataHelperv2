@@ -63,12 +63,32 @@ Rectangle {
                 verticalAlignment: Text.AlignVCenter
             }
             onClicked: {
-                // config.refresh();
-                // toast.show("Config Reloaded");
-
                 config.refreshRecentProjects();
                 openProject.loadRecentProjects();
                 openProject.open();
+            }
+        }
+
+        Button {
+            anchors.verticalCenter: parent.verticalCenter
+            text: "Save"
+            width: 70
+            height: 40
+            background: Rectangle {
+                color: "#009ca6"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                color: "white"
+                font.bold: true
+                anchors.centerIn: parent
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            onClicked: {
+                config.bookSets[0].saveToJson();
+                toast.show("Don't Panic 😎  Saving...");
             }
         }
 
@@ -279,7 +299,7 @@ Rectangle {
         }
         onCheckedChanged: {
             config.bookSets[0].books[0].isModuleSideLeft = checked;
-            config.bookSets[0].saveToJson();
+            // config.bookSets[0].saveToJson();
         }
     }
     function setModuleText() {
