@@ -631,7 +631,7 @@ Item {
                             FlowText {
                                 id: answer
                                 text: modelData.text
-                                color: myColors.answerColor
+                                color: modelData.textColor === "" ? myColors.answerColor : modelData.textColor
                                 rotation: modelData.rotation
                                 height: parent.height
                                 width: parent.width

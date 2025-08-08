@@ -127,7 +127,7 @@ GroupBox {
 
                             TextField {
                                 id: rectTextField
-                                width: parent.width * 0.40
+                                width: parent.width * 0.25
                                 height: parent.height
                                 text: modelData.text
                                 color: "white"
@@ -144,10 +144,31 @@ GroupBox {
                                 }
                             }
 
+                            TextField {
+                                id: rectTextColorField
+                                width: parent.width * 0.20
+                                height: parent.height
+                                text: modelData.textColor
+                                color: "white"
+                                placeholderText: "color"
+                                placeholderTextColor: "gray"
+
+                                background: Rectangle {
+                                    color: "#1A2327"
+                                    border.color: parent.focus ? "#009ca6" : "#445055"
+                                    border.width: 1
+                                    radius: 4
+                                }
+
+                                onTextChanged: {
+                                    modelData.textColor = text;
+                                }
+                            }
+
                             FlowText {
                                 text: "Rot:"
                                 color: "white"
-                                width: parent.width * 0.15
+                                width: parent.width * 0.10
                                 height: parent.height
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.centerIn: undefined

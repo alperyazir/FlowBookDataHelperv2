@@ -165,6 +165,7 @@ struct Answer : public QObject {
     Q_PROPERTY(QRect rectEnd READ rectEnd WRITE setRectEnd NOTIFY rectEndChanged)
     Q_PROPERTY(QPoint lineBegin READ lineBegin WRITE setLineBegin NOTIFY lineBeginChanged)
     Q_PROPERTY(QPoint lineEnd READ lineEnd WRITE setLineEnd NOTIFY lineEndChanged)
+    Q_PROPERTY(QString textColor READ textColor WRITE setTextColor NOTIFY textColorChanged)
 
 public:
     explicit Answer(QObject *parent = nullptr) :
@@ -195,6 +196,7 @@ public:
     QRect _rectEnd;
     QPoint _lineBegin;
     QPoint _lineEnd;
+    QString _textColor;
 
     // Mevcut getter/setter'lar...
     int no() const { return _no; }
@@ -378,6 +380,15 @@ public:
         }
     }
 
+
+    QString textColor() const { return _textColor; }
+    void setTextColor(const QString &textColor) {
+        if (_textColor != textColor) {
+            _textColor = textColor;
+            emit textColorChanged();
+        }
+    }
+
     QJsonObject toJson() const {
         QJsonObject answerObj;
 
@@ -492,6 +503,11 @@ public:
             answerObj["lineEnd"] = lineEndObj;
         }
 
+        if (!_textColor.isEmpty()) {
+            answerObj["text_color"] = _textColor;
+        }
+
+
         return answerObj;
     }
 
@@ -518,6 +534,7 @@ signals:
     void rectEndChanged();
     void lineBeginChanged();
     void lineEndChanged();
+    void textColorChanged();
 };
 
 struct MatchWord : public QObject {
