@@ -192,7 +192,7 @@ Column {
                 var numValue = parseInt(text);
                 if (allowedValues.includes(numValue)) {
                     root.activityModelData.markCount = numValue;
-                    config.bookSets[0].saveToJson();
+                    // config.bookSets[0].saveToJson();
                     print("mark count changed to:", numValue);
                 }
             }

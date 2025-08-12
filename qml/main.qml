@@ -12,6 +12,16 @@ ApplicationWindow {
     visible: true
     color: "#232f34"
 
+    Shortcut {
+        sequence: "Ctrl+S"
+        onActivated: {
+            console.log("Ctrl+S shortcut activated!");
+            toast.show("Don't Panic 😎  Saving...");
+            // Burada kaydetme işlemini yapabilirsiniz
+            config.bookSets[0].saveToJson();
+        }
+    }
+
     Colors {
         id: myColors
     }
@@ -24,12 +34,12 @@ ApplicationWindow {
     }
 
     Content {
-        id: content
-        anchors.top: toolBar.bottom
         anchors.bottom: parent.bottom
-        width: parent.width / 2
         anchors.left: parent.left
         anchors.leftMargin: parent.width / 5.5
+        anchors.top: toolBar.bottom
+        id: content
+        width: parent.width / 2
     }
 
     FlowSideBar {
@@ -139,7 +149,7 @@ ApplicationWindow {
 
         Text {
             id: versionText
-            text: "v2.1.0"  // versiyon numaranızı buraya yazın
+            text: "v2.1.2"  // versiyon numaranızı buraya yazın
             color: "#009ca6"
             anchors.centerIn: parent
             font.pixelSize: 14
@@ -184,4 +194,5 @@ ApplicationWindow {
             }
         }
     }
+
 }

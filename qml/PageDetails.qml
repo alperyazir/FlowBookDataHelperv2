@@ -33,121 +33,123 @@ Item {
         property real lastY: 0
 
         onPressed: mouse => {
-            if (mouse.button === Qt.MiddleButton) {
-                dragging = true;
-                lastX = mouse.x;
-                lastY = mouse.y;
-                //flick.interactive = true; // Enable Flickable interaction
-            } else if (mouse.button === Qt.RightButton) {
-                menu.popup(mouse.x, mouse.y);
-            } else if ((mouse.button === Qt.LeftButton) && root.fillingModeEnabled)
-            // drawing = true
-            // var component = Qt.createComponent("newComponents/NewRectangle.qml")
-            // root.activeFillRectangle = component.createObject(root, {
-            //                                                       "x": mouseArea.mouseX,
-            //                                                       "y": mouseArea.mouseY})
-            {}
-        }
+                       if (mouse.button === Qt.MiddleButton) {
+                           dragging = true;
+                           lastX = mouse.x;
+                           lastY = mouse.y;
+                           //flick.interactive = true; // Enable Flickable interaction
+                       } else if (mouse.button === Qt.RightButton) {
+                           menu.popup(mouse.x, mouse.y);
+                       } else if ((mouse.button === Qt.LeftButton) && root.fillingModeEnabled)
+                       // drawing = true
+                       // var component = Qt.createComponent("newComponents/NewRectangle.qml")
+                       // root.activeFillRectangle = component.createObject(root, {
+                       //                                                       "x": mouseArea.mouseX,
+                       //                                                       "y": mouseArea.mouseY})
+                       {}
+                   }
 
         onReleased: mouse => {
-            if (mouse.button === Qt.MiddleButton) {
-                dragging = false;
-                //flick.interactive = false; // Disable Flickable interaction
-            } else if (mouse.button === Qt.LeftButton && root.fillingModeEnabled)
-            // fillList.push(activeFillRectangle)
-            // sideBar.page = root.page
-            // sideBar.fillVisible = true
-            // sideBar.fillList = root.fillList
+                        if (mouse.button === Qt.MiddleButton) {
+                            dragging = false;
+                            //flick.interactive = false; // Disable Flickable interaction
+                        } else if (mouse.button === Qt.LeftButton && root.fillingModeEnabled)
+                        // fillList.push(activeFillRectangle)
+                        // sideBar.page = root.page
+                        // sideBar.fillVisible = true
+                        // sideBar.fillList = root.fillList
 
-            // var adjustedX = mouseArea.mouseX + flick.contentX
-            // var adjustedY = mouseArea.mouseY + flick.contentY
+                        // var adjustedX = mouseArea.mouseX + flick.contentX
+                        // var adjustedY = mouseArea.mouseY + flick.contentY
 
-            // // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
-            // var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth)
-            // var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight)
+                        // // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
+                        // var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth)
+                        // var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight)
 
-            // config.bookSets[0].saveToJson();
-            // activeFillRectangle.visible = false
-            // drawing = false
-            {}
-        }
+                        // // config.bookSets[0].saveToJson();
+                        // activeFillRectangle.visible = false
+                        // drawing = false
+                        {}
+                    }
 
         onPositionChanged: mouse => {
-            if (dragging) {
-                var dx = mouse.x - lastX;
-                var dy = mouse.y - lastY;
-                flick.contentX -= dx;
-                flick.contentY -= dy;
-                lastX = mouse.x;
-                lastY = mouse.y;
-            }
-        }
+                               if (dragging) {
+                                   var dx = mouse.x - lastX;
+                                   var dy = mouse.y - lastY;
+                                   flick.contentX -= dx;
+                                   flick.contentY -= dy;
+                                   lastX = mouse.x;
+                                   lastY = mouse.y;
+                               }
+                           }
 
         onWheel: event => {
-            // if (event.angleDelta.y > 0) {
-            //     flick.zoomIn();
-            // } else {
-            //     flick.zoomOut();
-            // }
-            event.accepted = true;
-        }
+                     // if (event.angleDelta.y > 0) {
+                     //     flick.zoomIn();
+                     // } else {
+                     //     flick.zoomOut();
+                     // }
+                     event.accepted = true;
+                 }
 
         onPressAndHold: mouse => {
-            var adjustedX = mainMouseArea.mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2);
-            var adjustedY = mainMouseArea.mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2);
+                            var adjustedX = mouse.x - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                            var adjustedY = mouse.y - (flick.contentHeight / 2 - picture.paintedHeight / 2);
 
-            // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
-            var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
-            var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
-            var answer;
-            if (currentSelectionType === "fill") {
-                root.activeSession = root.page.getAvailableSection("fill");
-                answer = root.activeSession.createNewAnswer(originalX, originalY, root.lastSize.width, root.lastSize.height);
-            } else if (currentSelectionType === "circle") {
-                root.activeSession = root.page.getAvailableSection("circle");
-                answer = root.activeSession.createNewAnswer(originalX, originalY, root.lastSize.width, root.lastSize.height);
-            } else if (currentSelectionType === "fillWithColor") {
-                root.activeSession = root.page.getAvailableSection("fillWithColor");
-                answer = root.activeSession.createNewAnswer(originalX, originalY, root.lastSize.width, root.lastSize.height);
-            } else if (currentSelectionType === "drawMatchedLine") {
-                root.activeSession = root.page.getAvailableSection("drawMatchedLine");
-                answer = root.activeSession.createNewAnswerDrawMacthedLine(originalX, originalY, root.lastSize.width, root.lastSize.height);
-            }
+                            print(mouse.x, mouse.y)
 
-            // if(root.activeSession.answers.length>1) {
-            //     lastWidth = root.activeSession.answers[root.activeSession.answers.length -2].width
-            //     lastHeight = root.activeSession.answers[root.activeSession.answers.length -2].height
-            // }
+                            // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
+                            var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
+                            var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
+                            var answer;
+                            if (currentSelectionType === "fill") {
+                                root.activeSession = root.page.getAvailableSection("fill");
+                                answer = root.activeSession.createNewAnswer(originalX, originalY, root.lastSize.width, root.lastSize.height);
+                            } else if (currentSelectionType === "circle") {
+                                root.activeSession = root.page.getAvailableSection("circle");
+                                answer = root.activeSession.createNewAnswer(originalX, originalY, root.lastSize.width, root.lastSize.height);
+                            } else if (currentSelectionType === "fillWithColor") {
+                                root.activeSession = root.page.getAvailableSection("fillWithColor");
+                                answer = root.activeSession.createNewAnswer(originalX, originalY, root.lastSize.width, root.lastSize.height);
+                            } else if (currentSelectionType === "drawMatchedLine") {
+                                root.activeSession = root.page.getAvailableSection("drawMatchedLine");
+                                answer = root.activeSession.createNewAnswerDrawMacthedLine(originalX, originalY, root.lastSize.width, root.lastSize.height);
+                            }
 
-            if (currentSelectionType === "fill") {
-                sideBar.hideAllComponent();
-                sideBar.fillVisible = true;
-                sideBar.page = page;
-                sideBar.section = activeSession;
-                sideBar.fillList = activeSession.answers;
-            } else if (currentSelectionType === "circle") {
-                sideBar.hideAllComponent();
-                sideBar.circleVisible = true;
-                sideBar.page = page;
-                sideBar.section = activeSession;
-                sideBar.circleList = activeSession.answers;
-            } else if (currentSelectionType === "fillWithColor") {
-                sideBar.hideAllComponent();
-                sideBar.fillwColorVisible = true;
-                sideBar.page = page;
-                sideBar.section = activeSession;
-                sideBar.fillWColorList = activeSession.answers;
-            } else if (currentSelectionType === "drawMatchedLine") {
-                sideBar.hideAllComponent();
-                sideBar.drawMatchedVisible = true;
-                sideBar.page = page;
-                sideBar.section = activeSession;
-                sideBar.drawMatchedLineList = activeSession.answers;
-            }
+                            // if(root.activeSession.answers.length>1) {
+                            //     lastWidth = root.activeSession.answers[root.activeSession.answers.length -2].width
+                            //     lastHeight = root.activeSession.answers[root.activeSession.answers.length -2].height
+                            // }
 
-            config.bookSets[0].saveToJson();
-            print("Changes Are Saved activity Fill on Triggered");
-        }
+                            if (currentSelectionType === "fill") {
+                                sideBar.hideAllComponent();
+                                sideBar.fillVisible = true;
+                                sideBar.page = page;
+                                sideBar.section = activeSession;
+                                sideBar.fillList = activeSession.answers;
+                            } else if (currentSelectionType === "circle") {
+                                sideBar.hideAllComponent();
+                                sideBar.circleVisible = true;
+                                sideBar.page = page;
+                                sideBar.section = activeSession;
+                                sideBar.circleList = activeSession.answers;
+                            } else if (currentSelectionType === "fillWithColor") {
+                                sideBar.hideAllComponent();
+                                sideBar.fillwColorVisible = true;
+                                sideBar.page = page;
+                                sideBar.section = activeSession;
+                                sideBar.fillWColorList = activeSession.answers;
+                            } else if (currentSelectionType === "drawMatchedLine") {
+                                sideBar.hideAllComponent();
+                                sideBar.drawMatchedVisible = true;
+                                sideBar.page = page;
+                                sideBar.section = activeSession;
+                                sideBar.drawMatchedLineList = activeSession.answers;
+                            }
+
+                            // config.bookSets[0].saveToJson();
+                            print("Changes Are Saved activity Fill on Triggered");
+                        }
 
         Menu {
             id: menu
@@ -161,8 +163,8 @@ Item {
                     var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
                     var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
-                    root.page.createNewAudioSection(originalX, originalY, root.imageHeights, root.imageHeights, "Enter the audio path");
-                    config.bookSets[0].saveToJson();
+                    root.page.createNewAudioSection(originalX, originalY, root.imageHeights, root.imageHeights, "");
+                    // config.bookSets[0].saveToJson();
                     print("Changes Are Saved activity Audio on Triggered");
                     currentSelectionType = "";
                 }
@@ -177,8 +179,8 @@ Item {
                     var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
                     var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
-                    root.page.createNewVideoSection(originalX, originalY, root.imageHeights, root.imageHeights, "Enter the video path");
-                    config.bookSets[0].saveToJson();
+                    root.page.createNewVideoSection(originalX, originalY, root.imageHeights, root.imageHeights, "");
+                    // config.bookSets[0].saveToJson();
                     print("Changes Are Saved activity Video on Triggered");
                     currentSelectionType = "";
                 }
@@ -211,7 +213,7 @@ Item {
                     sideBar.section = activeSession;
                     sideBar.fillList = activeSession.answers;
 
-                    config.bookSets[0].saveToJson();
+                    // config.bookSets[0].saveToJson();
                     print("Changes Are Saved activity Fill on Triggered");
                 }
             }
@@ -242,7 +244,7 @@ Item {
                     sideBar.section = activeSession;
                     sideBar.circleList = activeSession.answers;
 
-                    config.bookSets[0].saveToJson();
+                    // config.bookSets[0].saveToJson();
                     print("Changes Are Saved activity Circle on Triggered");
                 }
             }
@@ -273,7 +275,7 @@ Item {
                     sideBar.section = activeSession;
                     sideBar.fillWColorList = activeSession.answers;
 
-                    config.bookSets[0].saveToJson();
+                    // config.bookSets[0].saveToJson();
                     print("Changes Are Saved activity Circle on Triggered");
                 }
             }
@@ -304,7 +306,7 @@ Item {
                     sideBar.section = activeSession;
                     sideBar.drawMatchedLineList = activeSession.answers;
 
-                    config.bookSets[0].saveToJson();
+                    // config.bookSets[0].saveToJson();
                     print("Changes Are Saved activity Circle on Triggered");
                 }
             }
@@ -323,7 +325,7 @@ Item {
                         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
                         root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "dragdroppicture");
-                        config.bookSets[0].saveToJson();
+                        // config.bookSets[0].saveToJson();
                         print("Changes Are Saved activity Drag Drop on Triggered");
                         currentSelectionType = "";
                     }
@@ -339,7 +341,7 @@ Item {
                         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
                         root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "dragdroppicturegroup");
-                        config.bookSets[0].saveToJson();
+                        // config.bookSets[0].saveToJson();
                         print("Changes Are Saved activity Drag Drop Picture Group on Triggered");
                         currentSelectionType = "";
                     }
@@ -355,7 +357,7 @@ Item {
                         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
                         root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "fillpicture");
-                        config.bookSets[0].saveToJson();
+                        // config.bookSets[0].saveToJson();
                         print("Changes Are Saved activity Fill Picture on Triggered");
                         currentSelectionType = "";
                     }
@@ -371,7 +373,7 @@ Item {
                         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
                         root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "circle");
-                        config.bookSets[0].saveToJson();
+                        // config.bookSets[0].saveToJson();
                         print("Changes Are Saved Circle on Triggered");
                         currentSelectionType = "";
                     }
@@ -388,7 +390,7 @@ Item {
                         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
                         root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "matchTheWords");
-                        config.bookSets[0].saveToJson();
+                        // config.bookSets[0].saveToJson();
                         print("Changes Are Saved MenuItem onmatchTheWords Triggered");
                     }
                 }
@@ -404,7 +406,7 @@ Item {
                         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
                         root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "puzzleFindWords");
-                        config.bookSets[0].saveToJson();
+                        // config.bookSets[0].saveToJson();
                         print("Changes Are Saved MenuItem Puzzle Find Words Triggered");
                         currentSelectionType = "";
                     }
@@ -421,7 +423,7 @@ Item {
                         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
                         root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "markwithx");
-                        config.bookSets[0].saveToJson();
+                        // config.bookSets[0].saveToJson();
                         print("Changes Are Saved MenuItem Mark With X Triggered");
                         currentSelectionType = "";
                     }
@@ -552,7 +554,7 @@ Item {
                                 var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
                                 modelData.coords = Qt.rect(originalX, originalY, modelData.coords.width, modelData.coords.height);
-                                config.bookSets[0].saveToJson();
+                                // config.bookSets[0].saveToJson();
                                 print("Changes Are Saved Page Detail Audio On Released Triggered");
                             }
                         }
@@ -597,7 +599,7 @@ Item {
                                 var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
                                 modelData.coords = Qt.rect(originalX, originalY, modelData.coords.width, modelData.coords.height);
-                                config.bookSets[0].saveToJson();
+                                // config.bookSets[0].saveToJson();
                                 print("Changes Are Saved Page Detail vide On Released Triggered");
                             }
                         }
@@ -629,7 +631,7 @@ Item {
                             FlowText {
                                 id: answer
                                 text: modelData.text
-                                color: myColors.answerColor
+                                color: modelData.textColor === "" ? myColors.answerColor : modelData.textColor
                                 rotation: modelData.rotation
                                 height: parent.height
                                 width: parent.width
@@ -650,11 +652,9 @@ Item {
                                 }
                                 onReleased: root.setTotalStatus(answerRect, modelData)
                                 onClicked:
-                                // if (mouse.button === Qt.MiddleButton) {
-                                //     sectionItem.currentSection.removeAnswer(index);
-                                //     config.bookSets[0].saveToJson();
-                                //     toast.show("Changes are saved to File!");
-                                // }
+                                    // if (mouse.button === Qt.MiddleButton) {
+                                    //     sectionItem.currentSection.removeAnswer(index);
+                                    // }
                                 {}
                             }
 
@@ -732,11 +732,9 @@ Item {
                                 onReleased: root.setTotalStatus(answerCircleRect, modelData)
 
                                 onClicked:
-                                // if (mouse.button === Qt.MiddleButton) {
-                                //     sectionItem.currentSection.removeAnswer(index);
-                                //     config.bookSets[0].saveToJson();
-                                //     toast.show("Changes are saved to File!");
-                                // }
+                                    // if (mouse.button === Qt.MiddleButton) {
+                                    //     sectionItem.currentSection.removeAnswer(index);
+                                    // }
                                 {}
                             }
 
@@ -813,11 +811,9 @@ Item {
                                 }
                                 onReleased: root.setTotalStatus(answerColorRect, modelData)
                                 onClicked:
-                                // if (mouse.button === Qt.MiddleButton) {
-                                //     sectionItem.currentSection.removeAnswer(index);
-                                //     config.bookSets[0].saveToJson();
-                                //     toast.show("Changes are saved to File!");
-                                // }
+                                    // if (mouse.button === Qt.MiddleButton) {
+                                    //     sectionItem.currentSection.removeAnswer(index);
+                                    // }
                                 {}
                             }
 
@@ -913,7 +909,7 @@ Item {
                                         modelData.rectBegin = Qt.rect(originalX, originalY, adjustedW, adjustedH);
                                         root.lastSize.width = adjustedW;
                                         root.lastSize.height = adjustedH;
-                                        config.bookSets[0].saveToJson();
+                                        // config.bookSets[0].saveToJson();
                                         print("Changes Are Saved Page Detail set status");
                                     }
                                 }
@@ -958,7 +954,7 @@ Item {
                                             modelData.rectBegin = Qt.rect(originalX, originalY, adjustedW, adjustedH);
                                             root.lastSize.width = adjustedW;
                                             root.lastSize.height = adjustedH;
-                                            config.bookSets[0].saveToJson();
+                                            // config.bookSets[0].saveToJson();
                                             print("Changes Are Saved Page Detail set status");
                                         }
                                     }
@@ -998,7 +994,7 @@ Item {
                                         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
                                         modelData.lineBegin = Qt.point(originalX, originalY);
-                                        config.bookSets[0].saveToJson();
+                                        // config.bookSets[0].saveToJson();
                                         print("Changes Are Saved Page Detail set status");
                                     }
                                 }
@@ -1037,7 +1033,7 @@ Item {
                                         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
                                         modelData.lineEnd = Qt.point(originalX, originalY);
-                                        config.bookSets[0].saveToJson();
+                                        // config.bookSets[0].saveToJson();
                                         print("Changes Are Saved Page Detail set status");
                                     }
                                 }
@@ -1111,7 +1107,7 @@ Item {
                                         modelData.rectEnd = Qt.rect(originalX, originalY, adjustedW, adjustedH);
                                         root.lastSize.width = adjustedW;
                                         root.lastSize.height = adjustedH;
-                                        config.bookSets[0].saveToJson();
+                                        // config.bookSets[0].saveToJson();
                                         print("Changes Are Saved Page Detail set status");
                                     }
                                 }
@@ -1157,7 +1153,7 @@ Item {
                                             modelData.rectEnd = Qt.rect(originalX, originalY, adjustedW, adjustedH);
                                             root.lastSize.width = adjustedW;
                                             root.lastSize.height = adjustedH;
-                                            config.bookSets[0].saveToJson();
+                                            // config.bookSets[0].saveToJson();
                                             print("Changes Are Saved Page Detail set status");
                                         }
                                     }
@@ -1205,7 +1201,7 @@ Item {
                                 var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
                                 modelData.activity.coords = Qt.rect(originalX, originalY, modelData.activity.coords.width, modelData.activity.coords.height);
-                                config.bookSets[0].saveToJson();
+                                // config.bookSets[0].saveToJson();
                                 print("Changes Are Saved Page Detail set activity");
                             }
                         }
@@ -1242,7 +1238,7 @@ Item {
         root.lastSize.width = adjustedW;
         root.lastSize.height = adjustedH;
 
-        config.bookSets[0].saveToJson();
+        // config.bookSets[0].saveToJson();
         print("Changes Are Saved Page Detail set status");
     }
 }

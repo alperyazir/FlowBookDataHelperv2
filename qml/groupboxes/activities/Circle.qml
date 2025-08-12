@@ -20,8 +20,6 @@ Column {
                 var newPath = findBooksFolder(selectedFilePath, "books");
                 if (newPath) {
                     root.activityModelData.sectionPath = newPath;
-                    config.bookSets[0].saveToJson();
-                    print("section image is set to:", newPath);
                 } else {
                     console.log("Books klasörü bulunamadı.");
                 }
@@ -194,8 +192,6 @@ Column {
                 var numValue = parseInt(text);
                 if (allowedValues.includes(numValue)) {
                     root.activityModelData.circleCount = numValue;
-                    config.bookSets[0].saveToJson();
-                    print("circle count changed to:", numValue);
                 }
             }
 

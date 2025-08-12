@@ -327,6 +327,7 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
                     answer->_lineBegin = QPoint(cObj["x"].toInt(), cObj["y"].toInt());
                     cObj = aObj["lineEnd"].toObject();
                     answer->_lineEnd = QPoint(cObj["x"].toInt(), cObj["y"].toInt());
+                    answer->_textColor = aObj["text_color"].toString();
                     section->_answers.push_back(answer);
                 }
 

@@ -59,8 +59,6 @@ Rectangle {
         onRemoveSection: {
             page.removeSection(sectionIndex);
 
-            config.bookSets[0].saveToJson();
-            toast.show("Changes are saved to File Activity GroupBox On remove Section!");
         }
     }
 
@@ -76,15 +74,10 @@ Rectangle {
 
         onRemoveSection: {
             page.removeSection(secIndex);
-            config.bookSets[0].saveToJson();
-            toast.show("Changes are saved to File!");
         }
 
         onRemoveAnswer: {
             root.section.removeAnswer(answerIndex);
-            config.bookSets[0].saveToJson();
-            toast.show("Answer Removed!");
-
             root.fillList = root.section.answers;
         }
     }
@@ -101,15 +94,10 @@ Rectangle {
 
         onRemoveSection: {
             page.removeSection(secIndex);
-            config.bookSets[0].saveToJson();
-            toast.show("Changes are saved to File!");
         }
 
         onRemoveAnswer: {
             root.section.removeAnswer(answerIndex);
-            config.bookSets[0].saveToJson();
-            toast.show("Answer Removed!");
-
             root.circleList = root.section.answers;
         }
     }
@@ -123,9 +111,6 @@ Rectangle {
         height: parent.height / 3 * 2
         onRemoveSection: {
             page.removeSection(secIndex);
-
-            config.bookSets[0].saveToJson();
-            toast.show("Changes are saved to File!");
         }
     }
 
@@ -138,9 +123,6 @@ Rectangle {
         height: parent.height / 3 * 2
         onRemoveSection: {
             page.removeSection(secIndex);
-
-            config.bookSets[0].saveToJson();
-            toast.show("Changes are saved to File!");
         }
     }
 
@@ -156,15 +138,10 @@ Rectangle {
 
         onRemoveSection: {
             page.removeSection(secIndex);
-            config.bookSets[0].saveToJson();
-            toast.show("Changes are saved to File!");
         }
 
         onRemoveAnswer: {
             root.section.removeAnswer(answerIndex);
-            config.bookSets[0].saveToJson();
-            toast.show("Answer Removed!");
-
             root.fillWColorList = root.section.answers;
         }
     }
@@ -181,14 +158,10 @@ Rectangle {
 
         onRemoveSection: {
             page.removeSection(secIndex);
-            config.bookSets[0].saveToJson();
-            toast.show("Changes are saved to File!");
         }
 
         onRemoveAnswer: {
             root.section.removeAnswer(answerIndex);
-            config.bookSets[0].saveToJson();
-            toast.show("Answer Removed!");
 
             root.drawMatchedLineList = root.section.answers;
         }

@@ -207,7 +207,7 @@ GroupBox {
                         root.sectionModelData.audioExtra.path = audioTextField.text;
                     }
 
-                    config.bookSets[0].saveToJson();
+                    // config.bookSets[0].saveToJson();
                 }
             }
 
@@ -429,28 +429,6 @@ GroupBox {
             }
 
             Button {
-                text: "Save"
-                width: parent.width / 4
-                height: parent.height * .8
-
-                background: Rectangle {
-                    color: parent.hovered ? "#00b3be" : "#009ca6"
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                onClicked: {
-                    saveChanges();
-                }
-            }
-
-            Button {
                 text: "Delete"
                 width: parent.width / 4
                 height: parent.height * .8
@@ -551,60 +529,4 @@ GroupBox {
         }
     }
 
-    function saveChanges() {
-
-        // drag drop picture
-        for (var i = 0; i < ddpicture.words.count; i++) {
-            var item = ddpicture.words.itemAtIndex(i);
-            if (item !== null) {
-                root.activityModelData.words[i] = item.wText;
-            }
-        }
-        // drag drop picture group
-        for (var i = 0; i < ddppicturegroup.words.count; i++) {
-            var item = ddppicturegroup.words.itemAtIndex(i);
-            if (item !== null) {
-                root.activityModelData.words[i] = item.wText;
-            }
-        }
-        // fill picture
-        for (var i = 0; i < fillpicture.words.count; i++) {
-            var item = fillpicture.words.itemAtIndex(i);
-            if (item !== null) {
-                root.activityModelData.words[i] = item.wText;
-            }
-        }
-
-        // Match Word
-        for (var i = 0; i < matchthewords.words.count; i++) {
-            var item = matchthewords.words.itemAtIndex(i);
-            if (item !== null) {
-                root.activityModelData.matchWord[i].word = item.wordText;
-                root.activityModelData.matchWord[i].imagePath = item.imagePathText;
-            }
-        }
-        // Match sentence
-        for (var i = 0; i < matchthewords.sentences.count; i++) {
-            var item = matchthewords.sentences.itemAtIndex(i);
-            if (item !== null) {
-                root.activityModelData.sentences[i].imagePath = item.imagePathText;
-                root.activityModelData.sentences[i].sentence = item.sentenceText;
-                var witem = matchthewords.words.itemAtIndex(parseInt(item.wordText));
-                if (witem !== null) {
-                    root.activityModelData.sentences[i].word = witem.wordText;
-                }
-            }
-        }
-
-        // find puzzle
-        for (var i = 0; i < findPuzzle.words.count; i++) {
-            var item = findPuzzle.words.itemAtIndex(i);
-            if (item !== null) {
-                root.activityModelData.words[i] = item.wText;
-            }
-        }
-
-        config.bookSets[0].saveToJson();
-        toast.show("Changes are saved to File!");
-    }
 }

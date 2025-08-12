@@ -190,7 +190,7 @@ GroupBox {
                                         confirmBox.visible = true;
                                         confirmBox.type = "answer";
                                         confirmBox.index = index;
-                                        config.bookSets[0].saveToJson();
+                                        // config.bookSets[0].saveToJson();
                                     }
                                 }
                             }
@@ -206,29 +206,6 @@ GroupBox {
             anchors.horizontalCenter: parent.horizontalCenter
             width: parent.width
             height: parent.height * 0.1
-
-            Button {
-                text: "Save"
-                width: parent.width / 3
-                height: parent.height * .8
-
-                background: Rectangle {
-                    color: parent.hovered ? "#00b3be" : "#009ca6"
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                onClicked: {
-                    config.bookSets[0].saveToJson();
-                    toast.show("Changes are saved to File!");
-                }
-            }
 
             Button {
                 text: "Delete"

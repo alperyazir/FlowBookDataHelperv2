@@ -6,8 +6,8 @@ import Qt.labs.platform
 import "../../../qml"
 
 Column {
-    property var words: wordsRepeater
-    property var sentences: sentencesRepeater
+    // property var words: wordsRepeater
+    // property var sentences: sentencesRepeater
     property var activeImage
     width: parent.width
 
@@ -147,6 +147,11 @@ Column {
                                 border.width: 1
                                 radius: 4
                             }
+
+                            onAccepted: {
+                                updateData()
+                                focus = false
+                            }
                         }
                         TextField {
                             id: pictureEdit
@@ -163,6 +168,11 @@ Column {
                                 border.color: parent.focus ? "#009ca6" : "#445055"
                                 border.width: 1
                                 radius: 4
+                            }
+
+                            onAccepted: {
+                                updateData()
+                                focus = false
                             }
                         }
                         Button {
@@ -224,9 +234,8 @@ Column {
                 text: "Add New"
                 anchors.horizontalCenter: parent.horizontalCenter
                 onClicked: {
-                    saveChanges();
+                    updateData();
                     root.activityModelData.createMatchWord("", "");
-                    config.bookSets[0].saveToJson();
                 }
             }
         }
@@ -297,6 +306,10 @@ Column {
                                 border.width: 1
                                 radius: 4
                             }
+                            onAccepted: {
+                                updateData()
+                                focus = false
+                            }
                         }
                         TextField {
                             id: pictureEditRight
@@ -313,6 +326,10 @@ Column {
                                 border.color: parent.focus ? "#009ca6" : "#445055"
                                 border.width: 1
                                 radius: 4
+                            }
+                            onAccepted: {
+                                updateData()
+                                focus = false
                             }
                         }
                         Button {
@@ -376,8 +393,7 @@ Column {
                 text: "Add New"
                 anchors.horizontalCenter: parent.horizontalCenter
                 onClicked: {
-                    saveChanges();
-                    config.bookSets[0].saveToJson();
+                    updateData()
                     root.activityModelData.createSentences("", "", "");
                 }
             }
@@ -390,5 +406,29 @@ Column {
                 return i;
         }
         return "";
+    }
+
+    function updateData() {
+
+
+        for (var i = 0; i < wordsRepeater.count; i++) {
+            var item = wordsRepeater.itemAtIndex(i);
+            if (item !== null) {
+                root.activityModelData.matchWord[i].word = item.wordText;
+                root.activityModelData.matchWord[i].imagePath = item.imagePathText;
+            }
+        }
+        // Match sentence
+        for (var i = 0; i < sentencesRepeater.count; i++) {
+            var item = sentencesRepeater.itemAtIndex(i);
+            if (item !== null) {
+                root.activityModelData.sentences[i].imagePath = item.imagePathText;
+                root.activityModelData.sentences[i].sentence = item.sentenceText;
+                var witem = wordsRepeater.itemAtIndex(parseInt(item.wordText));
+                if (witem !== null) {
+                    root.activityModelData.sentences[i].word = witem.wordText;
+                }
+            }
+        }
     }
 }

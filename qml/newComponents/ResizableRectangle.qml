@@ -69,7 +69,7 @@ Item {
         var yInOriginalImage = (y - verticalEmptySpace) * (originalHeight / displayedHeight);
 
         root.modelData.updatePosition(xInOriginalImage, yInOriginalImage, 100, 50)
-        config.bookSets[0].saveToJson();
+        // config.bookSets[0].saveToJson();
         print("Changes Are Saved Page Detail set status")
     }
 }
