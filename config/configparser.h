@@ -166,6 +166,7 @@ struct Answer : public QObject {
     Q_PROPERTY(QPoint lineBegin READ lineBegin WRITE setLineBegin NOTIFY lineBeginChanged)
     Q_PROPERTY(QPoint lineEnd READ lineEnd WRITE setLineEnd NOTIFY lineEndChanged)
     Q_PROPERTY(QString textColor READ textColor WRITE setTextColor NOTIFY textColorChanged)
+    Q_PROPERTY(bool isTextBold READ isTextBold WRITE setIsTextBold NOTIFY isTextBoldChanged)
 
 public:
     explicit Answer(QObject *parent = nullptr) :
@@ -197,6 +198,7 @@ public:
     QPoint _lineBegin;
     QPoint _lineEnd;
     QString _textColor;
+    bool _isTextBold;
 
     // Mevcut getter/setter'lar...
     int no() const { return _no; }
@@ -389,6 +391,14 @@ public:
         }
     }
 
+    bool isTextBold() const { return _isTextBold; }
+    void setIsTextBold(const bool &isTextBold) {
+        if (_isTextBold != isTextBold) {
+            _isTextBold = isTextBold;
+            emit isTextBoldChanged();
+        }
+    }
+
     QJsonObject toJson() const {
         QJsonObject answerObj;
 
@@ -506,6 +516,9 @@ public:
         if (!_textColor.isEmpty()) {
             answerObj["text_color"] = _textColor;
         }
+        if (_isTextBold) {
+            answerObj["is_text_bold"] = _isTextBold;
+        }
 
 
         return answerObj;
@@ -535,6 +548,7 @@ signals:
     void lineBeginChanged();
     void lineEndChanged();
     void textColorChanged();
+    void isTextBoldChanged();
 };
 
 struct MatchWord : public QObject {

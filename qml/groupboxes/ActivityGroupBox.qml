@@ -40,6 +40,16 @@ GroupBox {
         }
     }
 
+    function saveRemains() {
+        //if (matchthewords.visible) {
+        matchthewords.updateData()
+        ddpicture.updateData()
+        ddppicturegroup.updateData()
+        fillpicture.updateData()
+        findPuzzle.updateData()
+        //}
+    }
+
     property var activityModelData: undefined
     property var sectionModelData: undefined
     signal removeSection
@@ -108,7 +118,9 @@ GroupBox {
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
+                        root.saveRemains()
                         sideBar.activityVisible = false;
+
                     }
                 }
             }
@@ -151,7 +163,7 @@ GroupBox {
             visible: root.activityModelData.type === "puzzleFindWords"
             enabled: visible
             width: parent.width
-            height: parent.height * 0.5
+            height: parent.height * 0.
         }
 
         Circle {
@@ -373,8 +385,8 @@ GroupBox {
         MediaPlayer {
             id: playRecordAudio
             audioOutput:
-            //volume: volumeSlider.value / 100.0
-            AudioOutput {}
+                //volume: volumeSlider.value / 100.0
+                AudioOutput {}
             onSourceChanged: {
                 play();
             }

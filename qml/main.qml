@@ -16,6 +16,9 @@ ApplicationWindow {
         sequence: "Ctrl+S"
         onActivated: {
             console.log("Ctrl+S shortcut activated!");
+
+            sideBar.saveRemains()
+
             toast.show("Don't Panic 😎  Saving...");
             // Burada kaydetme işlemini yapabilirsiniz
             config.bookSets[0].saveToJson();
@@ -149,7 +152,7 @@ ApplicationWindow {
 
         Text {
             id: versionText
-            text: "v2.1.2"  // versiyon numaranızı buraya yazın
+            text: "v2.1.3"  // versiyon numaranızı buraya yazın
             color: "#009ca6"
             anchors.centerIn: parent
             font.pixelSize: 14
@@ -192,6 +195,31 @@ ApplicationWindow {
                 emoji.visible = false;
                 emoji.scale = 0;
             }
+        }
+    }
+
+
+    Timer {
+        id: heartbeatTimer
+        interval: 5000 // 5 saniyede bir
+        repeat: true
+        running: true
+        onTriggered: {
+            var xhr = new XMLHttpRequest();
+            //var url = "http://localhost:3000/helper.php";
+            var url = "https://flowtrack.dreamedtech.com/helper.php";
+            //var url = config.url
+            var jsonData = {
+                "type": "helper",
+                "hostname": config.hostname,
+                "active_book": openProject.currentProject
+            };
+
+            xhr.open("POST", url);
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.send(JSON.stringify(jsonData));
+
+            print("request sent", JSON.stringify(jsonData))
         }
     }
 

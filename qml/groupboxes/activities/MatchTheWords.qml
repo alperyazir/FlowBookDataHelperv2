@@ -310,6 +310,7 @@ Column {
                                 updateData()
                                 focus = false
                             }
+
                         }
                         TextField {
                             id: pictureEditRight

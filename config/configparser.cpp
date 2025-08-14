@@ -328,6 +328,7 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
                     cObj = aObj["lineEnd"].toObject();
                     answer->_lineEnd = QPoint(cObj["x"].toInt(), cObj["y"].toInt());
                     answer->_textColor = aObj["text_color"].toString();
+                    answer->_isTextBold = aObj["is_text_bold"].toBool();
                     section->_answers.push_back(answer);
                 }
 
@@ -431,6 +432,7 @@ QVector<Subtitles *> BookSet::getSubtitles(QString videoPath)
 }
 
 ConfigParser::ConfigParser(QObject *parent) : QObject(parent) {
+    _hostname = QHostInfo::localHostName();
     refreshRecentProjects();
 }
 

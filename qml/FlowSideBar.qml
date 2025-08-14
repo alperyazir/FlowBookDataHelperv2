@@ -32,6 +32,13 @@ Rectangle {
 
     color: "#1A2327" // Dark background
 
+
+    function saveRemains() {
+        if (activityVisible) {
+            activityGB.saveRemains()
+        }
+    }
+
     // FileDialog bileşeni
     FileDialog {
         id: fileDialog
@@ -212,5 +219,8 @@ Rectangle {
         circleVisible = false;
         fillwColorVisible = false;
         drawMatchedVisible = false;
+
+        activityGB.saveRemains()
     }
+
 }

@@ -146,7 +146,7 @@ GroupBox {
 
                             TextField {
                                 id: rectTextColorField
-                                width: parent.width * 0.20
+                                width: parent.width * 0.15
                                 height: parent.height
                                 text: modelData.textColor
                                 color: "white"
@@ -165,18 +165,28 @@ GroupBox {
                                 }
                             }
 
+                            CheckBox {
+                                width: parent.width * 0.1
+                                height: parent.height
+                                checked: modelData.isTextBold
+
+                                onCheckedChanged: {
+                                    modelData.isTextBold = checked
+                                }
+                            }
+
                             FlowText {
                                 text: "Rot:"
                                 color: "white"
                                 width: parent.width * 0.10
-                                height: parent.height
+                                height: parent.height * 0.6
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.centerIn: undefined
                             }
 
                             SpinBox {
                                 id: rectRotationField
-                                width: parent.width * 0.25
+                                width: parent.width * 0.20
                                 height: parent.height
                                 value: modelData.rotation
                                 editable: true

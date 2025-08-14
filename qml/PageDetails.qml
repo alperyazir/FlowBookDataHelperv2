@@ -635,6 +635,7 @@ Item {
                                 rotation: modelData.rotation
                                 height: parent.height
                                 width: parent.width
+                                font.bold: modelData.isTextBold
                             }
 
                             MouseArea {
