@@ -163,7 +163,7 @@ GroupBox {
             visible: root.activityModelData.type === "puzzleFindWords"
             enabled: visible
             width: parent.width
-            height: parent.height * 0.
+            height: parent.height * 0.5
         }
 
         Circle {

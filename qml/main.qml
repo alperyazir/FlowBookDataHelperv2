@@ -152,7 +152,7 @@ ApplicationWindow {
 
         Text {
             id: versionText
-            text: "v2.1.3"  // versiyon numaranızı buraya yazın
+            text: "v2.1.4"  // versiyon numaranızı buraya yazın
             color: "#009ca6"
             anchors.centerIn: parent
             font.pixelSize: 14
