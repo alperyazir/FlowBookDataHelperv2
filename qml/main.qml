@@ -237,7 +237,7 @@ ApplicationWindow {
 
     Timer {
         id: saveTimer
-        interval: 1000 // 5 saniyede bir
+        interval: 60000 // 5 saniyede bir
         repeat: true
         running: true
         onTriggered: {
