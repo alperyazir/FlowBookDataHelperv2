@@ -87,8 +87,8 @@ Rectangle {
                 verticalAlignment: Text.AlignVCenter
             }
             onClicked: {
-                config.bookSets[0].saveToJson();
-                toast.show("Don't Panic 😎  Saving...");
+
+                save()
             }
         }
 

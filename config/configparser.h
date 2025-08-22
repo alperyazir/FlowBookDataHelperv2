@@ -455,7 +455,9 @@ public:
         if (!_letters.isEmpty()) {
             QJsonArray lettersArray;
             for (const Letter *letter : _letters) {
-                lettersArray.append(letter->toJson());
+                if (letter) { // Null check eklendi
+                    lettersArray.append(letter->toJson());
+                }
             }
             answerObj["letters"] = lettersArray;
         }
@@ -745,7 +747,14 @@ public:
         return l;
     }
     void setAnswers(const QVariantList &answers) {
+        // CRASH-SAFE: Eski objeler için memory cleanup
+        for (Answer *answer : _answers) {
+            if (answer) {
+                answer->deleteLater();
+            }
+        }
         _answers.clear();
+        
         for (const QVariant &a : answers) {
             Answer *answer = qobject_cast<Answer*>(a.value<QObject*>());
             if (answer) {
@@ -756,20 +765,27 @@ public:
     }
 
     Q_INVOKABLE void createNewAnswer(int x, int y, int w, int h, const QString &text = "" ) {
-        Answer *answer = new Answer;
-        answer->setCoords(QRect(x,y,w,h));
-        answer->setText(text);
+        try {
+            Answer *answer = new Answer(this); // Parent set edildi
+            answer->setCoords(QRect(x,y,w,h));
+            answer->setText(text);
 
-        _answers.push_back(answer);
-        emit answersChanged();
+            _answers.push_back(answer);
+            emit answersChanged();
+        } catch (...) {
+            qCritical("Exception in createNewAnswer");
+        }
     }
 
     Q_INVOKABLE void removeAnswer(int index) {
         if (index >= 0 && index < _answers.size()) {
+            Answer *answer = _answers[index];
             _answers.erase(_answers.begin() + index);
+            if (answer) {
+                answer->deleteLater(); // Qt-safe deletion
+            }
             emit answersChanged();
         }
-
     }
 
 
@@ -822,7 +838,7 @@ public:
     }
 
     Q_INVOKABLE void createMatchWord(const QString &word, const QString &imagePath) {
-        MatchWord *matchWord = new MatchWord;
+        MatchWord *matchWord = new MatchWord(this); // Parent set edildi
         matchWord->setWord(word);
         matchWord->setImagePath(imagePath);
 
@@ -832,7 +848,11 @@ public:
 
     Q_INVOKABLE void removeMatchWord(int index) {
         if (index >= 0 && index < _matchWord.size()) {
+            MatchWord *word = _matchWord[index];
             _matchWord.erase(_matchWord.begin() + index);
+            if (word) {
+                word->deleteLater(); // Qt-safe deletion
+            }
             emit matchWordChanged();
         }
     }
@@ -856,7 +876,7 @@ public:
     }
 
     Q_INVOKABLE void createSentences(const QString &word, const QString &sentences, const QString &imagePath) {
-        Sentences *sentence = new Sentences;
+        Sentences *sentence = new Sentences(this); // Parent set edildi
         sentence->setWord(word);
         sentence->setImagePath(imagePath);
         sentence->setSentence(sentences);
@@ -867,10 +887,13 @@ public:
 
     Q_INVOKABLE void removeSentences(int index) {
         if (index >= 0 && index < _sentences.size()) {
+            Sentences *sentence = _sentences[index];
             _sentences.erase(_sentences.begin() + index);
+            if (sentence) {
+                sentence->deleteLater(); // Qt-safe deletion
+            }
             emit sentencesChanged();
         }
-
     }
 
     QVariantList circleExtra() const {
@@ -986,7 +1009,9 @@ public:
         if (!_answers.isEmpty()) {
             QJsonArray answersArray;
             for (const Answer *answer : _answers) {
-                answersArray.append(answer->toJson());
+                if (answer) { // Null check eklendi
+                    answersArray.append(answer->toJson());
+                }
             }
             activityObj["answer"] = answersArray;
         }
@@ -994,7 +1019,9 @@ public:
         if (!_sentences.isEmpty()) {
             QJsonArray sentencesArray;
             for (const Sentences *sentence : _sentences) {
-                sentencesArray.append(sentence->toJson());
+                if (sentence) { // Null check eklendi
+                    sentencesArray.append(sentence->toJson());
+                }
             }
             activityObj["sentences"] = sentencesArray;
         }
@@ -1010,7 +1037,9 @@ public:
         if (!_matchWord.isEmpty()) {
             QJsonArray matchWordsArray;
             for (const MatchWord *matchWord : _matchWord) {
-                matchWordsArray.append(matchWord->toJson());
+                if (matchWord) { // Null check eklendi
+                    matchWordsArray.append(matchWord->toJson());
+                }
             }
             activityObj["match_words"] = matchWordsArray;
         }
@@ -1018,7 +1047,9 @@ public:
         if (!_circleExtra.isEmpty()) {
             QJsonArray circleExtraArray;
             for (const CircleExtra *circleExtra : _circleExtra) {
-                circleExtraArray.append(circleExtra->toJson());
+                if (circleExtra) { // Null check eklendi
+                    circleExtraArray.append(circleExtra->toJson());
+                }
             }
             activityObj["circle_extra"] = circleExtraArray;
         }
@@ -1307,7 +1338,9 @@ public:
         if (!_subtitles.isEmpty()) {
             QJsonArray subtitlesArray;
             for (const Subtitles *subtitle : _subtitles) {
-                subtitlesArray.append(subtitle->toJson());
+                if (subtitle) { // Null check eklendi
+                    subtitlesArray.append(subtitle->toJson());
+                }
             }
             videoObj["subtitles"] = subtitlesArray;
         }
@@ -1448,17 +1481,22 @@ public:
     }
 
     Q_INVOKABLE Answer* createNewAnswer(int x, int y, int w, int h, const QString &text = "" ) {
-        Answer *answer = new Answer;
-        answer->setCoords(QRect(x,y,w,h));
-        answer->setText(text);
-               
-        _answers.push_back(answer);
-        emit answersChanged();
-        return answer;
+        try {
+            Answer *answer = new Answer(this); // Parent set edildi
+            answer->setCoords(QRect(x,y,w,h));
+            answer->setText(text);
+                   
+            _answers.push_back(answer);
+            emit answersChanged();
+            return answer;
+        } catch (...) {
+            qCritical("Exception in Section::createNewAnswer");
+            return nullptr;
+        }
     }
 
     Q_INVOKABLE Answer * createNewAnswerDrawMacthedLine(int x, int y, int w, int h ) {
-        Answer *answer = new Answer;
+        Answer *answer = new Answer(this); // Parent set edildi
         answer->setRectBegin(QRect(x,y,w,h));
         answer->setRectEnd(QRect(x+ 150,y,w,h));
         answer->setLineBegin(QPoint(x, y));
@@ -1473,7 +1511,11 @@ public:
 
     Q_INVOKABLE void removeAnswer(int index) {
         if (index >= 0 && index < _answers.size()) {
+            Answer *answer = _answers[index];
             _answers.removeAt(index);
+            if (answer) {
+                answer->deleteLater(); // Qt-safe deletion
+            }
             emit answersChanged();
         }
     }
@@ -1488,7 +1530,7 @@ public:
     }
 
     Q_INVOKABLE AudioExtra* createAudioExtra(const QString &text = "" ) {
-        AudioExtra *newAudioExtra = new AudioExtra;
+        AudioExtra *newAudioExtra = new AudioExtra(this); // Parent set edildi
         newAudioExtra->setPath(text);
         _audio_extra = newAudioExtra;
         emit audioExtraChanged();
@@ -1571,7 +1613,9 @@ public:
         if (!_freeTextFields.isEmpty()) {
             QJsonArray freeTextFieldsArray;
             for (const FreeTextFields *field : _freeTextFields) {
-                freeTextFieldsArray.append(field->toJson());
+                if (field) { // Null check eklendi
+                    freeTextFieldsArray.append(field->toJson());
+                }
             }
             sectionObj["freeTextFields"] = freeTextFieldsArray;
         }
@@ -1583,7 +1627,9 @@ public:
         if (!_answers.isEmpty()) {
             QJsonArray answersArray;
             for (const Answer *answer : _answers) {
-                answersArray.append(answer->toJson());
+                if (answer) { // Null check eklendi
+                    answersArray.append(answer->toJson());
+                }
             }
             sectionObj["answer"] = answersArray;
         }
@@ -1704,7 +1750,9 @@ public:
         if (!_sections.isEmpty()) {
             QJsonArray sectionsArray;
             for (const Section *section : _sections) {
-                sectionsArray.append(section->toJson());
+                if (section) { // Null check eklendi
+                    sectionsArray.append(section->toJson());
+                }
             }
             pageObj["sections"] = sectionsArray;
         }
@@ -1713,7 +1761,7 @@ public:
     }
 
     Q_INVOKABLE Section * createNewAudioSection(int x, int y, int w , int h, const QString &audioPath) {
-        Section *newSection = new Section();
+        Section *newSection = new Section(this); // Parent set edildi
         newSection->setType("audio");
         newSection->setAudioPath(audioPath);
         newSection->setCoords(QRect(x,y,w,h));
@@ -1724,9 +1772,9 @@ public:
     }
 
     Q_INVOKABLE Section * createNewVideoSection(int x, int y, int w , int h, const QString &videoPath) {
-        Section *newSection = new Section();
+        Section *newSection = new Section(this); // Parent set edildi
         newSection->setType("video");
-        Video *video = new Video;
+        Video *video = new Video(newSection); // Parent set edildi
         video->setPath(videoPath);
         newSection->setVideo(QVariant::fromValue(video));
         newSection->setCoords(QRect(x,y,w,h));
@@ -1737,8 +1785,8 @@ public:
     }
 
     Q_INVOKABLE Section * createNewActivity(int x, int y, int w , int h, const QString &type, int circleCount = 2, int markCount = 2) {
-        Section *newSection = new Section();
-        Activity *activity = new Activity;
+        Section *newSection = new Section(this); // Parent set edildi
+        Activity *activity = new Activity(newSection); // Parent set edildi
         activity->setCoords(QRect(x,y,w,h));
         activity->setType(type);
         activity->setCircleCount(circleCount);
@@ -1751,29 +1799,31 @@ public:
     }
 
     Q_INVOKABLE Section * refreshSection() {
-        _sections.append(new Section);
+        // CRASH-SAFE: Sadece signal emit et, gereksiz allocation yapma
         emit sectionsChanged();
-        _sections.pop_back();
         return nullptr;
     }
     Q_INVOKABLE Section * getAvailableSection(const QString &type) {
         for (Section *section: _sections) {
-            if (section->type() == type) {
+            if (section && section->type() == type) { // Null check eklendi
                 return section;
             }
         }
 
-        Section *newSection = new Section;
+        Section *newSection = new Section(this); // Parent set edildi
         newSection->setType(type);
         _sections.push_back(newSection);
         emit sectionsChanged();
         return newSection;
-
     }
 
     Q_INVOKABLE void removeSection(int index) {
         if (index >= 0 && index < _sections.size()) {
+            Section *section = _sections[index];
             _sections.removeAt(index);
+            if (section) {
+                section->deleteLater(); // Qt-safe deletion
+            }
             emit sectionsChanged();
         }
     }
@@ -2165,7 +2215,9 @@ public:
         if (!_quizGameQuestions.isEmpty()) {
             QJsonArray quizQuestionsArray;
             for (const QuizGameQuestion *question : _quizGameQuestions) {
-                quizQuestionsArray.append(question->toJson());
+                if (question) { // Null check eklendi
+                    quizQuestionsArray.append(question->toJson());
+                }
             }
             gameObj["quiz_questions"] = quizQuestionsArray;
         }
@@ -2173,7 +2225,9 @@ public:
         if (!_sentenceGameQuestions.isEmpty()) {
             QJsonArray sentenceQuestionsArray;
             for (const SentenceGameQuestion *question : _sentenceGameQuestions) {
-                sentenceQuestionsArray.append(question->toJson());
+                if (question) { // Null check eklendi
+                    sentenceQuestionsArray.append(question->toJson());
+                }
             }
             gameObj["sentence_questions"] = sentenceQuestionsArray;
         }
@@ -2181,7 +2235,9 @@ public:
         if (!_memoryGameImages.isEmpty()) {
             QJsonArray memoryImagesArray;
             for (const MemoryGameImages *image : _memoryGameImages) {
-                memoryImagesArray.append(image->toJson());
+                if (image) { // Null check eklendi
+                    memoryImagesArray.append(image->toJson());
+                }
             }
             gameObj["memory_images"] = memoryImagesArray;
         }
@@ -2282,7 +2338,9 @@ public:
         if (!_games.isEmpty()) {
             QJsonArray gamesArray;
             for (const Game *game : _games) {
-                gamesArray.append(game->toJson());
+                if (game) { // Null check eklendi
+                    gamesArray.append(game->toJson());
+                }
             }
             moduleObj["games"] = gamesArray;
         }
@@ -2290,7 +2348,9 @@ public:
         if (!_pages.isEmpty()) {
             QJsonArray pagesArray;
             for (const Page *page : _pages) {
-                pagesArray.append(page->toJson());
+                if (page) { // Null check eklendi
+                    pagesArray.append(page->toJson());
+                }
             }
             moduleObj["pages"] = pagesArray;
         }
@@ -2418,7 +2478,9 @@ public:
         if (!_modules.isEmpty()) {
             QJsonArray modulesArray;
             for (const Module *module : _modules) {
-                modulesArray.append(module->toJson());
+                if (module) { // Null check eklendi
+                    modulesArray.append(module->toJson());
+                }
             }
             bookObj["modules"] = modulesArray;
         }
@@ -2505,7 +2567,25 @@ public:
                 return;
             }
 
-            QJsonDocument saveDoc(toJson());
+            // CRASH-SAFE: JSON serialization with error checking
+            QJsonObject jsonObj;
+            try {
+                jsonObj = toJson();
+            } catch (...) {
+                qCritical("Exception during JSON serialization");
+                tempFile.close();
+                QFile::remove(tempFilePath);
+                return;
+            }
+            
+            if (jsonObj.isEmpty()) {
+                qWarning("JSON object is empty, aborting save");
+                tempFile.close();
+                QFile::remove(tempFilePath);
+                return;
+            }
+
+            QJsonDocument saveDoc(jsonObj);
             QByteArray jsonData = saveDoc.toJson();
 
             // Write to temporary file
@@ -2562,7 +2642,11 @@ public:
                 }
             }
         } catch(const QException & ex) {
-            qDebug() << "Exception catched while saving "  <<  ex.what();
+            qCritical() << "QException caught while saving:" << ex.what();
+        } catch(const std::exception & ex) {
+            qCritical() << "std::exception caught while saving:" << ex.what();
+        } catch(...) {
+            qCritical() << "Unknown exception caught while saving";
         }
     }
 
@@ -2670,7 +2754,9 @@ public:
 
         QJsonArray booksArray;
         for (const Book *book : _books) {
-            booksArray.append(book->toJson());
+            if (book) { // Null check eklendi
+                booksArray.append(book->toJson());
+            }
         }
         root["books"] = booksArray;
 

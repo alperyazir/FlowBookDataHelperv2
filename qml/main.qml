@@ -12,16 +12,30 @@ ApplicationWindow {
     visible: true
     color: "#232f34"
 
+    function save() {
+        console.log("Ctrl+S shortcut activated!");
+
+        sideBar.saveRemains();
+
+        // CRASH-SAFE: Güvenli kaydetme
+        try {
+            if (config && config.bookSets && config.bookSets.length > 0) {
+                config.bookSets[0].saveToJson();
+                toast.show("Changes saved successfully!");
+            } else {
+                console.warn("No data to save!");
+                toast.show("No data to save!");
+            }
+        } catch (error) {
+            console.error("Save error:", error);
+            toast.show("Save failed! Check console for details.");
+        }
+    }
+
     Shortcut {
         sequence: "Ctrl+S"
         onActivated: {
-            console.log("Ctrl+S shortcut activated!");
-
-            sideBar.saveRemains()
-
-            toast.show("Don't Panic 😎  Saving...");
-            // Burada kaydetme işlemini yapabilirsiniz
-            config.bookSets[0].saveToJson();
+            save()
         }
     }
 
@@ -37,11 +51,11 @@ ApplicationWindow {
     }
 
     Content {
+        id: content
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.leftMargin: parent.width / 5.5
         anchors.top: toolBar.bottom
-        id: content
         width: parent.width / 2
     }
 
@@ -72,8 +86,7 @@ ApplicationWindow {
             font.pixelSize: 30
         }
         onAccepted: {
-            config.bookSets[0].saveToJson();
-            toast.show("Changes are saved to File!");
+            save()
             Qt.quit();
         }
         onRejected: {}
@@ -152,7 +165,7 @@ ApplicationWindow {
 
         Text {
             id: versionText
-            text: "v2.1.4"  // versiyon numaranızı buraya yazın
+            text: "v2.2.0"  // versiyon numaranızı buraya yazın
             color: "#009ca6"
             anchors.centerIn: parent
             font.pixelSize: 14
@@ -198,7 +211,6 @@ ApplicationWindow {
         }
     }
 
-
     Timer {
         id: heartbeatTimer
         interval: 5000 // 5 saniyede bir
@@ -219,8 +231,17 @@ ApplicationWindow {
             xhr.setRequestHeader("Content-Type", "application/json");
             xhr.send(JSON.stringify(jsonData));
 
-            print("request sent", JSON.stringify(jsonData))
+            print("request sent", JSON.stringify(jsonData));
         }
     }
 
+    Timer {
+        id: saveTimer
+        interval: 1000 // 5 saniyede bir
+        repeat: true
+        running: true
+        onTriggered: {
+            save()
+        }
+    }
 }
