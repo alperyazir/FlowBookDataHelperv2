@@ -31,7 +31,7 @@ GroupBox {
             if (selectedFilePath) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
                 if (newPath) {
-                    audioTextField.text = newPath;
+                    root.audioModelData.audioPath = newPath;
                 } else {
                     console.log("Books klasörü bulunamadı.");
                 }
@@ -42,6 +42,8 @@ GroupBox {
     property var audioModelData: undefined
     property int sectionIndex
     signal removeSection(int secIndex)
+
+
 
     Column {
         anchors.fill: parent

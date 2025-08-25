@@ -555,7 +555,7 @@ Item {
 
                                 modelData.coords = Qt.rect(originalX, originalY, modelData.coords.width, modelData.coords.height);
                                 // config.bookSets[0].saveToJson();
-                                print("Changes Are Saved Page Detail Audio On Released Triggered");
+                                //print("Changes Are Saved Page Detail Audio On Released Triggered");
                             }
                         }
                     }
@@ -600,7 +600,7 @@ Item {
 
                                 modelData.coords = Qt.rect(originalX, originalY, modelData.coords.width, modelData.coords.height);
                                 // config.bookSets[0].saveToJson();
-                                print("Changes Are Saved Page Detail vide On Released Triggered");
+                                //print("Changes Are Saved Page Detail vide On Released Triggered");
                             }
                         }
                     }

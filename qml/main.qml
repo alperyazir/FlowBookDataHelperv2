@@ -231,7 +231,7 @@ ApplicationWindow {
             xhr.setRequestHeader("Content-Type", "application/json");
             xhr.send(JSON.stringify(jsonData));
 
-            print("request sent", JSON.stringify(jsonData));
+            //print("request sent", JSON.stringify(jsonData));
         }
     }
 

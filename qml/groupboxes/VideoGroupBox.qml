@@ -29,7 +29,7 @@ GroupBox {
             if (selectedFilePath) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
                 if (newPath) {
-                    videoTextField.text = newPath;
+                    root.videoModelData.video.path = newPath;
                 } else {
                     console.log("Books klasörü bulunamadı.");
                 }
