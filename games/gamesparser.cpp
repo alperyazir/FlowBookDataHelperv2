@@ -100,7 +100,25 @@ bool GamesParser::saveToFile() {
             return false;
         }
 
-        QJsonDocument saveDoc(toJson());
+        // CRASH-SAFE: JSON serialization with error checking
+        QJsonObject jsonObj;
+        try {
+            jsonObj = toJson();
+        } catch (...) {
+            qCritical("Exception during JSON serialization in GamesParser");
+            tempFile.close();
+            QFile::remove(tempFilePath);
+            return false;
+        }
+        
+        if (jsonObj.isEmpty()) {
+            qWarning("JSON object is empty, aborting save");
+            tempFile.close();
+            QFile::remove(tempFilePath);
+            return false;
+        }
+
+        QJsonDocument saveDoc(jsonObj);
         QByteArray jsonData = saveDoc.toJson();
 
         // Write to temporary file
@@ -157,7 +175,13 @@ bool GamesParser::saveToFile() {
             }
         }
     } catch(const QException & ex) {
-        qDebug() << "Exception catched while saving "  <<  ex.what();
+        qCritical() << "QException caught while saving games:" << ex.what();
+        return false;
+    } catch(const std::exception & ex) {
+        qCritical() << "std::exception caught while saving games:" << ex.what();
+        return false;
+    } catch(...) {
+        qCritical() << "Unknown exception caught while saving games";
         return false;
     }
     return true;
@@ -169,7 +193,9 @@ QJsonObject GamesParser::toJson() const {
     if (!_levels.isEmpty()) {
         QJsonArray levelsArray;
         for (const Level *level : _levels) {
-            levelsArray.append(level->toJson());
+            if (level) { // Null check eklendi
+                levelsArray.append(level->toJson());
+            }
         }
         obj["levels"] = levelsArray;
     }
@@ -204,49 +230,49 @@ Level* GamesParser::createLevel(int levelNumber, const QString &title) {
 
 // Factory methods for creating specific game types
 QuizGame* GamesParser::createQuizGame() {
-    QuizGame *game = new QuizGame();
+    QuizGame *game = new QuizGame(this); // Parent set edildi
     // Initialize with empty questions array
     emit game->questionsChanged();
     return game;
 }
 
 MemoryGame* GamesParser::createMemoryGame() {
-    MemoryGame *game = new MemoryGame();
+    MemoryGame *game = new MemoryGame(this); // Parent set edildi
     // Initialize with empty questions array
     emit game->questionsChanged();
     return game;
 }
 
 OrderGame* GamesParser::createOrderGame() {
-    OrderGame *game = new OrderGame();
+    OrderGame *game = new OrderGame(this); // Parent set edildi
     // Initialize with empty questions array
     emit game->questionsChanged();
     return game;
 }
 
 SelectorGame* GamesParser::createSelectorGame() {
-    SelectorGame *game = new SelectorGame();
+    SelectorGame *game = new SelectorGame(this); // Parent set edildi
     // Initialize with empty questions array
     emit game->questionsChanged();
     return game;
 }
 
 BuilderGame* GamesParser::createBuilderGame() {
-    BuilderGame *game = new BuilderGame();
+    BuilderGame *game = new BuilderGame(this); // Parent set edildi
     // Initialize with empty questions array
     emit game->questionsChanged();
     return game;
 }
 
 CrosspuzzleGame* GamesParser::createCrosspuzzleGame() {
-    CrosspuzzleGame *game = new CrosspuzzleGame();
+    CrosspuzzleGame *game = new CrosspuzzleGame(this); // Parent set edildi
     // Initialize with empty questions array
     emit game->questionsChanged();
     return game;
 }
 
 RaceGame* GamesParser::createRaceGame() {
-    RaceGame *game = new RaceGame();
+    RaceGame *game = new RaceGame(this); // Parent set edildi
     // Initialize with empty questions array
     emit game->questionsChanged();
     return game;
@@ -254,21 +280,29 @@ RaceGame* GamesParser::createRaceGame() {
 
 // Methods for managing quiz questions and answers
 QuizAnswer* GamesParser::createQuizAnswer(const QString &text, bool isCorrect) {
-    QuizAnswer *answer = new QuizAnswer();
+    QuizAnswer *answer = new QuizAnswer(this); // Parent set edildi
     answer->setText(text);
     answer->setIsCorrect(isCorrect);
     return answer;
 }
 
 QuizQuestion* GamesParser::createQuizQuestion(const QString &question, const QString &image) {
-    QuizQuestion *quizQuestion = new QuizQuestion();
+    QuizQuestion *quizQuestion = new QuizQuestion(this); // Parent set edildi
     quizQuestion->setQuestion(question);
     quizQuestion->setImage(image);
     
-    // Create default 3 answers
-    QuizAnswer *answer1 = createQuizAnswer("", false);
-    QuizAnswer *answer2 = createQuizAnswer("", false);
-    QuizAnswer *answer3 = createQuizAnswer("", false);
+    // Create default 3 answers with parent
+    QuizAnswer *answer1 = new QuizAnswer(quizQuestion);
+    answer1->setText("");
+    answer1->setIsCorrect(false);
+    
+    QuizAnswer *answer2 = new QuizAnswer(quizQuestion);
+    answer2->setText("");
+    answer2->setIsCorrect(false);
+    
+    QuizAnswer *answer3 = new QuizAnswer(quizQuestion);
+    answer3->setText("");
+    answer3->setIsCorrect(false);
     
     quizQuestion->_answers.append(answer1);
     quizQuestion->_answers.append(answer2);
@@ -314,7 +348,7 @@ void GamesParser::removeAnswerFromQuestion(QuizQuestion* question, int index) {
 
 // Methods for managing memory questions
 MemoryQuestion* GamesParser::createMemoryQuestion(const QString &image) {
-    MemoryQuestion *memoryQuestion = new MemoryQuestion();
+    MemoryQuestion *memoryQuestion = new MemoryQuestion(this); // Parent set edildi
     memoryQuestion->setImage(image);
     return memoryQuestion;
 }
@@ -344,7 +378,7 @@ void GamesParser::removeQuestionFromMemoryGame(MemoryGame* game, int index) {
 
 // Methods for managing order questions
 OrderQuestion* GamesParser::createOrderQuestion(const QVariantList &words) {
-    OrderQuestion *orderQuestion = new OrderQuestion();
+    OrderQuestion *orderQuestion = new OrderQuestion(this); // Parent set edildi
     orderQuestion->setWords(words);
     return orderQuestion;
 }
@@ -374,7 +408,7 @@ void GamesParser::removeQuestionFromOrderGame(OrderGame* game, int index) {
 
 // Methods for managing selector questions and answers
 SelectorAnswer* GamesParser::createSelectorAnswer(const QString &text, const QString &image, bool isCorrect) {
-    SelectorAnswer *selectorAnswer = new SelectorAnswer();
+    SelectorAnswer *selectorAnswer = new SelectorAnswer(this); // Parent set edildi
     selectorAnswer->setText(text);
     selectorAnswer->setImage(image);
     selectorAnswer->setIsCorrect(isCorrect);
@@ -382,7 +416,7 @@ SelectorAnswer* GamesParser::createSelectorAnswer(const QString &text, const QSt
 }
 
 SelectorQuestion* GamesParser::createSelectorQuestion(const QString &image, const QString &audio, const QString &video) {
-    SelectorQuestion *selectorQuestion = new SelectorQuestion();
+    SelectorQuestion *selectorQuestion = new SelectorQuestion(this); // Parent set edildi
     selectorQuestion->setImage(image);
     selectorQuestion->setAudio(audio);
     selectorQuestion->setVideo(video);
@@ -434,7 +468,7 @@ void GamesParser::removeAnswerFromSelectorQuestion(SelectorQuestion* question, i
 
 // Methods for managing builder questions
 BuilderQuestion* GamesParser::createBuilderQuestion(const QString &question, const QString &image, const QString &audio, const QString &video, const QVariantList &words) {
-    BuilderQuestion *builderQuestion = new BuilderQuestion();
+    BuilderQuestion *builderQuestion = new BuilderQuestion(this); // Parent set edildi
     builderQuestion->setQuestion(question);
     builderQuestion->setImage(image);
     builderQuestion->setAudio(audio);
@@ -469,13 +503,13 @@ void GamesParser::removeQuestionFromBuilderGame(BuilderGame* game, int index) {
 
 // Methods for managing crosspuzzle questions and answers
 CrosspuzzleAnswer* GamesParser::createCrosspuzzleAnswer(const QString &text) {
-    CrosspuzzleAnswer *crosspuzzleAnswer = new CrosspuzzleAnswer();
+    CrosspuzzleAnswer *crosspuzzleAnswer = new CrosspuzzleAnswer(this); // Parent set edildi
     crosspuzzleAnswer->setText(text);
     return crosspuzzleAnswer;
 }
 
 CrosspuzzleQuestion* GamesParser::createCrosspuzzleQuestion(const QString &question) {
-    CrosspuzzleQuestion *crosspuzzleQuestion = new CrosspuzzleQuestion();
+    CrosspuzzleQuestion *crosspuzzleQuestion = new CrosspuzzleQuestion(this); // Parent set edildi
     crosspuzzleQuestion->setQuestion(question);
     return crosspuzzleQuestion;
 }
@@ -525,7 +559,7 @@ void GamesParser::removeAnswerFromCrosspuzzleQuestion(CrosspuzzleQuestion* quest
 
 // Methods for managing race questions and answers
 RaceAnswer* GamesParser::createRaceAnswer(const QString &text, const QString &image, bool isCorrect) {
-    RaceAnswer *raceAnswer = new RaceAnswer();
+    RaceAnswer *raceAnswer = new RaceAnswer(this); // Parent set edildi
     raceAnswer->setText(text);
     raceAnswer->setImage(image);
     raceAnswer->setIsCorrect(isCorrect);
@@ -533,7 +567,7 @@ RaceAnswer* GamesParser::createRaceAnswer(const QString &text, const QString &im
 }
 
 RaceQuestion* GamesParser::createRaceQuestion(const QString &question, const QString &image, const QString &audio) {
-    RaceQuestion *raceQuestion = new RaceQuestion();
+    RaceQuestion *raceQuestion = new RaceQuestion(this); // Parent set edildi
     raceQuestion->setQuestion(question);
     raceQuestion->setImage(image);
     raceQuestion->setAudio(audio);

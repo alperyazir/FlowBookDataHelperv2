@@ -115,7 +115,9 @@ public:
 
         QJsonArray answersArray;
         for (const QuizAnswer *answer : _answers) {
-            answersArray.append(answer->toJson());
+            if (answer) { // Null check eklendi
+                answersArray.append(answer->toJson());
+            }
         }
         obj["answers"] = answersArray;
         return obj;
@@ -161,7 +163,14 @@ public:
     }
 
     void setQuestions(const QVariantList &questions) {
+        // CRASH-SAFE: Eski objeler için memory cleanup
+        for (QuizQuestion *question : _questions) {
+            if (question) {
+                question->deleteLater();
+            }
+        }
         _questions.clear();
+        
         for (const QVariant &variant : questions) {
             QuizQuestion *question = qobject_cast<QuizQuestion*>(variant.value<QObject*>());
             if (question) {
@@ -177,7 +186,9 @@ public:
 
         QJsonArray questionsArray;
         for (const QuizQuestion *question : _questions) {
-            questionsArray.append(question->toJson());
+            if (question) { // Null check eklendi
+                questionsArray.append(question->toJson());
+            }
         }
         obj["questions"] = questionsArray;
         return obj;
@@ -248,7 +259,14 @@ public:
     }
 
     void setQuestions(const QVariantList &questions) {
+        // CRASH-SAFE: Eski objeler için memory cleanup
+        for (MemoryQuestion *question : _questions) {
+            if (question) {
+                question->deleteLater();
+            }
+        }
         _questions.clear();
+        
         for (const QVariant &variant : questions) {
             MemoryQuestion *question = qobject_cast<MemoryQuestion*>(variant.value<QObject*>());
             if (question) {
@@ -264,7 +282,9 @@ public:
 
         QJsonArray questionsArray;
         for (const MemoryQuestion *question : _questions) {
-            questionsArray.append(question->toJson());
+            if (question) { // Null check eklendi
+                questionsArray.append(question->toJson());
+            }
         }
         obj["questions"] = questionsArray;
         return obj;
@@ -353,7 +373,14 @@ public:
     }
 
     void setQuestions(const QVariantList &questions) {
+        // CRASH-SAFE: Eski objeler için memory cleanup
+        for (OrderQuestion *question : _questions) {
+            if (question) {
+                question->deleteLater();
+            }
+        }
         _questions.clear();
+        
         for (const QVariant &variant : questions) {
             OrderQuestion *question = qobject_cast<OrderQuestion*>(variant.value<QObject*>());
             if (question) {
@@ -369,7 +396,9 @@ public:
 
         QJsonArray questionsArray;
         for (const OrderQuestion *question : _questions) {
-            questionsArray.append(question->toJson());
+            if (question) { // Null check eklendi
+                questionsArray.append(question->toJson());
+            }
         }
         obj["questions"] = questionsArray;
         return obj;
@@ -513,7 +542,9 @@ public:
 
         QJsonArray answersArray;
         for (const SelectorAnswer *answer : _answers) {
-            answersArray.append(answer->toJson());
+            if (answer) { // Null check eklendi
+                answersArray.append(answer->toJson());
+            }
         }
         obj["answers"] = answersArray;
         return obj;
@@ -575,7 +606,9 @@ public:
 
         QJsonArray questionsArray;
         for (const SelectorQuestion *question : _questions) {
-            questionsArray.append(question->toJson());
+            if (question) { // Null check eklendi
+                questionsArray.append(question->toJson());
+            }
         }
         obj["questions"] = questionsArray;
         return obj;
@@ -735,7 +768,9 @@ public:
 
         QJsonArray questionsArray;
         for (const BuilderQuestion *question : _questions) {
-            questionsArray.append(question->toJson());
+            if (question) { // Null check eklendi
+                questionsArray.append(question->toJson());
+            }
         }
         obj["questions"] = questionsArray;
         return obj;
@@ -816,7 +851,14 @@ public:
     }
 
     void setAnswers(const QVariantList &answers) {
+        // CRASH-SAFE: Eski objeler için memory cleanup
+        for (CrosspuzzleAnswer *answer : _answers) {
+            if (answer) {
+                answer->deleteLater();
+            }
+        }
         _answers.clear();
+        
         for (const QVariant &variant : answers) {
             CrosspuzzleAnswer *answer = qobject_cast<CrosspuzzleAnswer*>(variant.value<QObject*>());
             if (answer) {
@@ -832,7 +874,9 @@ public:
 
         QJsonArray answersArray;
         for (const CrosspuzzleAnswer *answer : _answers) {
-            answersArray.append(answer->toJson());
+            if (answer) { // Null check eklendi
+                answersArray.append(answer->toJson());
+            }
         }
         obj["answers"] = answersArray;
         return obj;
@@ -890,7 +934,9 @@ public:
 
         QJsonArray questionsArray;
         for (const CrosspuzzleQuestion *question : _questions) {
-            questionsArray.append(question->toJson());
+            if (question) { // Null check eklendi
+                questionsArray.append(question->toJson());
+            }
         }
         obj["questions"] = questionsArray;
         return obj;
@@ -1037,7 +1083,9 @@ public:
 
         QJsonArray answersArray;
         for (const RaceAnswer *answer : _answers) {
-            answersArray.append(answer->toJson());
+            if (answer) { // Null check eklendi
+                answersArray.append(answer->toJson());
+            }
         }
         obj["answers"] = answersArray;
         return obj;
@@ -1099,7 +1147,9 @@ public:
 
         QJsonArray questionsArray;
         for (const RaceQuestion *question : _questions) {
-            questionsArray.append(question->toJson());
+            if (question) { // Null check eklendi
+                questionsArray.append(question->toJson());
+            }
         }
         obj["questions"] = questionsArray;
         return obj;
@@ -1309,27 +1359,41 @@ public:
 
         QJsonArray gamesArray;
 
-        // Add all game types to the games array
+        // Add all game types to the games array - CRASH-SAFE with null checks
         for (const QuizGame *game : _quizGames) {
-            gamesArray.append(game->toJson());
+            if (game) { // Null check eklendi
+                gamesArray.append(game->toJson());
+            }
         }
         for (const MemoryGame *game : _memoryGames) {
-            gamesArray.append(game->toJson());
+            if (game) { // Null check eklendi
+                gamesArray.append(game->toJson());
+            }
         }
         for (const OrderGame *game : _orderGames) {
-            gamesArray.append(game->toJson());
+            if (game) { // Null check eklendi
+                gamesArray.append(game->toJson());
+            }
         }
         for (const SelectorGame *game : _selectorGames) {
-            gamesArray.append(game->toJson());
+            if (game) { // Null check eklendi
+                gamesArray.append(game->toJson());
+            }
         }
         for (const BuilderGame *game : _builderGames) {
-            gamesArray.append(game->toJson());
+            if (game) { // Null check eklendi
+                gamesArray.append(game->toJson());
+            }
         }
         for (const CrosspuzzleGame *game : _crosspuzzleGames) {
-            gamesArray.append(game->toJson());
+            if (game) { // Null check eklendi
+                gamesArray.append(game->toJson());
+            }
         }
         for (const RaceGame *game : _raceGames) {
-            gamesArray.append(game->toJson());
+            if (game) { // Null check eklendi
+                gamesArray.append(game->toJson());
+            }
         }
 
         obj["games"] = gamesArray;
