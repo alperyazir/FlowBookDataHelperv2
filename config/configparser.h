@@ -172,7 +172,7 @@ public:
     explicit Answer(QObject *parent = nullptr) :
         QObject(parent), _no(0), _isCorrect(false), _diagonal(false),
         _rotation(0.0), _isTrueSection(false),
-        _isRound(false), _opacity(1.0) {
+        _isRound(false), _opacity(1.0), _isTextBold(false) {
     }
 
     int _no;
