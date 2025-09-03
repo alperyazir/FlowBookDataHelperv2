@@ -8,7 +8,8 @@ Rectangle {
     id: root
 
     property var memoryQuestion: ({
-            "image": ""
+            "image": "",
+            "audio": ""
         })
 
     // Add question ID property
@@ -96,6 +97,43 @@ Rectangle {
 
         onRejected: {
             console.log("File selection was canceled");
+        }
+    }
+
+    // FileDialog for audio selection
+    FileDialog {
+        id: audioFileDialog
+        title: "Select Audio"
+        nameFilters: ["Audio files (*.mp3 *.wav *.ogg *.m4a *.aac)"]
+
+        onAccepted: {
+            console.log("Audio FileDialog accepted!");
+            var selectedFilePath = audioFileDialog.file + ""; // Seçilen dosyanın tam dosya yolu
+            console.log("Selected audio file path:", selectedFilePath);
+
+            if (selectedFilePath) {
+                var newPath = findBooksFolder(selectedFilePath, "books");
+                if (newPath) {
+                    audioTextField.text = newPath;
+                    if (memoryQuestion) {
+                        memoryQuestion.audio = newPath;
+                    }
+                    console.log("Memory audio path set to:", newPath);
+                } else {
+                    console.log("Books klasörü bulunamadı, using full path");
+                    // If books folder not found, use the full path
+                    audioTextField.text = selectedFilePath;
+                    if (memoryQuestion) {
+                        memoryQuestion.audio = selectedFilePath;
+                    }
+                }
+            } else {
+                console.log("Dosya yolu geçersiz.");
+            }
+        }
+
+        onRejected: {
+            console.log("Audio file selection was canceled");
         }
     }
 
@@ -230,9 +268,72 @@ Rectangle {
                     }
                 }
 
+                // Audio Row
+                Row {
+                    id: audioRow
+                    width: parent.width
+                    height: parent.height * 0.2
+
+                    Text {
+                        text: "Audio:"
+                        width: parent.width / 5
+                        height: parent.height
+                        color: "#FFFFFF" // White text
+                        font.pixelSize: root.height * 0.06
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    TextField {
+                        id: audioTextField
+                        width: parent.width / 5 * 3
+                        height: parent.height
+                        text: memoryQuestion && memoryQuestion.audio ? memoryQuestion.audio : ""
+                        color: "#FFFFFF" // White text
+                        font.pixelSize: root.height * 0.05
+                        placeholderText: "Select audio file or enter path..."
+                        placeholderTextColor: "#666666"
+
+                        background: Rectangle {
+                            color: "#232f34" // Darker background
+                            border.color: audioTextField.focus ? "#009ca6" : "#445055"
+                            border.width: 1
+                            radius: 4
+                        }
+
+                        onTextChanged: {
+                            if (memoryQuestion) {
+                                memoryQuestion.audio = text;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width / 5
+                        height: parent.height
+                        color: "#009ca6"
+                        radius: 4
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "..."
+                            color: "white"
+                            font.pixelSize: root.height * 0.06
+                            font.bold: true
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                console.log("Memory audio dialog button clicked");
+                                audioFileDialog.open();
+                            }
+                        }
+                    }
+                }
+
                 // Info text
                 Text {
-                    text: "Select an image for this memory card. The image will be shown during the memory game."
+                    text: "Select an image and optionally an audio file for this memory card. Both will be available during the memory game."
                     width: parent.width
                     height: parent.height * 0.15
                     color: "#CCCCCC"
@@ -242,7 +343,7 @@ Rectangle {
                 }
             }
 
-            // Right side - Image preview
+            // Right side - Preview area
             Rectangle {
                 id: previewArea
                 width: parent.width * 0.35
@@ -265,10 +366,11 @@ Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
                     }
 
+                    // Image Preview
                     Rectangle {
                         id: imagePreview
                         width: parent.width
-                        height: parent.height - 30
+                        height: (parent.height - 30) * 0.6
                         color: "#1A2327"
                         border.color: "#445055"
                         border.width: 1
@@ -298,6 +400,63 @@ Rectangle {
                             font.pixelSize: root.height * 0.04
                             horizontalAlignment: Text.AlignHCenter
                             visible: !previewImage.visible
+                        }
+                    }
+
+                    // Audio Preview
+                    Rectangle {
+                        id: audioPreview
+                        width: parent.width
+                        height: (parent.height - 30) * 0.35
+                        color: "#1A2327"
+                        border.color: "#445055"
+                        border.width: 1
+                        radius: 4
+
+                        Row {
+                            anchors.fill: parent
+                            anchors.margins: 5
+                            spacing: 10
+
+                            Image {
+                                id: audioIcon
+                                width: parent.height
+                                height: parent.height
+                                source: "qrc:/icons/sound.svg"
+                                fillMode: Image.PreserveAspectFit
+                                visible: memoryQuestion && memoryQuestion.audio && memoryQuestion.audio !== ""
+                            }
+
+                            Column {
+                                width: parent.width - parent.height - 10
+                                height: parent.height
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                Text {
+                                    text: "Audio File"
+                                    color: "#009ca6"
+                                    font.pixelSize: root.height * 0.04
+                                    font.bold: true
+                                    visible: memoryQuestion && memoryQuestion.audio && memoryQuestion.audio !== ""
+                                }
+
+                                Text {
+                                    text: memoryQuestion && memoryQuestion.audio ? memoryQuestion.audio.split('/').pop() : ""
+                                    color: "#CCCCCC"
+                                    font.pixelSize: root.height * 0.035
+                                    elide: Text.ElideMiddle
+                                    visible: memoryQuestion && memoryQuestion.audio && memoryQuestion.audio !== ""
+                                }
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "No Audio\nSelected"
+                                color: "#666666"
+                                font.pixelSize: root.height * 0.035
+                                horizontalAlignment: Text.AlignHCenter
+                                visible: !(memoryQuestion && memoryQuestion.audio && memoryQuestion.audio !== "")
+                            }
                         }
                     }
                 }

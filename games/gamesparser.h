@@ -213,11 +213,13 @@ signals:
 struct MemoryQuestion : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString image READ image WRITE setImage NOTIFY imageChanged)
+    Q_PROPERTY(QString audio READ audio WRITE setAudio NOTIFY audioChanged)
 
 public:
     explicit MemoryQuestion(QObject *parent = nullptr) : QObject(parent) {}
 
     QString _image;
+    QString _audio;
 
     QString image() const { return _image; }
     void setImage(const QString &image) {
@@ -227,18 +229,29 @@ public:
         }
     }
 
+    QString audio() const { return _audio; }
+    void setAudio(const QString &audio) {
+        if (_audio != audio) {
+            _audio = audio;
+            emit audioChanged();
+        }
+    }
+
     QJsonObject toJson() const {
         QJsonObject obj;
         obj["image"] = _image;
+        obj["audio"] = _audio;
         return obj;
     }
 
     void fromJson(const QJsonObject &obj) {
         setImage(obj["image"].toString());
+        setAudio(obj["audio"].toString());
     }
 
 signals:
     void imageChanged();
+    void audioChanged();
 };
 
 struct MemoryGame : public QObject {
@@ -1549,7 +1562,7 @@ public:
     Q_INVOKABLE void removeAnswerFromQuestion(QuizQuestion* question, int index);
     
     // Methods for managing memory questions
-    Q_INVOKABLE MemoryQuestion* createMemoryQuestion(const QString &image = "");
+    Q_INVOKABLE MemoryQuestion* createMemoryQuestion(const QString &image = "", const QString &audio = "");
     Q_INVOKABLE void addQuestionToMemoryGame(MemoryGame* game, MemoryQuestion* question);
     Q_INVOKABLE void removeQuestionFromMemoryGame(MemoryGame* game, int index);
     

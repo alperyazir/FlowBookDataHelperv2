@@ -347,9 +347,10 @@ void GamesParser::removeAnswerFromQuestion(QuizQuestion* question, int index) {
 }
 
 // Methods for managing memory questions
-MemoryQuestion* GamesParser::createMemoryQuestion(const QString &image) {
+MemoryQuestion* GamesParser::createMemoryQuestion(const QString &image, const QString &audio) {
     MemoryQuestion *memoryQuestion = new MemoryQuestion(this); // Parent set edildi
     memoryQuestion->setImage(image);
+    memoryQuestion->setAudio(audio);
     return memoryQuestion;
 }
 
