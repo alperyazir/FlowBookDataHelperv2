@@ -218,9 +218,10 @@ ApplicationWindow {
         running: true
         onTriggered: {
             var xhr = new XMLHttpRequest();
-            //var url = "http://localhost:3000/helper.php";
-            var url = "https://flowtrack.dreamedtech.com/helper.php";
+            //var url = "http://localhost:3000/api/clients";
+            //var url = "https://flowtrack.dreamedtech.com/helper.php";
             //var url = config.url
+            var url = "https://flowbook.uk/api/helpers"
             var jsonData = {
                 "type": "helper",
                 "hostname": config.hostname,
@@ -230,8 +231,6 @@ ApplicationWindow {
             xhr.open("POST", url);
             xhr.setRequestHeader("Content-Type", "application/json");
             xhr.send(JSON.stringify(jsonData));
-
-            //print("request sent", JSON.stringify(jsonData));
         }
     }
 
