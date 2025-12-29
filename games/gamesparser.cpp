@@ -572,6 +572,34 @@ RaceQuestion* GamesParser::createRaceQuestion(const QString &question, const QSt
     raceQuestion->setQuestion(question);
     raceQuestion->setImage(image);
     raceQuestion->setAudio(audio);
+    
+    // Create default 4 answers with parent
+    RaceAnswer *answer1 = new RaceAnswer(raceQuestion);
+    answer1->setText("");
+    answer1->setImage("");
+    answer1->setIsCorrect(false);
+    
+    RaceAnswer *answer2 = new RaceAnswer(raceQuestion);
+    answer2->setText("");
+    answer2->setImage("");
+    answer2->setIsCorrect(false);
+    
+    RaceAnswer *answer3 = new RaceAnswer(raceQuestion);
+    answer3->setText("");
+    answer3->setImage("");
+    answer3->setIsCorrect(false);
+    
+    RaceAnswer *answer4 = new RaceAnswer(raceQuestion);
+    answer4->setText("");
+    answer4->setImage("");
+    answer4->setIsCorrect(false);
+    
+    raceQuestion->_answers.append(answer1);
+    raceQuestion->_answers.append(answer2);
+    raceQuestion->_answers.append(answer3);
+    raceQuestion->_answers.append(answer4);
+    
+    emit raceQuestion->answersChanged();
     return raceQuestion;
 }
 

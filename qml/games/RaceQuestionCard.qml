@@ -48,18 +48,6 @@ Rectangle {
     Component.onCompleted: {
         console.log("Race question loaded:", raceQuestion.question);
         console.log("Number of answers:", raceQuestion.answers ? raceQuestion.answers.length : 0);
-
-        // Initialize 4 default answers if not exists
-        if (!raceQuestion.answers) {
-            raceQuestion.answers = [];
-        }
-        while (raceQuestion.answers.length < 4) {
-            raceQuestion.answers.push({
-                "text": "",
-                "image": "",
-                "isCorrect": false
-            });
-        }
     }
 
     width: parent.width
@@ -384,19 +372,7 @@ Rectangle {
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                // Ensure answers array exists and has 4 elements
-                                if (!raceQuestion.answers) {
-                                    raceQuestion.answers = [];
-                                }
-                                while (raceQuestion.answers.length < 4) {
-                                    raceQuestion.answers.push({
-                                        "text": "",
-                                        "image": "",
-                                        "isCorrect": false
-                                    });
-                                }
-
-                                if (raceQuestion.answers[index]) {
+                                if (raceQuestion.answers && raceQuestion.answers[index]) {
                                     raceQuestion.answers[index].isCorrect = !raceQuestion.answers[index].isCorrect;
                                 }
                             }
@@ -434,19 +410,7 @@ Rectangle {
                             radius: 3
                         }
                         onTextChanged: {
-                            // Ensure answers array exists and has 4 elements
-                            if (!raceQuestion.answers) {
-                                raceQuestion.answers = [];
-                            }
-                            while (raceQuestion.answers.length < 4) {
-                                raceQuestion.answers.push({
-                                    "text": "",
-                                    "image": "",
-                                    "isCorrect": false
-                                });
-                            }
-
-                            if (raceQuestion.answers[index]) {
+                            if (raceQuestion.answers && raceQuestion.answers[index]) {
                                 raceQuestion.answers[index].text = text;
                             }
                         }
@@ -472,19 +436,7 @@ Rectangle {
                             radius: 3
                         }
                         onTextChanged: {
-                            // Ensure answers array exists and has 4 elements
-                            if (!raceQuestion.answers) {
-                                raceQuestion.answers = [];
-                            }
-                            while (raceQuestion.answers.length < 4) {
-                                raceQuestion.answers.push({
-                                    "text": "",
-                                    "image": "",
-                                    "isCorrect": false
-                                });
-                            }
-
-                            if (raceQuestion.answers[index]) {
+                            if (raceQuestion.answers && raceQuestion.answers[index]) {
                                 raceQuestion.answers[index].image = text;
                             }
                         }
@@ -519,32 +471,12 @@ Rectangle {
                                             // Update the text field
                                             parent.parent.children[3].text = newPath;
                                             // Update the data
-                                            if (!raceQuestion.answers) {
-                                                raceQuestion.answers = [];
-                                            }
-                                            while (raceQuestion.answers.length < 4) {
-                                                raceQuestion.answers.push({
-                                                    "text": "",
-                                                    "image": "",
-                                                    "isCorrect": false
-                                                });
-                                            }
-                                            if (raceQuestion.answers[index]) {
+                                            if (raceQuestion.answers && raceQuestion.answers[index]) {
                                                 raceQuestion.answers[index].image = newPath;
                                             }
                                         } else {
                                             parent.parent.children[3].text = selectedFilePath;
-                                            if (!raceQuestion.answers) {
-                                                raceQuestion.answers = [];
-                                            }
-                                            while (raceQuestion.answers.length < 4) {
-                                                raceQuestion.answers.push({
-                                                    "text": "",
-                                                    "image": "",
-                                                    "isCorrect": false
-                                                });
-                                            }
-                                            if (raceQuestion.answers[index]) {
+                                            if (raceQuestion.answers && raceQuestion.answers[index]) {
                                                 raceQuestion.answers[index].image = selectedFilePath;
                                             }
                                         }
