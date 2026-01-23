@@ -1,5 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
 import QtQuick.Dialogs
 import Qt.labs.platform
 import ".."
@@ -146,32 +147,24 @@ Rectangle {
         }
     }
 
-    Column {
+    ColumnLayout {
         id: totalColumn
-        width: parent.width
-        height: parent.height
+        anchors.fill: parent
+        anchors.margins: 8
         spacing: 8
 
         // Header Row
-        Row {
+        RowLayout {
             id: headerRow
-            width: parent.width
-            height: parent.height * 0.08
+            Layout.fillWidth: true
+            Layout.preferredHeight: 30
 
             Text {
                 text: "Selector Question #" + questionId
-                width: parent.width / 4
-                height: parent.height
                 color: "#009ca6"
-                font.pixelSize: root.height * 0.06
+                font.pixelSize: 18
                 font.bold: true
-                verticalAlignment: Text.AlignVCenter
-                horizontalAlignment: Text.AlignLeft
-            }
-
-            Item {
-                width: parent.width / 4 * 3
-                height: parent.height
+                Layout.fillWidth: true
             }
 
             Rectangle {
@@ -180,7 +173,6 @@ Rectangle {
                 height: 28
                 radius: 14
                 color: "#d2232b"
-                anchors.verticalCenter: parent.verticalCenter
 
                 Text {
                     text: "×"
@@ -203,14 +195,15 @@ Rectangle {
         // Question Media Section
         Rectangle {
             id: questionMediaSection
-            width: parent.width
-            height: parent.height * 0.38
+            Layout.fillWidth: true
+            Layout.preferredHeight: mediaColumn.implicitHeight + 20
             color: "#232f34"
             border.color: "#009ca6"
             border.width: 1
             radius: 6
 
-            Column {
+            ColumnLayout {
+                id: mediaColumn
                 anchors.fill: parent
                 anchors.margins: 10
                 spacing: 6
@@ -218,32 +211,31 @@ Rectangle {
                 Text {
                     text: "Question Media"
                     color: "#009ca6"
-                    font.pixelSize: root.height * 0.035
+                    font.pixelSize: 14
                     font.bold: true
                 }
 
                 // Text Question Row
-                Row {
-                    width: parent.width
-                    height: 28
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 28
                     spacing: 8
 
                     Text {
                         text: "Text:"
-                        width: 50
-                        height: parent.height
+                        Layout.preferredWidth: 50
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.028
+                        font.pixelSize: 12
                         verticalAlignment: Text.AlignVCenter
                     }
 
                     TextField {
                         id: questionTextField
-                        width: parent.width - 58
-                        height: parent.height
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 28
                         text: selectorQuestion && selectorQuestion.question ? selectorQuestion.question : ""
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.028
+                        font.pixelSize: 12
                         placeholderText: "Enter question text..."
                         placeholderTextColor: "#666666"
                         background: Rectangle {
@@ -261,27 +253,26 @@ Rectangle {
                 }
 
                 // Image Row
-                Row {
-                    width: parent.width
-                    height: 28
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 28
                     spacing: 8
 
                     Text {
                         text: "Image:"
-                        width: 50
-                        height: parent.height
+                        Layout.preferredWidth: 50
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.028
+                        font.pixelSize: 12
                         verticalAlignment: Text.AlignVCenter
                     }
 
                     TextField {
                         id: questionImageField
-                        width: parent.width - 50 - 35 - 16
-                        height: parent.height
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 28
                         text: selectorQuestion && selectorQuestion.image ? selectorQuestion.image : ""
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.028
+                        font.pixelSize: 12
                         placeholderText: "Select image..."
                         placeholderTextColor: "#666666"
                         background: Rectangle {
@@ -298,8 +289,8 @@ Rectangle {
                     }
 
                     Rectangle {
-                        width: 35
-                        height: parent.height
+                        Layout.preferredWidth: 35
+                        Layout.preferredHeight: 28
                         color: "#009ca6"
                         radius: 3
                         Text {
@@ -316,27 +307,26 @@ Rectangle {
                 }
 
                 // Audio Row
-                Row {
-                    width: parent.width
-                    height: 28
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 28
                     spacing: 8
 
                     Text {
                         text: "Audio:"
-                        width: 50
-                        height: parent.height
+                        Layout.preferredWidth: 50
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.028
+                        font.pixelSize: 12
                         verticalAlignment: Text.AlignVCenter
                     }
 
                     TextField {
                         id: questionAudioField
-                        width: parent.width - 50 - 35 - 16
-                        height: parent.height
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 28
                         text: selectorQuestion && selectorQuestion.audio ? selectorQuestion.audio : ""
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.028
+                        font.pixelSize: 12
                         placeholderText: "Select audio..."
                         placeholderTextColor: "#666666"
                         background: Rectangle {
@@ -353,8 +343,8 @@ Rectangle {
                     }
 
                     Rectangle {
-                        width: 35
-                        height: parent.height
+                        Layout.preferredWidth: 35
+                        Layout.preferredHeight: 28
                         color: "#009ca6"
                         radius: 3
                         Text {
@@ -371,27 +361,26 @@ Rectangle {
                 }
 
                 // Video Row
-                Row {
-                    width: parent.width
-                    height: 28
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 28
                     spacing: 8
 
                     Text {
                         text: "Video:"
-                        width: 50
-                        height: parent.height
+                        Layout.preferredWidth: 50
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.028
+                        font.pixelSize: 12
                         verticalAlignment: Text.AlignVCenter
                     }
 
                     TextField {
                         id: questionVideoField
-                        width: parent.width - 50 - 35 - 16
-                        height: parent.height
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 28
                         text: selectorQuestion && selectorQuestion.video ? selectorQuestion.video : ""
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.028
+                        font.pixelSize: 12
                         placeholderText: "Select video..."
                         placeholderTextColor: "#666666"
                         background: Rectangle {
@@ -408,8 +397,8 @@ Rectangle {
                     }
 
                     Rectangle {
-                        width: 35
-                        height: parent.height
+                        Layout.preferredWidth: 35
+                        Layout.preferredHeight: 28
                         color: "#009ca6"
                         radius: 3
                         Text {
@@ -430,47 +419,47 @@ Rectangle {
         // Options Section
         Rectangle {
             id: optionsSection
-            width: parent.width
-            height: parent.height * 0.52
+            Layout.fillWidth: true
+            Layout.fillHeight: true
             color: "#232f34"
             border.color: "#009ca6"
             border.width: 1
             radius: 6
 
-            Column {
+            ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 10
                 spacing: 8
 
-                Row {
-                    width: parent.width
-                    height: 25
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 25
 
                     Text {
                         text: "Answer Options (" + (selectorQuestion.answers ? selectorQuestion.answers.length : 0) + ")"
                         color: "#009ca6"
-                        font.pixelSize: root.height * 0.04
+                        font.pixelSize: 14
                         font.bold: true
-                        width: parent.width - 100
+                        Layout.fillWidth: true
                     }
 
                     Rectangle {
-                        width: 80
-                        height: 25
+                        Layout.preferredWidth: 80
+                        Layout.preferredHeight: 25
                         color: {
                             let optionCount = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 0;
-                            return optionCount >= 5 ? "#666666" : "#009ca6";  // Gray if max reached
+                            return optionCount >= 5 ? "#666666" : "#009ca6";
                         }
                         opacity: {
                             let optionCount = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 0;
-                            return optionCount >= 5 ? 0.5 : 1.0;  // Dim if max reached
+                            return optionCount >= 5 ? 0.5 : 1.0;
                         }
                         radius: 4
                         Text {
                             anchors.centerIn: parent
                             text: "Add Option"
                             color: "white"
-                            font.pixelSize: root.height * 0.03
+                            font.pixelSize: 12
                             font.bold: true
                         }
                         MouseArea {
@@ -478,7 +467,6 @@ Rectangle {
                             onClicked: {
                                 let optionCount = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 0;
                                 if (optionCount < 5) {
-                                    // Maximum 5 options
                                     optionAdded();
                                 } else {
                                     console.log("Maximum 5 options allowed");
@@ -488,167 +476,156 @@ Rectangle {
                     }
                 }
 
-                // Add a spacer item instead of anchors.top
-                Item {
-                    width: parent.width
-                    height: 3  // Space for header
-                }
+                // Options list
+                ListView {
+                    id: optionsListView
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 4
+                    model: selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers : []
 
-                Column {
-                    id: column
-                    width: parent.width
-                    spacing: 2
+                    delegate: Rectangle {
+                        width: optionsListView.width
+                        height: 35
+                        color: "#1A2327"
+                        border.color: "#445055"
+                        border.width: 1
+                        radius: 4
 
-                    Repeater {
-                        model: selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers : []
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            spacing: 6
 
-                        Rectangle {
-                            width: parent.width
-                            height: 35  // Reduced from 45 to 40
-                            color: "#1A2327"
-                            border.color: "#445055"
-                            border.width: 1
-                            radius: 4
+                            // Option number
+                            Text {
+                                text: index + 1
+                                Layout.preferredWidth: 20
+                                color: "#009ca6"
+                                font.bold: true
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
 
-                            Row {
-                                anchors.fill: parent
-                                anchors.margins: 8
-                                spacing: 8
+                            // Correct checkbox
+                            Rectangle {
+                                Layout.preferredWidth: 22
+                                Layout.preferredHeight: 22
+                                radius: 4
+                                color: "white"
+                                border.color: "#009ca6"
+                                border.width: 2
 
-                                // Option number
-                                Text {
-                                    text: index + 1
-                                    width: 20
-                                    height: parent.height
-                                    color: "#009ca6"
-                                    font.bold: true
-                                    verticalAlignment: Text.AlignVCenter
-                                    horizontalAlignment: Text.AlignHCenter
-                                }
-
-                                // Correct checkbox
-                                Rectangle {
-                                    width: 22
-                                    height: 22
-                                    radius: 4
-                                    color: "white"
-                                    border.color: "#009ca6"
-                                    border.width: 2
-                                    anchors.verticalCenter: parent.verticalCenter
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        onClicked: {
-                                            if (modelData) {
-                                                modelData.isCorrect = !modelData.isCorrect;
-                                            }
-                                        }
-                                    }
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: modelData && modelData.isCorrect ? "✓" : ""
-                                        color: "#009ca6"
-                                        font.pixelSize: 14
-                                        font.bold: true
-                                    }
-                                }
-
-                                // Text field
-                                TextField {
-                                    width: parent.width * 0.4
-                                    height: parent.height
-                                    text: modelData && modelData.text ? modelData.text : ""
-                                    color: "#FFFFFF"
-                                    font.pixelSize: root.height * 0.03
-                                    placeholderText: "Option text..."
-                                    placeholderTextColor: "#666666"
-                                    background: Rectangle {
-                                        color: "#232f34"
-                                        border.color: parent.focus ? "#009ca6" : "#445055"
-                                        border.width: 1
-                                        radius: 3
-                                    }
-                                    onTextChanged: {
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
                                         if (modelData) {
-                                            modelData.text = text;
+                                            modelData.isCorrect = !modelData.isCorrect;
                                         }
                                     }
                                 }
 
-                                // Image field
-                                TextField {
-                                    width: parent.width * 0.35
-                                    height: parent.height
-                                    text: modelData && modelData.image ? modelData.image : ""
-                                    color: "#FFFFFF"
-                                    font.pixelSize: root.height * 0.03
-                                    placeholderText: "Image path..."
-                                    placeholderTextColor: "#666666"
-                                    readOnly: true
-                                    background: Rectangle {
-                                        color: "#232f34"
-                                        border.color: parent.focus ? "#009ca6" : "#445055"
-                                        border.width: 1
-                                        radius: 3
-                                    }
-                                }
-
-                                // Image select button
-                                Rectangle {
-                                    width: 25
-                                    height: 25
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: modelData && modelData.isCorrect ? "✓" : ""
                                     color: "#009ca6"
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                }
+                            }
+
+                            // Text field
+                            TextField {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 26
+                                text: modelData && modelData.text ? modelData.text : ""
+                                color: "#FFFFFF"
+                                font.pixelSize: 11
+                                placeholderText: "Option text..."
+                                placeholderTextColor: "#666666"
+                                background: Rectangle {
+                                    color: "#232f34"
+                                    border.color: parent.focus ? "#009ca6" : "#445055"
+                                    border.width: 1
                                     radius: 3
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "..."
-                                        color: "white"
-                                        font.bold: true
-                                    }
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        onClicked: {
-                                            optionImageDialog.currentOptionIndex = index;
-                                            optionImageDialog.open();
-                                        }
+                                }
+                                onTextChanged: {
+                                    if (modelData) {
+                                        modelData.text = text;
                                     }
                                 }
+                            }
 
-                                // Delete button
-                                Rectangle {
-                                    width: 25
-                                    height: 25
-                                    radius: 12
-                                    color: {
+                            // Image field
+                            TextField {
+                                Layout.preferredWidth: parent.width * 0.25
+                                Layout.preferredHeight: 26
+                                text: modelData && modelData.image ? modelData.image : ""
+                                color: "#FFFFFF"
+                                font.pixelSize: 11
+                                placeholderText: "Image..."
+                                placeholderTextColor: "#666666"
+                                readOnly: true
+                                background: Rectangle {
+                                    color: "#232f34"
+                                    border.color: parent.focus ? "#009ca6" : "#445055"
+                                    border.width: 1
+                                    radius: 3
+                                }
+                            }
+
+                            // Image select button
+                            Rectangle {
+                                Layout.preferredWidth: 25
+                                Layout.preferredHeight: 25
+                                color: "#009ca6"
+                                radius: 3
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "..."
+                                    color: "white"
+                                    font.bold: true
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        optionImageDialog.currentOptionIndex = index;
+                                        optionImageDialog.open();
+                                    }
+                                }
+                            }
+
+                            // Delete button
+                            Rectangle {
+                                Layout.preferredWidth: 25
+                                Layout.preferredHeight: 25
+                                radius: 12
+                                color: {
+                                    let optionCount = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 0;
+                                    return optionCount <= 2 ? "#666666" : "#d2232b";
+                                }
+                                opacity: {
+                                    let optionCount = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 0;
+                                    return optionCount <= 2 ? 0.5 : 1.0;
+                                }
+
+                                Text {
+                                    text: "×"
+                                    anchors.centerIn: parent
+                                    color: "white"
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
                                         let optionCount = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 0;
-                                        return optionCount <= 2 ? "#666666" : "#d2232b";  // Gray if min reached
-                                    }
-                                    opacity: {
-                                        let optionCount = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 0;
-                                        return optionCount <= 2 ? 0.5 : 1.0;  // Dim if min reached
-                                    }
-                                    anchors.verticalCenter: parent.verticalCenter
-
-                                    Text {
-                                        text: "×"
-                                        anchors.centerIn: parent
-                                        color: "white"
-                                        font.pixelSize: 14
-                                        font.bold: true
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        onClicked: {
-                                            let optionCount = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 0;
-                                            if (optionCount > 2) {
-                                                // Minimum 2 options
-                                                optionDeleted(index);
-                                            } else {
-                                                console.log("Minimum 2 options required");
-                                            }
+                                        if (optionCount > 2) {
+                                            optionDeleted(index);
+                                        } else {
+                                            console.log("Minimum 2 options required");
                                         }
                                     }
                                 }
