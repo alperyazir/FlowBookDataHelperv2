@@ -204,7 +204,7 @@ Rectangle {
         Rectangle {
             id: questionMediaSection
             width: parent.width
-            height: parent.height * 0.32
+            height: parent.height * 0.38
             color: "#232f34"
             border.color: "#009ca6"
             border.width: 1
@@ -431,7 +431,7 @@ Rectangle {
         Rectangle {
             id: optionsSection
             width: parent.width
-            height: parent.height * 0.58
+            height: parent.height * 0.52
             color: "#232f34"
             border.color: "#009ca6"
             border.width: 1
