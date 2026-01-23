@@ -170,10 +170,10 @@ Rectangle {
             }
         }
 
-        // Question Media Section - 40%
+        // Question Media Section - 2x2 Grid
         Rectangle {
             width: parent.width
-            height: root.height * 0.38
+            height: root.height * 0.28
             color: "#232f34"
             border.color: "#009ca6"
             border.width: 1
@@ -181,7 +181,7 @@ Rectangle {
 
             Column {
                 anchors.fill: parent
-                anchors.margins: 8
+                anchors.margins: 6
                 spacing: 4
 
                 Text {
@@ -189,210 +189,220 @@ Rectangle {
                     color: "#009ca6"
                     font.pixelSize: fontSize
                     font.bold: true
-                    height: rowHeight * 0.8
+                    height: 18
                 }
 
-                // Text Row
-                Row {
+                // 2x2 Grid for media fields
+                GridLayout {
                     width: parent.width
-                    height: rowHeight
-                    spacing: 6
+                    height: parent.height - 24
+                    columns: 2
+                    rowSpacing: 4
+                    columnSpacing: 8
 
-                    Text {
-                        text: "Text:"
-                        width: 45
-                        height: parent.height
-                        color: "#FFFFFF"
-                        font.pixelSize: fontSize
-                        verticalAlignment: Text.AlignVCenter
-                    }
+                    // Text field (full width - spans 2 columns)
+                    Row {
+                        Layout.columnSpan: 2
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: rowHeight
+                        spacing: 4
 
-                    TextField {
-                        id: questionTextField
-                        width: parent.width - 51
-                        height: parent.height
-                        text: selectorQuestion && selectorQuestion.question ? selectorQuestion.question : ""
-                        color: "#FFFFFF"
-                        font.pixelSize: fontSize
-                        placeholderText: "Enter question text..."
-                        placeholderTextColor: "#666666"
-                        background: Rectangle {
-                            color: "#1A2327"
-                            border.color: questionTextField.focus ? "#009ca6" : "#445055"
-                            border.width: 1
-                            radius: 3
-                        }
-                        onTextChanged: {
-                            if (selectorQuestion) selectorQuestion.question = text;
-                        }
-                    }
-                }
-
-                // Image Row
-                Row {
-                    width: parent.width
-                    height: rowHeight
-                    spacing: 6
-
-                    Text {
-                        text: "Image:"
-                        width: 45
-                        height: parent.height
-                        color: "#FFFFFF"
-                        font.pixelSize: fontSize
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    TextField {
-                        id: questionImageField
-                        width: parent.width - 45 - 35 - 12
-                        height: parent.height
-                        text: selectorQuestion && selectorQuestion.image ? selectorQuestion.image : ""
-                        color: "#FFFFFF"
-                        font.pixelSize: fontSize
-                        placeholderText: "Select image..."
-                        placeholderTextColor: "#666666"
-                        background: Rectangle {
-                            color: "#1A2327"
-                            border.color: questionImageField.focus ? "#009ca6" : "#445055"
-                            border.width: 1
-                            radius: 3
-                        }
-                        onTextChanged: {
-                            if (selectorQuestion) selectorQuestion.image = text;
-                        }
-                    }
-
-                    Rectangle {
-                        width: 35
-                        height: parent.height
-                        color: "#009ca6"
-                        radius: 3
                         Text {
-                            anchors.centerIn: parent
-                            text: "..."
-                            color: "white"
-                            font.bold: true
+                            text: "Text:"
+                            width: 40
+                            height: parent.height
+                            color: "#FFFFFF"
+                            font.pixelSize: fontSize
+                            verticalAlignment: Text.AlignVCenter
                         }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: questionImageDialog.open()
-                        }
-                    }
-                }
 
-                // Audio Row
-                Row {
-                    width: parent.width
-                    height: rowHeight
-                    spacing: 6
-
-                    Text {
-                        text: "Audio:"
-                        width: 45
-                        height: parent.height
-                        color: "#FFFFFF"
-                        font.pixelSize: fontSize
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    TextField {
-                        id: questionAudioField
-                        width: parent.width - 45 - 35 - 12
-                        height: parent.height
-                        text: selectorQuestion && selectorQuestion.audio ? selectorQuestion.audio : ""
-                        color: "#FFFFFF"
-                        font.pixelSize: fontSize
-                        placeholderText: "Select audio..."
-                        placeholderTextColor: "#666666"
-                        background: Rectangle {
-                            color: "#1A2327"
-                            border.color: questionAudioField.focus ? "#009ca6" : "#445055"
-                            border.width: 1
-                            radius: 3
-                        }
-                        onTextChanged: {
-                            if (selectorQuestion) selectorQuestion.audio = text;
+                        TextField {
+                            id: questionTextField
+                            width: parent.width - 44
+                            height: parent.height
+                            text: selectorQuestion && selectorQuestion.question ? selectorQuestion.question : ""
+                            color: "#FFFFFF"
+                            font.pixelSize: fontSize
+                            placeholderText: "Enter question text..."
+                            placeholderTextColor: "#666666"
+                            background: Rectangle {
+                                color: "#1A2327"
+                                border.color: questionTextField.focus ? "#009ca6" : "#445055"
+                                border.width: 1
+                                radius: 3
+                            }
+                            onTextChanged: {
+                                if (selectorQuestion) selectorQuestion.question = text;
+                            }
                         }
                     }
 
-                    Rectangle {
-                        width: 35
-                        height: parent.height
-                        color: "#009ca6"
-                        radius: 3
+                    // Image field
+                    Row {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: rowHeight
+                        spacing: 4
+
                         Text {
-                            anchors.centerIn: parent
-                            text: "..."
-                            color: "white"
-                            font.bold: true
+                            text: "Image:"
+                            width: 40
+                            height: parent.height
+                            color: "#FFFFFF"
+                            font.pixelSize: fontSize
+                            verticalAlignment: Text.AlignVCenter
                         }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: questionAudioDialog.open()
+
+                        TextField {
+                            id: questionImageField
+                            width: parent.width - 40 - 30 - 8
+                            height: parent.height
+                            text: selectorQuestion && selectorQuestion.image ? selectorQuestion.image : ""
+                            color: "#FFFFFF"
+                            font.pixelSize: fontSize
+                            placeholderText: "Select..."
+                            placeholderTextColor: "#666666"
+                            background: Rectangle {
+                                color: "#1A2327"
+                                border.color: questionImageField.focus ? "#009ca6" : "#445055"
+                                border.width: 1
+                                radius: 3
+                            }
+                            onTextChanged: {
+                                if (selectorQuestion) selectorQuestion.image = text;
+                            }
                         }
-                    }
-                }
 
-                // Video Row
-                Row {
-                    width: parent.width
-                    height: rowHeight
-                    spacing: 6
-
-                    Text {
-                        text: "Video:"
-                        width: 45
-                        height: parent.height
-                        color: "#FFFFFF"
-                        font.pixelSize: fontSize
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    TextField {
-                        id: questionVideoField
-                        width: parent.width - 45 - 35 - 12
-                        height: parent.height
-                        text: selectorQuestion && selectorQuestion.video ? selectorQuestion.video : ""
-                        color: "#FFFFFF"
-                        font.pixelSize: fontSize
-                        placeholderText: "Select video..."
-                        placeholderTextColor: "#666666"
-                        background: Rectangle {
-                            color: "#1A2327"
-                            border.color: questionVideoField.focus ? "#009ca6" : "#445055"
-                            border.width: 1
+                        Rectangle {
+                            width: 30
+                            height: parent.height
+                            color: "#009ca6"
                             radius: 3
-                        }
-                        onTextChanged: {
-                            if (selectorQuestion) selectorQuestion.video = text;
+                            Text {
+                                anchors.centerIn: parent
+                                text: "..."
+                                color: "white"
+                                font.bold: true
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: questionImageDialog.open()
+                            }
                         }
                     }
 
-                    Rectangle {
-                        width: 35
-                        height: parent.height
-                        color: "#009ca6"
-                        radius: 3
+                    // Audio field
+                    Row {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: rowHeight
+                        spacing: 4
+
                         Text {
-                            anchors.centerIn: parent
-                            text: "..."
-                            color: "white"
-                            font.bold: true
+                            text: "Audio:"
+                            width: 40
+                            height: parent.height
+                            color: "#FFFFFF"
+                            font.pixelSize: fontSize
+                            verticalAlignment: Text.AlignVCenter
                         }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: questionVideoDialog.open()
+
+                        TextField {
+                            id: questionAudioField
+                            width: parent.width - 40 - 30 - 8
+                            height: parent.height
+                            text: selectorQuestion && selectorQuestion.audio ? selectorQuestion.audio : ""
+                            color: "#FFFFFF"
+                            font.pixelSize: fontSize
+                            placeholderText: "Select..."
+                            placeholderTextColor: "#666666"
+                            background: Rectangle {
+                                color: "#1A2327"
+                                border.color: questionAudioField.focus ? "#009ca6" : "#445055"
+                                border.width: 1
+                                radius: 3
+                            }
+                            onTextChanged: {
+                                if (selectorQuestion) selectorQuestion.audio = text;
+                            }
+                        }
+
+                        Rectangle {
+                            width: 30
+                            height: parent.height
+                            color: "#009ca6"
+                            radius: 3
+                            Text {
+                                anchors.centerIn: parent
+                                text: "..."
+                                color: "white"
+                                font.bold: true
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: questionAudioDialog.open()
+                            }
+                        }
+                    }
+
+                    // Video field
+                    Row {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: rowHeight
+                        spacing: 4
+
+                        Text {
+                            text: "Video:"
+                            width: 40
+                            height: parent.height
+                            color: "#FFFFFF"
+                            font.pixelSize: fontSize
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        TextField {
+                            id: questionVideoField
+                            width: parent.width - 40 - 30 - 8
+                            height: parent.height
+                            text: selectorQuestion && selectorQuestion.video ? selectorQuestion.video : ""
+                            color: "#FFFFFF"
+                            font.pixelSize: fontSize
+                            placeholderText: "Select..."
+                            placeholderTextColor: "#666666"
+                            background: Rectangle {
+                                color: "#1A2327"
+                                border.color: questionVideoField.focus ? "#009ca6" : "#445055"
+                                border.width: 1
+                                radius: 3
+                            }
+                            onTextChanged: {
+                                if (selectorQuestion) selectorQuestion.video = text;
+                            }
+                        }
+
+                        Rectangle {
+                            width: 30
+                            height: parent.height
+                            color: "#009ca6"
+                            radius: 3
+                            Text {
+                                anchors.centerIn: parent
+                                text: "..."
+                                color: "white"
+                                font.bold: true
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: questionVideoDialog.open()
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Options Section - 50%
+        // Options Section - 58%
         Rectangle {
             width: parent.width
-            height: root.height * 0.48
+            height: root.height * 0.58
             color: "#232f34"
             border.color: "#009ca6"
             border.width: 1
@@ -400,13 +410,13 @@ Rectangle {
 
             Column {
                 anchors.fill: parent
-                anchors.margins: 8
+                anchors.margins: 6
                 spacing: 4
 
                 // Header row
                 Row {
                     width: parent.width
-                    height: rowHeight
+                    height: 22
 
                     Text {
                         text: "Answer Options (" + (selectorQuestion.answers ? selectorQuestion.answers.length : 0) + ")"
@@ -420,7 +430,7 @@ Rectangle {
 
                     Rectangle {
                         width: 80
-                        height: parent.height * 0.9
+                        height: 20
                         anchors.verticalCenter: parent.verticalCenter
                         color: {
                             let count = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 0;
@@ -448,20 +458,23 @@ Rectangle {
                     }
                 }
 
-                // Options - each option takes equal share of remaining space
-                Column {
+                // Options in 2-column grid
+                GridLayout {
                     width: parent.width
-                    height: parent.height - rowHeight - 8
-                    spacing: 3
+                    height: parent.height - 28
+                    columns: 2
+                    rowSpacing: 3
+                    columnSpacing: 4
 
                     Repeater {
                         model: selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers : []
 
                         Rectangle {
-                            width: parent.width
-                            height: {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: {
                                 let count = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 1;
-                                return Math.max(28, (parent.height - (count - 1) * 3) / count);
+                                let rows = Math.ceil(count / 2);
+                                return Math.max(26, (parent.height - (rows - 1) * 3) / rows);
                             }
                             color: "#1A2327"
                             border.color: "#445055"
@@ -470,24 +483,24 @@ Rectangle {
 
                             Row {
                                 anchors.fill: parent
-                                anchors.margins: 4
-                                spacing: 4
+                                anchors.margins: 3
+                                spacing: 3
 
                                 // Option number
                                 Text {
                                     text: index + 1
-                                    width: 18
+                                    width: 14
                                     height: parent.height
                                     color: "#009ca6"
                                     font.bold: true
-                                    font.pixelSize: fontSize
+                                    font.pixelSize: fontSize * 0.9
                                     verticalAlignment: Text.AlignVCenter
                                     horizontalAlignment: Text.AlignHCenter
                                 }
 
                                 // Correct checkbox
                                 Rectangle {
-                                    width: Math.min(22, parent.height - 4)
+                                    width: Math.min(18, parent.height - 2)
                                     height: width
                                     radius: 3
                                     color: "white"
@@ -513,12 +526,12 @@ Rectangle {
 
                                 // Text field
                                 TextField {
-                                    width: parent.width * 0.4
+                                    width: parent.width * 0.35
                                     height: parent.height
                                     text: modelData && modelData.text ? modelData.text : ""
                                     color: "#FFFFFF"
-                                    font.pixelSize: fontSize * 0.9
-                                    placeholderText: "Option text..."
+                                    font.pixelSize: fontSize * 0.85
+                                    placeholderText: "Text..."
                                     placeholderTextColor: "#666666"
                                     background: Rectangle {
                                         color: "#232f34"
@@ -533,11 +546,11 @@ Rectangle {
 
                                 // Image field
                                 TextField {
-                                    width: parent.width * 0.32
+                                    width: parent.width * 0.35
                                     height: parent.height
                                     text: modelData && modelData.image ? modelData.image : ""
                                     color: "#FFFFFF"
-                                    font.pixelSize: fontSize * 0.9
+                                    font.pixelSize: fontSize * 0.85
                                     placeholderText: "Image..."
                                     placeholderTextColor: "#666666"
                                     readOnly: true
@@ -551,7 +564,7 @@ Rectangle {
 
                                 // Image select button
                                 Rectangle {
-                                    width: Math.min(28, parent.height)
+                                    width: Math.min(22, parent.height)
                                     height: width
                                     color: "#009ca6"
                                     radius: 3
@@ -561,7 +574,7 @@ Rectangle {
                                         text: "..."
                                         color: "white"
                                         font.bold: true
-                                        font.pixelSize: fontSize * 0.9
+                                        font.pixelSize: 10
                                     }
                                     MouseArea {
                                         anchors.fill: parent
@@ -574,7 +587,7 @@ Rectangle {
 
                                 // Delete button
                                 Rectangle {
-                                    width: Math.min(28, parent.height)
+                                    width: Math.min(22, parent.height)
                                     height: width
                                     radius: width / 2
                                     anchors.verticalCenter: parent.verticalCenter
