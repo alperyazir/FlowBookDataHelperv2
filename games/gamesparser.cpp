@@ -416,8 +416,9 @@ SelectorAnswer* GamesParser::createSelectorAnswer(const QString &text, const QSt
     return selectorAnswer;
 }
 
-SelectorQuestion* GamesParser::createSelectorQuestion(const QString &image, const QString &audio, const QString &video) {
+SelectorQuestion* GamesParser::createSelectorQuestion(const QString &question, const QString &image, const QString &audio, const QString &video) {
     SelectorQuestion *selectorQuestion = new SelectorQuestion(this); // Parent set edildi
+    selectorQuestion->setQuestion(question);
     selectorQuestion->setImage(image);
     selectorQuestion->setAudio(audio);
     selectorQuestion->setVideo(video);

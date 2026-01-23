@@ -491,6 +491,7 @@ signals:
 
 struct SelectorQuestion : public QObject {
     Q_OBJECT
+    Q_PROPERTY(QString question READ question WRITE setQuestion NOTIFY questionChanged)
     Q_PROPERTY(QString image READ image WRITE setImage NOTIFY imageChanged)
     Q_PROPERTY(QString audio READ audio WRITE setAudio NOTIFY audioChanged)
     Q_PROPERTY(QString video READ video WRITE setVideo NOTIFY videoChanged)
@@ -499,10 +500,19 @@ struct SelectorQuestion : public QObject {
 public:
     explicit SelectorQuestion(QObject *parent = nullptr) : QObject(parent) {}
 
+    QString _question; // OPTIONAL - text question
     QString _image;   // OPTIONAL
     QString _audio;   // OPTIONAL
     QString _video;   // OPTIONAL
     QVector<SelectorAnswer*> _answers;
+
+    QString question() const { return _question; }
+    void setQuestion(const QString &question) {
+        if (_question != question) {
+            _question = question;
+            emit questionChanged();
+        }
+    }
 
     QString image() const { return _image; }
     void setImage(const QString &image) {
@@ -549,6 +559,7 @@ public:
 
     QJsonObject toJson() const {
         QJsonObject obj;
+        if (!_question.isEmpty()) obj["question"] = _question;
         if (!_image.isEmpty()) obj["image"] = _image;
         if (!_audio.isEmpty()) obj["audio"] = _audio;
         if (!_video.isEmpty()) obj["video"] = _video;
@@ -564,6 +575,7 @@ public:
     }
 
     void fromJson(const QJsonObject &obj) {
+        if (obj.contains("question")) setQuestion(obj["question"].toString());
         if (obj.contains("image")) setImage(obj["image"].toString());
         if (obj.contains("audio")) setAudio(obj["audio"].toString());
         if (obj.contains("video")) setVideo(obj["video"].toString());
@@ -579,6 +591,7 @@ public:
     }
 
 signals:
+    void questionChanged();
     void imageChanged();
     void audioChanged();
     void videoChanged();
@@ -1573,7 +1586,7 @@ public:
     
     // Methods for managing selector questions and answers
     Q_INVOKABLE SelectorAnswer* createSelectorAnswer(const QString &text = "", const QString &image = "", bool isCorrect = false);
-    Q_INVOKABLE SelectorQuestion* createSelectorQuestion(const QString &image = "", const QString &audio = "", const QString &video = "");
+    Q_INVOKABLE SelectorQuestion* createSelectorQuestion(const QString &question = "", const QString &image = "", const QString &audio = "", const QString &video = "");
     Q_INVOKABLE void addQuestionToSelectorGame(SelectorGame* game, SelectorQuestion* question);
     Q_INVOKABLE void removeQuestionFromSelectorGame(SelectorGame* game, int index);
     Q_INVOKABLE void addAnswerToSelectorQuestion(SelectorQuestion* question, SelectorAnswer* answer);

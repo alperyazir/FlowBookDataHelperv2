@@ -8,6 +8,7 @@ Rectangle {
     id: root
 
     property var selectorQuestion: ({
+            "question": "",
             "image": "",
             "audio": "",
             "video": "",
@@ -203,7 +204,7 @@ Rectangle {
         Rectangle {
             id: questionMediaSection
             width: parent.width
-            height: parent.height * 0.25  // Increased from 0.2 to 0.25
+            height: parent.height * 0.32
             color: "#232f34"
             border.color: "#009ca6"
             border.width: 1
@@ -211,38 +212,76 @@ Rectangle {
 
             Column {
                 anchors.fill: parent
-                anchors.margins: 8  // Reduced from 10 to 8
-                spacing: 4  // Reduced from 8 to 4
+                anchors.margins: 10
+                spacing: 6
 
                 Text {
                     text: "Question Media"
                     color: "#009ca6"
-                    font.pixelSize: root.height * 0.035  // Reduced from 0.04
+                    font.pixelSize: root.height * 0.035
                     font.bold: true
+                }
+
+                // Text Question Row
+                Row {
+                    width: parent.width
+                    height: 28
+                    spacing: 8
+
+                    Text {
+                        text: "Text:"
+                        width: 50
+                        height: parent.height
+                        color: "#FFFFFF"
+                        font.pixelSize: root.height * 0.028
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    TextField {
+                        id: questionTextField
+                        width: parent.width - 58
+                        height: parent.height
+                        text: selectorQuestion && selectorQuestion.question ? selectorQuestion.question : ""
+                        color: "#FFFFFF"
+                        font.pixelSize: root.height * 0.028
+                        placeholderText: "Enter question text..."
+                        placeholderTextColor: "#666666"
+                        background: Rectangle {
+                            color: "#1A2327"
+                            border.color: questionTextField.focus ? "#009ca6" : "#445055"
+                            border.width: 1
+                            radius: 3
+                        }
+                        onTextChanged: {
+                            if (selectorQuestion) {
+                                selectorQuestion.question = text;
+                            }
+                        }
+                    }
                 }
 
                 // Image Row
                 Row {
                     width: parent.width
-                    height: parent.height * 0.22  // Reduced from 0.25 to 0.22
-                    spacing: 5
+                    height: 28
+                    spacing: 8
 
                     Text {
                         text: "Image:"
-                        width: 60
+                        width: 50
                         height: parent.height
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.025  // Reduced from 0.03
+                        font.pixelSize: root.height * 0.028
                         verticalAlignment: Text.AlignVCenter
                     }
 
                     TextField {
                         id: questionImageField
-                        width: parent.width - 60 - 30 - 10
+                        width: parent.width - 50 - 35 - 16
                         height: parent.height
                         text: selectorQuestion && selectorQuestion.image ? selectorQuestion.image : ""
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.025  // Reduced from 0.03
+                        font.pixelSize: root.height * 0.028
                         placeholderText: "Select image..."
                         placeholderTextColor: "#666666"
                         background: Rectangle {
@@ -259,7 +298,7 @@ Rectangle {
                     }
 
                     Rectangle {
-                        width: 30
+                        width: 35
                         height: parent.height
                         color: "#009ca6"
                         radius: 3
@@ -279,25 +318,25 @@ Rectangle {
                 // Audio Row
                 Row {
                     width: parent.width
-                    height: parent.height * 0.22  // Reduced from 0.25 to 0.22
-                    spacing: 5
+                    height: 28
+                    spacing: 8
 
                     Text {
                         text: "Audio:"
-                        width: 60
+                        width: 50
                         height: parent.height
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.025  // Reduced from 0.03
+                        font.pixelSize: root.height * 0.028
                         verticalAlignment: Text.AlignVCenter
                     }
 
                     TextField {
                         id: questionAudioField
-                        width: parent.width - 60 - 30 - 10
+                        width: parent.width - 50 - 35 - 16
                         height: parent.height
                         text: selectorQuestion && selectorQuestion.audio ? selectorQuestion.audio : ""
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.025  // Reduced from 0.03
+                        font.pixelSize: root.height * 0.028
                         placeholderText: "Select audio..."
                         placeholderTextColor: "#666666"
                         background: Rectangle {
@@ -314,7 +353,7 @@ Rectangle {
                     }
 
                     Rectangle {
-                        width: 30
+                        width: 35
                         height: parent.height
                         color: "#009ca6"
                         radius: 3
@@ -334,25 +373,25 @@ Rectangle {
                 // Video Row
                 Row {
                     width: parent.width
-                    height: parent.height * 0.22  // Reduced from 0.25 to 0.22
-                    spacing: 5
+                    height: 28
+                    spacing: 8
 
                     Text {
                         text: "Video:"
-                        width: 60
+                        width: 50
                         height: parent.height
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.025  // Reduced from 0.03
+                        font.pixelSize: root.height * 0.028
                         verticalAlignment: Text.AlignVCenter
                     }
 
                     TextField {
                         id: questionVideoField
-                        width: parent.width - 60 - 30 - 10
+                        width: parent.width - 50 - 35 - 16
                         height: parent.height
                         text: selectorQuestion && selectorQuestion.video ? selectorQuestion.video : ""
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.025  // Reduced from 0.03
+                        font.pixelSize: root.height * 0.028
                         placeholderText: "Select video..."
                         placeholderTextColor: "#666666"
                         background: Rectangle {
@@ -369,7 +408,7 @@ Rectangle {
                     }
 
                     Rectangle {
-                        width: 30
+                        width: 35
                         height: parent.height
                         color: "#009ca6"
                         radius: 3
@@ -392,7 +431,7 @@ Rectangle {
         Rectangle {
             id: optionsSection
             width: parent.width
-            height: parent.height * 0.65  // Reduced from 0.7 to 0.65
+            height: parent.height * 0.58
             color: "#232f34"
             border.color: "#009ca6"
             border.width: 1

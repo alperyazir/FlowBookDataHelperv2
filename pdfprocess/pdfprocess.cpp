@@ -14,7 +14,7 @@ void PdfProcess::startProcessing(const QString &pdfConfig)
     qDebug() << "Starting PDF processing with config:" << pdfConfig;
     QString mPdfConfig = pdfConfig;
     if (mPdfConfig.size() > 0 && mPdfConfig.startsWith("/")) {
-        mPdfConfig = mPdfConfig.removeFirst();
+        //mPdfConfig = mPdfConfig.removeFirst();
     }
     //emit processingStarted();
 
