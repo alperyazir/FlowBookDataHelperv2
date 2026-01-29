@@ -10,6 +10,7 @@ Rectangle {
 
     property var selectorQuestion: ({
             "question": "",
+            "header": "",
             "image": "",
             "audio": "",
             "video": "",
@@ -194,37 +195,79 @@ Rectangle {
                     Layout.preferredHeight: 16
                 }
 
-                // Text field row
+                // Header and Text field row
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    spacing: 4
+                    spacing: 8
 
-                    Text {
-                        text: "Text:"
-                        Layout.preferredWidth: 40
-                        color: "#FFFFFF"
-                        font.pixelSize: fontSize
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    TextField {
-                        id: questionTextField
+                    // Header field group
+                    RowLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        text: selectorQuestion && selectorQuestion.question ? selectorQuestion.question : ""
-                        color: "#FFFFFF"
-                        font.pixelSize: fontSize
-                        placeholderText: "Enter question text..."
-                        placeholderTextColor: "#666666"
-                        background: Rectangle {
-                            color: "#1A2327"
-                            border.color: questionTextField.focus ? "#009ca6" : "#445055"
-                            border.width: 1
-                            radius: 3
+                        spacing: 4
+
+                        Text {
+                            text: "Header:"
+                            Layout.preferredWidth: 45
+                            color: "#FFFFFF"
+                            font.pixelSize: fontSize
+                            verticalAlignment: Text.AlignVCenter
                         }
-                        onTextChanged: {
-                            if (selectorQuestion) selectorQuestion.question = text;
+
+                        TextField {
+                            id: questionHeaderField
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            text: selectorQuestion && selectorQuestion.header ? selectorQuestion.header : ""
+                            color: "#FFFFFF"
+                            font.pixelSize: fontSize
+                            placeholderText: "Header text..."
+                            placeholderTextColor: "#666666"
+                            background: Rectangle {
+                                color: "#1A2327"
+                                border.color: questionHeaderField.focus ? "#009ca6" : "#445055"
+                                border.width: 1
+                                radius: 3
+                            }
+                            onTextChanged: {
+                                if (selectorQuestion) selectorQuestion.header = text;
+                            }
+                        }
+                    }
+
+                    // Text field group
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        spacing: 4
+
+                        Text {
+                            text: "Text:"
+                            Layout.preferredWidth: 30
+                            color: "#FFFFFF"
+                            font.pixelSize: fontSize
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        TextField {
+                            id: questionTextField
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            text: selectorQuestion && selectorQuestion.question ? selectorQuestion.question : ""
+                            color: "#FFFFFF"
+                            font.pixelSize: fontSize
+                            placeholderText: "Question text..."
+                            placeholderTextColor: "#666666"
+                            background: Rectangle {
+                                color: "#1A2327"
+                                border.color: questionTextField.focus ? "#009ca6" : "#445055"
+                                border.width: 1
+                                radius: 3
+                            }
+                            onTextChanged: {
+                                if (selectorQuestion) selectorQuestion.question = text;
+                            }
                         }
                     }
                 }
