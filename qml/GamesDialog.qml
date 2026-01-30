@@ -2068,7 +2068,7 @@ Dialog {
                                         print("Add New Selector Question");
                                         if (currentSelectorGame) {
                                             // Create new selector question using gamesParser
-                                            let newQuestion = gamesParser.createSelectorQuestion("", "", "", "");
+                                            let newQuestion = gamesParser.createSelectorQuestion("", "", "", "", "");
 
                                             // Add to selector game using gamesParser method
                                             gamesParser.addQuestionToSelectorGame(currentSelectorGame, newQuestion);
