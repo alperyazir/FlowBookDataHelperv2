@@ -14,7 +14,6 @@ void PdfProcess::startProcessing(const QString &pdfConfig)
     qDebug() << "Starting PDF processing with config:" << pdfConfig;
     QString mPdfConfig = pdfConfig;
     if (mPdfConfig.size() > 0 && mPdfConfig.startsWith("/")) {
-        mPdfConfig = mPdfConfig.removeFirst();
     }
     //emit processingStarted();
 
@@ -137,6 +136,96 @@ void PdfProcess::startProcessing(const QString &pdfConfig)
 
     // Don't wait here - the process will emit signals as it proceeds
     qDebug() << "Python process started";
+}
+
+void PdfProcess::startAIAnalysis(const QString &configPath, const QString &settingsPath)
+{
+    qDebug() << "Starting AI Analysis with config:" << configPath << "settings:" << settingsPath;
+
+    // Setup the process to run the Python script
+    QProcess *process = new QProcess(this);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    process->setProcessEnvironment(env);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+
+    // Connect to readyRead to capture output in real-time
+    connect(process, &QProcess::readyRead, [this, process]() {
+        while (process->canReadLine()) {
+            QString line = QString::fromUtf8(process->readLine()).trimmed();
+            if (line.isEmpty()) continue;
+
+            if (line.startsWith("PROGRESS:")) {
+                QString progressStr = line.mid(9, line.indexOf("%") - 9);
+                bool ok;
+                int progressValue = progressStr.toInt(&ok);
+                if (ok) setProgress(progressValue);
+            } else {
+                setLogMessages(line);
+                qDebug() << line;
+            }
+        }
+    });
+
+    // Connect to finished to handle completion
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+                QByteArray remainingOutput = process->readAllStandardOutput();
+                if (!remainingOutput.isEmpty()) {
+                    QString remainingText = QString::fromUtf8(remainingOutput);
+                    QStringList lines = remainingText.split('\n', Qt::SkipEmptyParts);
+                    for (const QString &line : lines) {
+                        if (line.startsWith("PROGRESS:")) {
+                            QString progressStr = line.mid(9, line.indexOf("%") - 9);
+                            bool ok;
+                            int progressValue = progressStr.toInt(&ok);
+                            if (ok) setProgress(progressValue);
+                        } else {
+                            setLogMessages(line);
+                            qDebug() << "Remaining output:" << line;
+                        }
+                    }
+                }
+
+                if (exitStatus == QProcess::NormalExit && exitCode == 0) {
+                    qDebug() << "AI Analysis completed successfully";
+                    setLogMessages("AI Analysis completed successfully");
+                } else {
+                    QString error = "AI Analysis failed with exit code: " + QString::number(exitCode);
+                    qDebug() << error;
+                    setLogMessages(error);
+                }
+
+                process->deleteLater();
+            });
+
+    // Connect to error handling
+    connect(process, &QProcess::errorOccurred, [this, process](QProcess::ProcessError error) {
+        QString errorMessage = "Process error: " + QString::number(error) + " - " + process->errorString();
+        qDebug() << errorMessage;
+        setLogMessages(errorMessage);
+        process->deleteLater();
+    });
+
+    // Construct the path to the Python script
+    QString appDir = QGuiApplication::applicationDirPath();
+#ifdef Q_OS_MAC
+    appDir += "/../../..";
+#else
+    appDir += "/";
+#endif
+    QString scriptPath = appDir + "/scripts/ai_analyzer.py";
+
+    // Set up the process arguments
+    QStringList arguments;
+    arguments << "-u" << scriptPath << configPath << settingsPath;
+
+    qDebug() << "AI ANALYZER SCRIPT PATH: " << arguments;
+
+    // Start the process
+    process->start("python", arguments);
+
+    qDebug() << "AI Analyzer process started";
 }
 
 QString PdfProcess::logMessages() const

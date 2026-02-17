@@ -94,6 +94,60 @@ Rectangle {
 
         Button {
             anchors.verticalCenter: parent.verticalCenter
+            text: "AI Analyze"
+            width: 100
+            height: 40
+            background: Rectangle {
+                color: "#009ca6"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                color: "white"
+                font.bold: true
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            onClicked: {
+                // Read settings.json to check API key
+                var settingsPath = appPath + "settings.json";
+                var xhr = new XMLHttpRequest();
+                xhr.open("GET", "file://" + settingsPath, false);
+                try {
+                    xhr.send();
+                    if (xhr.status === 200 || xhr.status === 0) {
+                        var settings = JSON.parse(xhr.responseText);
+                        if (settings.gemini_api_key && settings.gemini_api_key.length > 0) {
+                            // API key exists, build config path from current project
+                            var configPath = appPath + "books/" + openProject.currentProject + "/config.json";
+                            console.log("Starting AI Analysis with config: " + configPath);
+
+                            // Save current changes first
+                            save();
+
+                            // Start AI analysis
+                            pdfProcess.startAIAnalysis(configPath, settingsPath);
+
+                            // Show progress dialog
+                            flowProgress.reset();
+                            flowProgress.statusText = "AI Analysis in progress...";
+                            flowProgress.addLogMessage("Starting AI analysis...");
+                            flowProgress.open();
+                        } else {
+                            toast.show("API key is empty in settings.json");
+                        }
+                    } else {
+                        toast.show("settings.json not found at: " + settingsPath);
+                    }
+                } catch (e) {
+                    toast.show("settings.json not found. Create it with gemini_api_key.");
+                    console.log("Settings error: " + e);
+                }
+            }
+        }
+
+        Button {
+            anchors.verticalCenter: parent.verticalCenter
             text: "Test"
             width: 70
             height: 40
