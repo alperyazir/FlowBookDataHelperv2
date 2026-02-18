@@ -15,7 +15,11 @@ public:
     Q_INVOKABLE bool launchTestFlowBook(const QString &testVersion);
     Q_INVOKABLE bool packageForPlatforms(const QStringList &platforms, const QString &currentBookName);
     Q_INVOKABLE void copyAdditionalFiles(const QStringList &filePaths);
-    
+    Q_INVOKABLE void cropSectionFromPdf(const QString &pdfPath, int pageIndex,
+                                         double x, double y, double w, double h,
+                                         double pngWidth, double pngHeight,
+                                         const QString &outputPath);
+
     int _progress;
     QString _logMessages;
 
@@ -31,6 +35,8 @@ signals:
     void progressChanged();
     void logMessagesChanged();
     void copyCompleted(bool success);
+    void aiAnalysisCompleted(bool success);
+    void cropCompleted(bool success, const QString &outputPath);
 
 private:
     Q_PROPERTY(int progress READ progress WRITE setProgress NOTIFY progressChanged FINAL)

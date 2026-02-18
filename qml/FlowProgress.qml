@@ -6,24 +6,33 @@ import QtQuick.Dialogs
 Dialog {
     id: flowProgress
     title: "Processing"
-    width: 600
-    height: detailsExpanded ? 500 : 250
-    modal: true
+    width: minimized ? 300 : 600
+    height: minimized ? 60 : (detailsExpanded ? 500 : 250)
+    modal: false
     closePolicy: Popup.NoAutoClose
-    anchors.centerIn: parent
+    anchors.centerIn: undefined
+    x: minimized ? parent.width - width - 20 : (parent.width - width) / 2
+    y: minimized ? parent.height - height - 20 : (parent.height - height) / 2
     standardButtons: Dialog.Cancel
 
     // Properties
     property int progress: 0
     property string statusText: "Processing..."
     property bool detailsExpanded: false
+    property bool minimized: false
     property var logMessages: ["Alper", "Test"]
 
+    Behavior on width {
+        NumberAnimation { duration: 200; easing.type: Easing.OutQuad }
+    }
     Behavior on height {
-        NumberAnimation {
-            duration: 200
-            easing.type: Easing.OutQuad
-        }
+        NumberAnimation { duration: 200; easing.type: Easing.OutQuad }
+    }
+    Behavior on x {
+        NumberAnimation { duration: 200; easing.type: Easing.OutQuad }
+    }
+    Behavior on y {
+        NumberAnimation { duration: 200; easing.type: Easing.OutQuad }
     }
 
     header: Rectangle {
@@ -31,8 +40,9 @@ Dialog {
         height: 40
         border.color: "#009ca6"
         border.width: 1
+
         Label {
-            text: "Processing"
+            text: minimized ? "AI: " + progress + "%" : "Processing"
             color: "white"
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left
@@ -40,11 +50,35 @@ Dialog {
             font.pixelSize: 16
             font.bold: true
         }
+
+        // Minimize/Maximize button
+        Button {
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.right: parent.right
+            anchors.rightMargin: 10
+            width: 30
+            height: 30
+            text: minimized ? "+" : "-"
+            background: Rectangle {
+                color: parent.hovered ? "#2A3337" : "transparent"
+                radius: 4
+            }
+            contentItem: Text {
+                text: parent.text
+                color: "#009ca6"
+                font.bold: true
+                font.pixelSize: 18
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            onClicked: minimized = !minimized
+        }
     }
 
     footer: Rectangle {
         color: "#1A2327"
-        height: 60
+        height: minimized ? 0 : 60
+        visible: !minimized
         border.color: "#009ca6"
         border.width: 1
         RowLayout {
@@ -82,8 +116,9 @@ Dialog {
     // Content
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 20
+        anchors.margins: minimized ? 5 : 20
         spacing: 15
+        visible: !minimized
 
         // Status text
         Label {
@@ -213,6 +248,7 @@ Dialog {
     function reset() {
         progress = 0;
         statusText = "Processing...";
+        minimized = false;
         clearLogs();
     }
 
@@ -231,6 +267,17 @@ Dialog {
 
         function onLogMessagesChanged() {
             addLogMessage(pdfProcess.logMessages);
+        }
+
+        function onAiAnalysisCompleted(success) {
+            if (success) {
+                // Reload config from disk so AI changes are picked up
+                var projectName = openProject.currentProject;
+                if (projectName && projectName !== "") {
+                    console.log("Reloading config after AI analysis for: " + projectName);
+                    config.initialize(true, appPath + "books/" + projectName);
+                }
+            }
         }
     }
 }

@@ -18,6 +18,19 @@ Item {
     property var activeSession
     property real startRectX: 0
     property real startRectY: 0
+
+    // Crop mode properties
+    property bool cropMode: false
+    property var cropActivity: null        // target object during crop mode
+    property string cropPathProperty: ""   // property name to update ("sectionPath" or "imagePath")
+    property var cropActivityRef: null     // kept after crop mode ends for onCropCompleted
+    property string cropNewSectionPath: ""
+    property real cropStartX: 0
+    property real cropStartY: 0
+    property real cropEndX: 0
+    property real cropEndY: 0
+    property bool cropDrawing: false
+
     anchors.fill: parent
 
     MouseArea {
@@ -37,38 +50,16 @@ Item {
                            dragging = true;
                            lastX = mouse.x;
                            lastY = mouse.y;
-                           //flick.interactive = true; // Enable Flickable interaction
                        } else if (mouse.button === Qt.RightButton) {
                            menu.popup(mouse.x, mouse.y);
                        } else if ((mouse.button === Qt.LeftButton) && root.fillingModeEnabled)
-                       // drawing = true
-                       // var component = Qt.createComponent("newComponents/NewRectangle.qml")
-                       // root.activeFillRectangle = component.createObject(root, {
-                       //                                                       "x": mouseArea.mouseX,
-                       //                                                       "y": mouseArea.mouseY})
                        {}
                    }
 
         onReleased: mouse => {
                         if (mouse.button === Qt.MiddleButton) {
                             dragging = false;
-                            //flick.interactive = false; // Disable Flickable interaction
                         } else if (mouse.button === Qt.LeftButton && root.fillingModeEnabled)
-                        // fillList.push(activeFillRectangle)
-                        // sideBar.page = root.page
-                        // sideBar.fillVisible = true
-                        // sideBar.fillList = root.fillList
-
-                        // var adjustedX = mouseArea.mouseX + flick.contentX
-                        // var adjustedY = mouseArea.mouseY + flick.contentY
-
-                        // // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
-                        // var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth)
-                        // var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight)
-
-                        // // config.bookSets[0].saveToJson();
-                        // activeFillRectangle.visible = false
-                        // drawing = false
                         {}
                     }
 
@@ -504,6 +495,7 @@ Item {
                     }
                 }
             }
+
             Repeater {
                 id: sections
                 model: page.sections
@@ -1212,6 +1204,78 @@ Item {
         }
     }
 
+    // Crop mode: overlay MouseArea on top of everything (z: 100)
+    MouseArea {
+        id: cropMouseArea
+        anchors.fill: parent
+        visible: root.cropMode
+        enabled: root.cropMode
+        z: 100
+        cursorShape: Qt.CrossCursor
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+        onPressed: mouse => {
+                       if (mouse.button === Qt.LeftButton) {
+                           root.cropStartX = mouse.x;
+                           root.cropStartY = mouse.y;
+                           root.cropEndX = mouse.x;
+                           root.cropEndY = mouse.y;
+                           root.cropDrawing = true;
+                       } else if (mouse.button === Qt.RightButton) {
+                           root.endCropMode();
+                       }
+                   }
+
+        onPositionChanged: mouse => {
+                               if (root.cropDrawing) {
+                                   root.cropEndX = mouse.x;
+                                   root.cropEndY = mouse.y;
+                               }
+                           }
+
+        onReleased: mouse => {
+                        if (mouse.button === Qt.LeftButton && root.cropDrawing) {
+                            root.cropDrawing = false;
+                            root.executeCrop();
+                        }
+                    }
+    }
+
+    // Crop selection rectangle overlay (on top of cropMouseArea)
+    Rectangle {
+        id: cropRect
+        visible: root.cropMode && root.cropDrawing
+        z: 101
+        color: "#300078D4"
+        border.color: "#0078D4"
+        border.width: 2
+        x: Math.min(root.cropStartX, root.cropEndX)
+        y: Math.min(root.cropStartY, root.cropEndY)
+        width: Math.abs(root.cropEndX - root.cropStartX)
+        height: Math.abs(root.cropEndY - root.cropStartY)
+    }
+
+    // Crop mode indicator label
+    Rectangle {
+        visible: root.cropMode
+        z: 102
+        anchors.top: parent.top
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.topMargin: 10
+        width: cropLabel.width + 20
+        height: 30
+        color: "#E00078D4"
+        radius: 4
+
+        Text {
+            id: cropLabel
+            anchors.centerIn: parent
+            text: "CROP MODE - Draw selection, Right-click or Esc to cancel"
+            color: "white"
+            font.pixelSize: 12
+        }
+    }
+
     function setDefaultZoom() {
         // İçeriği orijinal boyutuna (1x zoom) döndür
         flick.resizeContent(flick.width, flick.height, Qt.point(flick.width / 2, flick.height / 2));
@@ -1241,5 +1305,127 @@ Item {
 
         // config.bookSets[0].saveToJson();
         print("Changes Are Saved Page Detail set status");
+    }
+
+    function startCropMode(targetObj, pathProperty) {
+        root.cropMode = true;
+        root.cropActivity = targetObj;
+        root.cropActivityRef = targetObj;
+        root.cropPathProperty = pathProperty || "sectionPath";
+        root.cropNewSectionPath = "";
+        root.cropDrawing = false;
+        mainMouseArea.cursorShape = Qt.CrossCursor;
+        var currentPath = targetObj[root.cropPathProperty] || "";
+        print("Crop mode started for property: " + root.cropPathProperty + " = " + currentPath);
+    }
+
+    function endCropMode() {
+        root.cropMode = false;
+        root.cropActivity = null;
+        root.cropDrawing = false;
+        mainMouseArea.cursorShape = Qt.ArrowCursor;
+        print("Crop mode ended");
+    }
+
+    function executeCrop() {
+        // Convert display coordinates to original PNG pixel coordinates
+        var selX = Math.min(root.cropStartX, root.cropEndX);
+        var selY = Math.min(root.cropStartY, root.cropEndY);
+        var selW = Math.abs(root.cropEndX - root.cropStartX);
+        var selH = Math.abs(root.cropEndY - root.cropStartY);
+
+        // Minimum selection check
+        if (selW < 10 || selH < 10) {
+            print("Crop selection too small, ignoring");
+            endCropMode();
+            return;
+        }
+
+        // Display (viewport) coords -> content coords -> original PNG pixel coords
+        // mouse.x/y is in viewport space, add flick scroll offset to get content coords
+        var contentX = selX + flick.contentX;
+        var contentY = selY + flick.contentY;
+
+        // Subtract image centering offset within the content area
+        var adjustedX = contentX - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+        var adjustedY = contentY - (flick.contentHeight / 2 - picture.paintedHeight / 2);
+
+        // Scale from painted size to original source size
+        var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
+        var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
+        var originalW = selW * (picture.sourceSize.width / picture.paintedWidth);
+        var originalH = selH * (picture.sourceSize.height / picture.paintedHeight);
+
+        // Clamp to image bounds
+        originalX = Math.max(0, originalX);
+        originalY = Math.max(0, originalY);
+        if (originalX + originalW > picture.sourceSize.width)
+            originalW = picture.sourceSize.width - originalX;
+        if (originalY + originalH > picture.sourceSize.height)
+            originalH = picture.sourceSize.height - originalY;
+
+        // Determine raw directory path from page image_path
+        var imagePath = page.image_path.replace(/\\/g, "/");
+        var bookDir = imagePath.substring(0, imagePath.indexOf("/images/"));
+        var pdfPath = appPath + bookDir.substring(2) + "/raw";
+
+        // Page index (0-based)
+        var pageIndex = page.page_number - 1;
+
+        // Output path: generate unique name to bust QML image cache
+        var currentPath = root.cropActivity[root.cropPathProperty] || "";
+        var sectionDir;
+        if (currentPath !== "" && currentPath.indexOf("/") !== -1) {
+            sectionDir = currentPath.substring(0, currentPath.lastIndexOf("/") + 1);
+        } else {
+            // Fallback: use page image directory
+            var imgPath = page.image_path.replace(/\\/g, "/");
+            sectionDir = imgPath.substring(0, imgPath.lastIndexOf("/") + 1);
+        }
+        var timestamp = Date.now();
+        var newFileName = "p" + page.page_number + "_crop_" + timestamp + ".png";
+        var newSectionPath = sectionDir + newFileName;
+        var outputPath = appPath + newSectionPath.substring(2);
+
+        // Store new path for onCropCompleted to update sectionPath
+        root.cropNewSectionPath = newSectionPath;
+
+        print("Crop: PDF=" + pdfPath + " page=" + pageIndex);
+        print("Crop: PNG coords x=" + originalX + " y=" + originalY + " w=" + originalW + " h=" + originalH);
+        print("Crop: PNG size=" + picture.sourceSize.width + "x" + picture.sourceSize.height);
+        print("Crop: Output=" + outputPath);
+
+        pdfProcess.cropSectionFromPdf(
+            pdfPath, pageIndex,
+            originalX, originalY, originalW, originalH,
+            picture.sourceSize.width, picture.sourceSize.height,
+            outputPath
+        );
+
+        endCropMode();
+    }
+
+    Connections {
+        target: pdfProcess
+        function onCropCompleted(success, outputPath) {
+            if (success) {
+                print("Crop saved successfully: " + outputPath);
+                // Update target property to new file (unique name busts QML image cache)
+                if (root.cropActivityRef && root.cropNewSectionPath !== "") {
+                    root.cropActivityRef[root.cropPathProperty] = root.cropNewSectionPath;
+                    print(root.cropPathProperty + " updated to: " + root.cropNewSectionPath);
+                }
+            } else {
+                print("Crop failed for: " + outputPath);
+            }
+        }
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        enabled: root.cropMode
+        onActivated: {
+            root.endCropMode();
+        }
     }
 }

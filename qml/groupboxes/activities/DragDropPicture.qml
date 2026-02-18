@@ -148,6 +148,34 @@ Column {
                 }
             }
         }
+
+        Button {
+            width: 50
+            height: 36
+            anchors.verticalCenter: parent.verticalCenter
+
+            background: Rectangle {
+                color: parent.hovered ? "#00b3be" : "#009ca6"
+                border.color: "#007a82"
+                border.width: 1
+                radius: 4
+            }
+
+            contentItem: Text {
+                text: "Crop"
+                color: "white"
+                font.pixelSize: 12
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {
+                    content.startCropMode(root.activityModelData);
+                }
+            }
+        }
     }
 
     GroupBox {

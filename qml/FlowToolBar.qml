@@ -94,7 +94,7 @@ Rectangle {
 
         Button {
             anchors.verticalCenter: parent.verticalCenter
-            text: "AI Analyze"
+            text: "Analyze"
             width: 100
             height: 40
             background: Rectangle {
@@ -105,44 +105,30 @@ Rectangle {
                 text: parent.text
                 color: "white"
                 font.bold: true
+                anchors.centerIn: parent
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
             onClicked: {
-                // Read settings.json to check API key
+                var bookDir = config.bookSets[0].bookDirectoryName;
+                var configPath = bookDir + "/config.json";
                 var settingsPath = appPath + "settings.json";
-                var xhr = new XMLHttpRequest();
-                xhr.open("GET", "file://" + settingsPath, false);
-                try {
-                    xhr.send();
-                    if (xhr.status === 200 || xhr.status === 0) {
-                        var settings = JSON.parse(xhr.responseText);
-                        if (settings.gemini_api_key && settings.gemini_api_key.length > 0) {
-                            // API key exists, build config path from current project
-                            var configPath = appPath + "books/" + openProject.currentProject + "/config.json";
-                            console.log("Starting AI Analysis with config: " + configPath);
 
-                            // Save current changes first
-                            save();
+                console.log("AI Analyze - bookDir: " + bookDir);
+                console.log("AI Analyze - configPath: " + configPath);
+                console.log("AI Analyze - settingsPath: " + settingsPath);
 
-                            // Start AI analysis
-                            pdfProcess.startAIAnalysis(configPath, settingsPath);
+                // Save current changes first
+                save();
 
-                            // Show progress dialog
-                            flowProgress.reset();
-                            flowProgress.statusText = "AI Analysis in progress...";
-                            flowProgress.addLogMessage("Starting AI analysis...");
-                            flowProgress.open();
-                        } else {
-                            toast.show("API key is empty in settings.json");
-                        }
-                    } else {
-                        toast.show("settings.json not found at: " + settingsPath);
-                    }
-                } catch (e) {
-                    toast.show("settings.json not found. Create it with gemini_api_key.");
-                    console.log("Settings error: " + e);
-                }
+                // Start AI analysis
+                pdfProcess.startAIAnalysis(configPath, settingsPath);
+
+                // Show progress dialog
+                flowProgress.reset();
+                flowProgress.statusText = "AI Analysis in progress...";
+                flowProgress.addLogMessage("Starting AI analysis...");
+                flowProgress.open();
             }
         }
 

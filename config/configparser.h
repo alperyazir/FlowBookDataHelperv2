@@ -2529,11 +2529,14 @@ struct BookSet : public QObject {
     Q_PROPERTY(QVariantList books READ books WRITE setBooks NOTIFY booksChanged)
     Q_PROPERTY(bool fullscreen READ fullscreen WRITE setFullscreen NOTIFY fullscreenChanged)
     Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged)
+    Q_PROPERTY(QString bookDirectoryName READ bookDirectoryName NOTIFY bookDirectoryNameChanged)
 
 public:
     explicit BookSet(QObject *parent = nullptr) : QObject(parent) {}
 
     QString _bookDirectoryName = "";
+    QString bookDirectoryName() const { return _bookDirectoryName; }
+    Q_SIGNAL void bookDirectoryNameChanged();
 
     bool initialize(const QString &config_path);
     Q_INVOKABLE void saveToJson() {

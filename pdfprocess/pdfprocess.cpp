@@ -132,7 +132,7 @@ void PdfProcess::startProcessing(const QString &pdfConfig)
      qDebug() << "SCRIPT PATH: " << arguments;
 
     // Start the process with python3 command
-    process->start("python", arguments);
+    process->start("/Library/Frameworks/Python.framework/Versions/3.12/bin/python3", arguments);
 
     // Don't wait here - the process will emit signals as it proceeds
     qDebug() << "Python process started";
@@ -190,10 +190,12 @@ void PdfProcess::startAIAnalysis(const QString &configPath, const QString &setti
                 if (exitStatus == QProcess::NormalExit && exitCode == 0) {
                     qDebug() << "AI Analysis completed successfully";
                     setLogMessages("AI Analysis completed successfully");
+                    emit aiAnalysisCompleted(true);
                 } else {
                     QString error = "AI Analysis failed with exit code: " + QString::number(exitCode);
                     qDebug() << error;
                     setLogMessages(error);
+                    emit aiAnalysisCompleted(false);
                 }
 
                 process->deleteLater();
@@ -204,6 +206,7 @@ void PdfProcess::startAIAnalysis(const QString &configPath, const QString &setti
         QString errorMessage = "Process error: " + QString::number(error) + " - " + process->errorString();
         qDebug() << errorMessage;
         setLogMessages(errorMessage);
+        emit aiAnalysisCompleted(false);
         process->deleteLater();
     });
 
@@ -223,7 +226,7 @@ void PdfProcess::startAIAnalysis(const QString &configPath, const QString &setti
     qDebug() << "AI ANALYZER SCRIPT PATH: " << arguments;
 
     // Start the process
-    process->start("python", arguments);
+    process->start("/Library/Frameworks/Python.framework/Versions/3.12/bin/python3", arguments);
 
     qDebug() << "AI Analyzer process started";
 }
@@ -611,7 +614,7 @@ bool PdfProcess::package(const QStringList &platforms, const QString &currentBoo
             continue;
         }
 
-        // Zip işlemi
+        // Zip işlemiq
         setProgress(baseProgress + progressPerPlatform * 0.8); // %80
         setLogMessages(QString("7/7 - Creating zip file for %1...").arg(platformName));
         QString zipPath = releaseBookPath + "/" + targetFolderName + ".zip";
@@ -711,6 +714,71 @@ void PdfProcess::copyAdditionalFiles(const QStringList &filePaths)
         }
     }
 */
+}
+
+void PdfProcess::cropSectionFromPdf(const QString &pdfPath, int pageIndex,
+                                     double x, double y, double w, double h,
+                                     double pngWidth, double pngHeight,
+                                     const QString &outputPath)
+{
+    qDebug() << "Cropping section from PDF:" << pdfPath << "page:" << pageIndex
+             << "rect:" << x << y << w << h << "png:" << pngWidth << pngHeight
+             << "output:" << outputPath;
+
+    QProcess *process = new QProcess(this);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    process->setProcessEnvironment(env);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+
+    QString capturedOutput;
+
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [this, process, outputPath, &capturedOutput](int exitCode, QProcess::ExitStatus exitStatus) {
+                QByteArray remaining = process->readAllStandardOutput();
+                QString output = QString::fromUtf8(remaining).trimmed();
+                qDebug() << "Crop script output:" << output;
+
+                if (exitStatus == QProcess::NormalExit && exitCode == 0 && output.contains("OK")) {
+                    qDebug() << "Crop completed successfully:" << outputPath;
+                    emit cropCompleted(true, outputPath);
+                } else {
+                    qDebug() << "Crop failed with exit code:" << exitCode;
+                    emit cropCompleted(false, outputPath);
+                }
+                process->deleteLater();
+            });
+
+    connect(process, &QProcess::errorOccurred, [this, process, outputPath](QProcess::ProcessError error) {
+        qDebug() << "Crop process error:" << error << process->errorString();
+        emit cropCompleted(false, outputPath);
+        process->deleteLater();
+    });
+
+    QString appDir = QGuiApplication::applicationDirPath();
+#ifdef Q_OS_MAC
+    appDir += "/../../..";
+#else
+    appDir += "/";
+#endif
+    QString scriptPath = appDir + "/scripts/crop_section.py";
+
+    QStringList arguments;
+    arguments << "-u" << scriptPath
+              << pdfPath
+              << QString::number(pageIndex)
+              << QString::number(x, 'f', 2)
+              << QString::number(y, 'f', 2)
+              << QString::number(w, 'f', 2)
+              << QString::number(h, 'f', 2)
+              << QString::number(pngWidth, 'f', 2)
+              << QString::number(pngHeight, 'f', 2)
+              << outputPath;
+
+    qDebug() << "CROP SCRIPT ARGS:" << arguments;
+
+    process->start("/Library/Frameworks/Python.framework/Versions/3.12/bin/python3", arguments);
+    qDebug() << "Crop process started";
 }
 
 bool PdfProcess::packageForPlatforms(const QStringList &platforms, const QString &currentBookName) {

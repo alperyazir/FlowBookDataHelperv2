@@ -165,7 +165,7 @@ ApplicationWindow {
 
         Text {
             id: versionText
-            text: "v2.2.4"  // versiyon numaranızı buraya yazın
+            text: "v2.3.0"
             color: "#009ca6"
             anchors.centerIn: parent
             font.pixelSize: 14
@@ -184,7 +184,7 @@ ApplicationWindow {
     // Emoji için Text component'i
     Text {
         id: emoji
-        text: "🤗"  // kucaklayan emoji
+        text: "👌🏻"  // kucaklayan emoji
         font.pixelSize: 48
         visible: false
         anchors.left: versionRect.right

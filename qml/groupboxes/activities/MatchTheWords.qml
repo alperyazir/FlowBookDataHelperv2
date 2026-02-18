@@ -205,6 +205,30 @@ Column {
                             width: parent.width * 0.075
                             height: parent.height
                             anchors.verticalCenter: parent.verticalCenter
+
+                            background: Rectangle {
+                                color: parent.hovered ? "#00b3be" : "#009ca6"
+                                border.color: "#007a82"
+                                border.width: 1
+                                radius: 4
+                            }
+
+                            contentItem: FlowText {
+                                text: "Crop"
+                                color: "white"
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: {
+                                    content.startCropMode(modelData, "imagePath");
+                                }
+                            }
+                        }
+                        Button {
+                            width: parent.width * 0.075
+                            height: parent.height
+                            anchors.verticalCenter: parent.verticalCenter
                             text: "X"
 
                             background: Rectangle {
@@ -358,6 +382,33 @@ Column {
                                     activeImage = modelData;
                                     fileDialog.folder = "file:" + appPath + root.activityModelData.sectionPath;
                                     fileDialog.open();
+                                }
+                            }
+                        }
+                        Button {
+                            width: parent.width * 0.075
+                            height: parent.height
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            background: Rectangle {
+                                color: parent.hovered ? "#00b3be" : "#009ca6"
+                                border.color: "#007a82"
+                                border.width: 1
+                                radius: 4
+                            }
+
+                            contentItem: Text {
+                                text: "Crop"
+                                color: "white"
+                                font.pixelSize: 10
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: {
+                                    content.startCropMode(modelData, "imagePath");
                                 }
                             }
                         }

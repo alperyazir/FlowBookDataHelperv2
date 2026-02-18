@@ -1044,10 +1044,10 @@ Dialog {
             "publisher_name": publisherNameEdit.text,
             "book_title": bookTitleEdit.text,
             "language": languageComboBox.currentText,
-            "book_pdf_path": pdfPath.startsWith("/") ? pdfPath.slice(1) : pdfPath,
-            "book_cover_path": bookCoverPath.startsWith("/") ? bookCoverPath.slice(1) : bookCoverPath,
-            "audio_path": audioPath.startsWith("/") ? audioPath.slice(1) : audioPath,
-            "video_path": videoPath.startsWith("/") ? videoPath.slice(1) : videoPath,
+            "book_pdf_path": (Qt.platform.os === "windows" && pdfPath.startsWith("/")) ? pdfPath.slice(1) : pdfPath,
+            "book_cover_path": (Qt.platform.os === "windows" && bookCoverPath.startsWith("/")) ? bookCoverPath.slice(1) : bookCoverPath,
+            "audio_path": (Qt.platform.os === "windows" && audioPath.startsWith("/")) ? audioPath.slice(1) : audioPath,
+            "video_path": (Qt.platform.os === "windows" && videoPath.startsWith("/")) ? videoPath.slice(1) : videoPath,
             "modules": modulesArray,
             "output_path": outputEdit.text
         };

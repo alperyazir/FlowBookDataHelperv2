@@ -8,6 +8,7 @@ Rectangle {
     property bool outlineEnabled
     property var currentPageDetails
     property int currentPageIndex: 0
+    property alias pageDetails: pageDetails
     height: parent.height
     width: parent.width
     color: "#1A2327" // Dark background
@@ -67,5 +68,9 @@ Rectangle {
 
     function enableRightClick(enabled) {
         currentPageDetails.enableRightClick(enabled);
+    }
+
+    function startCropMode(targetObj, pathProperty) {
+        pageDetails.startCropMode(targetObj, pathProperty);
     }
 }
