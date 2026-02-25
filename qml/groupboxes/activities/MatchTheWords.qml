@@ -133,7 +133,7 @@ Column {
                         }
                         TextField {
                             id: tf
-                            width: parent.width * 0.40
+                            width: parent.width * 0.35
                             height: parent.height
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -155,7 +155,7 @@ Column {
                         }
                         TextField {
                             id: pictureEdit
-                            width: parent.width * 0.40
+                            width: parent.width * 0.35
                             height: parent.height
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -316,7 +316,7 @@ Column {
                         }
                         TextField {
                             id: sentenceTxt
-                            width: parent.width * 0.39
+                            width: parent.width * 0.34
                             height: parent.height
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -338,7 +338,7 @@ Column {
                         }
                         TextField {
                             id: pictureEditRight
-                            width: parent.width * 0.39
+                            width: parent.width * 0.34
                             height: parent.height
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
