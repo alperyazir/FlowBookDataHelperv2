@@ -102,6 +102,8 @@
         <file>qml/groupboxes/DrawMatchedLineGroupBox.qml</file>
         <file>qml/qtquickcontrols2.conf</file>
         <file>qml/GamesDialog.qml</file>
+        <file>qml/ModuleEditorDialog.qml</file>
+        <file>fun/minion.mp4</file>
         <file>qml/games/QuizQuestionCard.qml</file>
         <file>qml/games/MemoryQuestionCard.qml</file>
         <file>qml/games/OrderQuestionCard.qml</file>

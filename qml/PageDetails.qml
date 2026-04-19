@@ -33,6 +33,71 @@ Item {
 
     anchors.fill: parent
 
+    // HoverHandler lives in the pointer-handler layer so it always sees hover
+    // movements even when a Flickable / other MouseArea sits on top of us.
+    HoverHandler {
+        id: hoverTracker
+    }
+
+    // Converts current mouse position inside the picture into page-original coords.
+    function _mouseToOriginal() {
+        var x = hoverTracker.hovered ? hoverTracker.point.position.x : mainMouseArea.mouseX;
+        var y = hoverTracker.hovered ? hoverTracker.point.position.y : mainMouseArea.mouseY;
+        var adjustedX = x - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+        var adjustedY = y - (flick.contentHeight / 2 - picture.paintedHeight / 2);
+        var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
+        var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
+        return { x: originalX, y: originalY };
+    }
+
+    function addAudioAtMouse() {
+        if (!root.page) return;
+        var p = _mouseToOriginal();
+        root.page.createNewAudioSection(p.x, p.y, root.imageHeights, root.imageHeights, "");
+        currentSelectionType = "";
+    }
+
+    function addVideoAtMouse() {
+        if (!root.page) return;
+        var p = _mouseToOriginal();
+        root.page.createNewVideoSection(p.x, p.y, root.imageHeights, root.imageHeights, "");
+        currentSelectionType = "";
+    }
+
+    function addFillAtMouse() {
+        if (!root.page) return;
+        root.fillingModeEnabled = true;
+        currentSelectionType = "fill";
+        var p = _mouseToOriginal();
+        root.activeSession = root.page.getAvailableSection("fill");
+        root.activeSession.createNewAnswer(p.x, p.y, root.lastSize.width, root.lastSize.height);
+        sideBar.hideAllComponent();
+        sideBar.fillVisible = true;
+        sideBar.page = page;
+        sideBar.section = activeSession;
+        sideBar.fillList = activeSession.answers;
+    }
+
+    function addActivityAtMouse(activityType) {
+        if (!root.page) return;
+        var p = _mouseToOriginal();
+        root.page.createNewActivity(p.x, p.y, root.imageHeights, root.imageHeights, activityType);
+        currentSelectionType = "";
+    }
+
+    function removeSelectedSection() {
+        var hasSelection = sideBar.audioVisible || sideBar.videoVisible
+                        || sideBar.activityVisible || sideBar.fillVisible
+                        || sideBar.circleVisible || sideBar.fillwColorVisible
+                        || sideBar.drawMatchedVisible;
+        if (!hasSelection) return;
+        if (!sideBar.page || sideBar.sectionIndex < 0) return;
+        var pg = sideBar.page;
+        var idx = sideBar.sectionIndex;
+        sideBar.hideAllComponent();
+        pg.removeSection(idx);
+    }
+
     MouseArea {
         id: mainMouseArea
         anchors.fill: parent
@@ -144,8 +209,9 @@ Item {
 
         Menu {
             id: menu
+            implicitWidth: 260
             MenuItem {
-                text: "Audio"
+                text: "Audio\t(A)"
                 onTriggered: {
                     var adjustedX = mainMouseArea.mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2);
                     var adjustedY = mainMouseArea.mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2);
@@ -161,7 +227,7 @@ Item {
                 }
             }
             MenuItem {
-                text: "Video"
+                text: "Video\t(V)"
                 onTriggered: {
                     var adjustedX = mainMouseArea.mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2);
                     var adjustedY = mainMouseArea.mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2);
@@ -177,7 +243,7 @@ Item {
                 }
             }
             MenuItem {
-                text: "Fill"
+                text: "Fill\t(F)"
                 highlighted: currentSelectionType == "fill"
                 onTriggered: {
                     root.fillingModeEnabled = true;
@@ -305,8 +371,9 @@ Item {
             Menu {
                 id: activityMenu
                 title: "Activity"
+                implicitWidth: 300
                 MenuItem {
-                    text: "Drag Drop Picture"
+                    text: "Drag Drop Picture\t(A → D)"
                     onTriggered: {
                         var adjustedX = mainMouseArea.mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2);
                         var adjustedY = mainMouseArea.mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2);
@@ -322,7 +389,7 @@ Item {
                     }
                 }
                 MenuItem {
-                    text: "Drag Drop Picture Group"
+                    text: "Drag Drop Picture Group\t(A → G)"
                     onTriggered: {
                         var adjustedX = mainMouseArea.mouseX + flick.contentX;
                         var adjustedY = mainMouseArea.mouseY + flick.contentY;
@@ -338,7 +405,7 @@ Item {
                     }
                 }
                 MenuItem {
-                    text: "Fill Picture"
+                    text: "Fill Picture\t(A → F)"
                     onTriggered: {
                         var adjustedX = mainMouseArea.mouseX + flick.contentX;
                         var adjustedY = mainMouseArea.mouseY + flick.contentY;
@@ -354,7 +421,7 @@ Item {
                     }
                 }
                 MenuItem {
-                    text: "Circle"
+                    text: "Circle\t(A → C)"
                     onTriggered: {
                         var adjustedX = mainMouseArea.mouseX + flick.contentX;
                         var adjustedY = mainMouseArea.mouseY + flick.contentY;
@@ -371,7 +438,7 @@ Item {
                 }
 
                 MenuItem {
-                    text: "Match"
+                    text: "Match\t(A → M)"
                     onTriggered: {
                         var adjustedX = mainMouseArea.mouseX + flick.contentX;
                         var adjustedY = mainMouseArea.mouseY + flick.contentY;
@@ -387,7 +454,7 @@ Item {
                 }
 
                 MenuItem {
-                    text: "Puzzle Find Words"
+                    text: "Puzzle Find Words\t(A → P)"
                     onTriggered: {
                         var adjustedX = mainMouseArea.mouseX + flick.contentX;
                         var adjustedY = mainMouseArea.mouseY + flick.contentY;
@@ -404,7 +471,7 @@ Item {
                 }
 
                 MenuItem {
-                    text: "Mark With X"
+                    text: "Mark With X\t(A → X)"
                     onTriggered: {
                         var adjustedX = mainMouseArea.mouseX + flick.contentX;
                         var adjustedY = mainMouseArea.mouseY + flick.contentY;

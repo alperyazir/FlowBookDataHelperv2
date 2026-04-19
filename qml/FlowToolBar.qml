@@ -296,7 +296,7 @@ Rectangle {
         anchors.leftMargin: 50
         width: 100
         height: 40
-        color: "#232f34"
+        color: moduleBtnArea.containsMouse ? "#2A3337" : "#232f34"
         border.color: "#009ca6"
         border.width: 1
         FlowText {
@@ -308,6 +308,19 @@ Rectangle {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }
+
+        MouseArea {
+            id: moduleBtnArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: moduleEditorDialog.open()
+        }
+    }
+
+    Connections {
+        target: config.bookSets[0].books[0]
+        function onModulesChanged() { root.setModuleText(); }
     }
 
     CheckBox {

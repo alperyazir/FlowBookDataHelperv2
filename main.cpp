@@ -16,6 +16,10 @@
 
 int main(int argc, char *argv[])
 {
+    // Use FFmpeg media backend so MediaPlayer can read qrc:/ resources
+    // (the default AVFoundation backend on macOS cannot).
+    qputenv("QT_MEDIA_BACKEND", "ffmpeg");
+
     QGuiApplication app(argc, argv);
     QQuickStyle::setStyle("Fusion");
 

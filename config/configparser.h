@@ -6,6 +6,7 @@
 #include <QRect>
 #include <QString>
 #include <QVector>
+#include <QSet>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -2464,15 +2465,15 @@ public:
 
     QJsonObject toJson() const {
         QJsonObject bookObj;
-        
+
         if (_type != 0) {
             bookObj["type"] = _type;
         }
-        
+
         if (!_name.isEmpty()) {
             bookObj["name"] = _name;
         }
-        
+
         bookObj["is_module_side_left"] = _isModuleSideLeft;
 
         if (!_modules.isEmpty()) {
@@ -2486,6 +2487,243 @@ public:
         }
 
         return bookObj;
+    }
+
+    Q_INVOKABLE Module* addModule(const QString &name) {
+        Module *m = new Module(this);
+        m->_name = name;
+        m->_type = "";
+        _modules.append(m);
+        emit modulesChanged();
+        return m;
+    }
+
+    Q_INVOKABLE void removeModule(int index) {
+        if (index < 0 || index >= _modules.size()) return;
+        Module *m = _modules.takeAt(index);
+        if (m) m->deleteLater();
+        emit modulesChanged();
+    }
+
+    Q_INVOKABLE void moveModule(int from, int to) {
+        if (from < 0 || from >= _modules.size()) return;
+        if (to < 0 || to >= _modules.size()) return;
+        if (from == to) return;
+        _modules.move(from, to);
+        emit modulesChanged();
+    }
+
+    Q_INVOKABLE void movePageToModule(int pageNumber, int targetModuleIndex) {
+        if (targetModuleIndex < 0 || targetModuleIndex >= _modules.size()) return;
+        Module *target = _modules[targetModuleIndex];
+        if (!target) return;
+
+        Page *moved = nullptr;
+        for (Module *m : _modules) {
+            if (!m) continue;
+            for (int i = 0; i < m->_pages.size(); ++i) {
+                Page *p = m->_pages[i];
+                if (p && p->_page_number == pageNumber) {
+                    if (m == target) return; // already there
+                    moved = p;
+                    m->_pages.removeAt(i);
+                    emit m->pagesChanged();
+                    break;
+                }
+            }
+            if (moved) break;
+        }
+        // Fallback: page might be unassigned (exists in book but no module owns it)
+        if (!moved) {
+            for (Page *p : _pages) {
+                if (p && p->_page_number == pageNumber) {
+                    moved = p;
+                    break;
+                }
+            }
+        }
+        if (!moved) return;
+
+        // Insert keeping pages sorted by page_number
+        int insertIdx = target->_pages.size();
+        for (int i = 0; i < target->_pages.size(); ++i) {
+            Page *p = target->_pages[i];
+            if (p && p->_page_number > pageNumber) {
+                insertIdx = i;
+                break;
+            }
+        }
+        target->_pages.insert(insertIdx, moved);
+        emit target->pagesChanged();
+        emit modulesChanged();
+    }
+
+    // insertIndex < 0 → append to end of target module (preserves manual order).
+    // insertIndex >= 0 → insert contiguously starting at that visual position in target.
+    Q_INVOKABLE void movePagesToModule(const QVariantList &pageNumbers, int targetModuleIndex,
+                                        int insertIndex = -1) {
+        if (targetModuleIndex < 0 || targetModuleIndex >= _modules.size()) return;
+        Module *target = _modules[targetModuleIndex];
+        if (!target) return;
+
+        QSet<int> wanted;
+        for (const QVariant &v : pageNumbers) {
+            bool ok = false;
+            int pn = v.toInt(&ok);
+            if (ok) wanted.insert(pn);
+        }
+        if (wanted.isEmpty()) return;
+
+        QVector<Page*> pagesToInsert;
+        QSet<int> already;
+        for (Page *p : target->_pages) {
+            if (p) already.insert(p->_page_number);
+        }
+
+        for (Module *m : _modules) {
+            if (!m || m == target) continue;
+            bool changed = false;
+            for (int i = m->_pages.size() - 1; i >= 0; --i) {
+                Page *p = m->_pages[i];
+                if (p && wanted.contains(p->_page_number)
+                        && !already.contains(p->_page_number)) {
+                    pagesToInsert.append(p);
+                    already.insert(p->_page_number);
+                    m->_pages.removeAt(i);
+                    changed = true;
+                }
+            }
+            if (changed) emit m->pagesChanged();
+        }
+
+        // Orphan fallback
+        for (Page *p : _pages) {
+            if (p && wanted.contains(p->_page_number)
+                    && !already.contains(p->_page_number)) {
+                pagesToInsert.append(p);
+                already.insert(p->_page_number);
+            }
+        }
+
+        if (pagesToInsert.isEmpty()) return;
+
+        // Keep dragged pages in ascending page_number order for predictability.
+        std::sort(pagesToInsert.begin(), pagesToInsert.end(),
+                  [](Page *a, Page *b) { return a->_page_number < b->_page_number; });
+
+        if (insertIndex < 0 || insertIndex > target->_pages.size()) {
+            for (Page *p : pagesToInsert) target->_pages.append(p);
+        } else {
+            int pos = insertIndex;
+            for (Page *p : pagesToInsert) {
+                target->_pages.insert(pos, p);
+                pos++;
+            }
+        }
+        emit target->pagesChanged();
+        emit modulesChanged();
+    }
+
+    Q_INVOKABLE void reorderPagesInModule(int moduleIndex, const QVariantList &newOrder) {
+        if (moduleIndex < 0 || moduleIndex >= _modules.size()) return;
+        Module *m = _modules[moduleIndex];
+        if (!m) return;
+        if (newOrder.size() != m->_pages.size()) return;
+        QSet<Page*> existing(m->_pages.begin(), m->_pages.end());
+        QVector<Page*> reordered;
+        reordered.reserve(newOrder.size());
+        for (const QVariant &v : newOrder) {
+            Page *p = qobject_cast<Page*>(v.value<QObject*>());
+            if (!p || !existing.contains(p)) return;
+            reordered.append(p);
+        }
+        m->_pages = reordered;
+        emit m->pagesChanged();
+    }
+
+    Q_INVOKABLE void reorderModules(const QVariantList &newOrder) {
+        if (newOrder.size() != _modules.size()) return;
+        QVector<Module*> reordered;
+        reordered.reserve(_modules.size());
+        for (const QVariant &v : newOrder) {
+            Module *m = qobject_cast<Module*>(v.value<QObject*>());
+            if (!m || !_modules.contains(m)) return;
+            reordered.append(m);
+        }
+        // Verify no duplicates
+        if (reordered.size() != _modules.size()) return;
+        _modules = reordered;
+        emit modulesChanged();
+    }
+
+    // Returns empty string on success, or a user-facing message (already exists / error).
+    Q_INVOKABLE QString addPageToFirstModule(int pageNumber) {
+        if (pageNumber <= 0) return QStringLiteral("Invalid page number.");
+        if (_modules.isEmpty()) return QStringLiteral("No modules available.");
+
+        for (Module *m : _modules) {
+            if (!m) continue;
+            for (Page *p : m->_pages) {
+                if (p && p->_page_number == pageNumber) {
+                    return QStringLiteral("Page %1 already exists in \"%2\".")
+                            .arg(pageNumber).arg(m->_name);
+                }
+            }
+        }
+
+        Page *target = nullptr;
+        for (Page *p : _pages) {
+            if (p && p->_page_number == pageNumber) { target = p; break; }
+        }
+        if (!target) {
+            target = new Page(this);
+            target->_page_number = pageNumber;
+            int insertIdx = _pages.size();
+            for (int i = 0; i < _pages.size(); ++i) {
+                Page *p = _pages[i];
+                if (p && p->_page_number > pageNumber) { insertIdx = i; break; }
+            }
+            _pages.insert(insertIdx, target);
+            emit pagesChanged();
+        }
+
+        Module *firstMod = _modules[0];
+        int insertIdx = firstMod->_pages.size();
+        for (int i = 0; i < firstMod->_pages.size(); ++i) {
+            Page *p = firstMod->_pages[i];
+            if (p && p->_page_number > pageNumber) { insertIdx = i; break; }
+        }
+        firstMod->_pages.insert(insertIdx, target);
+        emit firstMod->pagesChanged();
+        emit modulesChanged();
+        return QString();
+    }
+
+    Q_INVOKABLE QVariantList unassignedPages() const {
+        QSet<Page*> assigned;
+        for (Module *m : _modules) {
+            if (!m) continue;
+            for (Page *p : m->_pages) {
+                if (p) assigned.insert(p);
+            }
+        }
+        QVariantList result;
+        for (Page *p : _pages) {
+            if (p && !assigned.contains(p)) {
+                result << QVariant::fromValue(p);
+            }
+        }
+        return result;
+    }
+
+    Q_INVOKABLE void renameModule(int index, const QString &name) {
+        if (index < 0 || index >= _modules.size()) return;
+        Module *m = _modules[index];
+        if (!m) return;
+        if (m->_name != name) {
+            m->_name = name;
+            emit m->nameChanged();
+        }
     }
 
 signals:
