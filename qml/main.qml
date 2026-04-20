@@ -582,7 +582,8 @@ ApplicationWindow {
             var jsonData = {
                 "type": "helper",
                 "hostname": config.hostname,
-                "active_book": openProject.currentProject
+                "active_book": openProject.currentProject,
+                "active": activityTracker.active
             };
 
             xhr.open("POST", url);

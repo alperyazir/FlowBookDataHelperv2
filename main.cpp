@@ -11,6 +11,7 @@
 #include "pdfprocess/pdfprocess.h"
 #include "clipboardhelper.h"
 #include "games/gamesparser.h"
+#include "activity/activitytracker.h"
 
 
 
@@ -56,12 +57,16 @@ int main(int argc, char *argv[])
 
 
 
+    ActivityTracker *activityTracker = new ActivityTracker(&app);
+    app.installEventFilter(activityTracker);
+
     QQmlContext *rootContext = engine.rootContext();
     rootContext->setContextProperty("config", config);
     rootContext->setContextProperty("appPath", appPath);
     rootContext->setContextProperty("pdfProcess", pdfProcess);
     rootContext->setContextProperty("clipboardHelper", &clipboardHelper);
     rootContext->setContextProperty("gamesParser", new GamesParser());
+    rootContext->setContextProperty("activityTracker", activityTracker);
 
     const QUrl url(u"qrc:/qml/main.qml"_qs);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreated,

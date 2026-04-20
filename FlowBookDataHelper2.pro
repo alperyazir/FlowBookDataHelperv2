@@ -1,4 +1,4 @@
-QT += quick concurrent quickcontrols2
+QT += quick concurrent quickcontrols2 network
 
 # You can make your code fail to compile if it uses deprecated APIs.
 # In order to do so, uncomment the following line.
@@ -8,14 +8,16 @@ HEADERS += \
     clipboardhelper.h \
     config/configparser.h \
     pdfprocess/pdfprocess.h \
-    games/gamesparser.h
+    games/gamesparser.h \
+    activity/activitytracker.h
 
 SOURCES += \
     clipboardhelper.cpp \
     config/configparser.cpp \
     main.cpp \
     pdfprocess/pdfprocess.cpp \
-    games/gamesparser.cpp
+    games/gamesparser.cpp \
+    activity/activitytracker.cpp
 
 RESOURCES += qml.qrc
 

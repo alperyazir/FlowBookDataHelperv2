@@ -89,6 +89,11 @@ Dialog {
     signal projectSelected(string projectPath)
     property string currentProject
 
+    onCurrentProjectChanged: {
+        if (typeof activityTracker !== "undefined")
+            activityTracker.setCurrentBook(currentProject)
+    }
+
     // Property to hold the selected project path
     property string selectedProjectPath: ""
 
