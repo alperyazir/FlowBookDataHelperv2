@@ -132,7 +132,7 @@ void PdfProcess::startProcessing(const QString &pdfConfig)
      qDebug() << "SCRIPT PATH: " << arguments;
 
     // Start the process with python3 command
-    process->start("/Library/Frameworks/Python.framework/Versions/3.12/bin/python3", arguments);
+    process->start("python", arguments);
 
     // Don't wait here - the process will emit signals as it proceeds
     qDebug() << "Python process started";
@@ -226,7 +226,7 @@ void PdfProcess::startAIAnalysis(const QString &configPath, const QString &setti
     qDebug() << "AI ANALYZER SCRIPT PATH: " << arguments;
 
     // Start the process
-    process->start("/Library/Frameworks/Python.framework/Versions/3.12/bin/python3", arguments);
+    process->start("python", arguments);
 
     qDebug() << "AI Analyzer process started";
 }
@@ -777,7 +777,7 @@ void PdfProcess::cropSectionFromPdf(const QString &pdfPath, int pageIndex,
 
     qDebug() << "CROP SCRIPT ARGS:" << arguments;
 
-    process->start("/Library/Frameworks/Python.framework/Versions/3.12/bin/python3", arguments);
+    process->start("python", arguments);
     qDebug() << "Crop process started";
 }
 
