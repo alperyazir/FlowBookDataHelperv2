@@ -257,9 +257,11 @@ GroupBox {
                 text: "Delete"
                 width: parent.width / 3
                 height: parent.height * .8
+                enabled: root.fillIndex >= 0 && root.fillIndex < root.fillList.length
 
                 background: Rectangle {
-                    color: parent.hovered ? "#bf4040" : "#a63030"
+                    color: !parent.enabled ? "#555555"
+                         : (parent.hovered ? "#bf4040" : "#a63030")
                     radius: 4
                 }
 
@@ -271,8 +273,10 @@ GroupBox {
                 }
 
                 onClicked: {
+                    if (root.fillIndex < 0 || root.fillIndex >= root.fillList.length) return;
                     confirmBox.visible = true;
-                    confirmBox.type = "section";
+                    confirmBox.type = "answer";
+                    confirmBox.index = root.fillIndex;
                 }
             }
         }

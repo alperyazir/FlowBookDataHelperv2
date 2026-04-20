@@ -76,6 +76,7 @@ Item {
         sideBar.page = page;
         sideBar.section = activeSession;
         sideBar.fillList = activeSession.answers;
+        sideBar.fillIndex = activeSession.answers.length - 1;
     }
 
     function addActivityAtMouse(activityType) {
@@ -92,6 +93,16 @@ Item {
                         || sideBar.drawMatchedVisible;
         if (!hasSelection) return;
         if (!sideBar.page || sideBar.sectionIndex < 0) return;
+
+        // If a single fill is selected, delete just that one instead of the whole section
+        if (sideBar.fillVisible && sideBar.section
+            && sideBar.fillIndex >= 0
+            && sideBar.fillIndex < sideBar.section.answers.length) {
+            sideBar.section.removeAnswer(sideBar.fillIndex);
+            sideBar.fillList = sideBar.section.answers;
+            return;
+        }
+
         var pg = sideBar.page;
         var idx = sideBar.sectionIndex;
         sideBar.hideAllComponent();
@@ -183,6 +194,7 @@ Item {
                                 sideBar.page = page;
                                 sideBar.section = activeSession;
                                 sideBar.fillList = activeSession.answers;
+                                sideBar.fillIndex = activeSession.answers.length - 1;
                             } else if (currentSelectionType === "circle") {
                                 sideBar.hideAllComponent();
                                 sideBar.circleVisible = true;
@@ -269,6 +281,7 @@ Item {
                     sideBar.page = page;
                     sideBar.section = activeSession;
                     sideBar.fillList = activeSession.answers;
+                    sideBar.fillIndex = activeSession.answers.length - 1;
 
                     // config.bookSets[0].saveToJson();
                     print("Changes Are Saved activity Fill on Triggered");
@@ -671,6 +684,7 @@ Item {
                             id: answerRect
                             property real originalWidth: modelData.coords.width
                             property real originalHeight: modelData.coords.height
+                            property bool editing: false
                             x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.coords.x * (picture.paintedWidth / picture.sourceSize.width)
                             y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.coords.y * (picture.paintedHeight / picture.sourceSize.height)
                             width: originalWidth * (picture.paintedWidth / picture.sourceSize.width)
@@ -678,10 +692,13 @@ Item {
                             visible: sectionType === "fill"
 
                             Rectangle {
+                                property bool isSelected: sideBar.fillVisible
+                                                          && sideBar.section === sectionData
+                                                          && sideBar.fillIndex === index
 
                                 color: "#7bd5bd"
-                                border.color: "black"
-                                border.width: 2
+                                border.color: isSelected ? "#009ca6" : "black"
+                                border.width: isSelected ? 3 : 2
                                 radius: 5
                                 anchors.fill: parent
                                 opacity: 0.4
@@ -695,12 +712,47 @@ Item {
                                 height: parent.height
                                 width: parent.width
                                 font.bold: modelData.isTextBold
+                                visible: !answerRect.editing
+                            }
+
+                            TextField {
+                                id: inlineTextEditor
+                                anchors.fill: parent
+                                visible: answerRect.editing
+                                enabled: answerRect.editing
+                                text: modelData.text
+                                color: modelData.textColor === "" ? myColors.answerColor : modelData.textColor
+                                font.bold: modelData.isTextBold
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                background: Rectangle {
+                                    color: "white"
+                                    border.color: "#009ca6"
+                                    border.width: 2
+                                    radius: 4
+                                    opacity: 0.85
+                                }
+                                onTextChanged: {
+                                    if (answerRect.editing)
+                                        modelData.text = text;
+                                }
+                                onAccepted: {
+                                    answerRect.editing = false;
+                                    inlineTextEditor.focus = false;
+                                    mainMouseArea.forceActiveFocus();
+                                }
+                                onActiveFocusChanged: {
+                                    if (!activeFocus && answerRect.editing) {
+                                        answerRect.editing = false;
+                                    }
+                                }
                             }
 
                             MouseArea {
                                 anchors.fill: parent
                                 drag.target: parent
                                 acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                                enabled: !answerRect.editing
                                 onPressed: {
                                     sideBar.hideAllComponent();
                                     sideBar.fillVisible = true;
@@ -711,6 +763,13 @@ Item {
                                     sideBar.sectionIndex = sectionItem.sectionIndex;
                                 }
                                 onReleased: root.setTotalStatus(answerRect, modelData)
+                                onDoubleClicked: {
+                                    answerRect.editing = true;
+                                    Qt.callLater(function() {
+                                        inlineTextEditor.forceActiveFocus();
+                                        inlineTextEditor.selectAll();
+                                    });
+                                }
                                 onClicked:
                                     // if (mouse.button === Qt.MiddleButton) {
                                     //     sectionItem.currentSection.removeAnswer(index);
