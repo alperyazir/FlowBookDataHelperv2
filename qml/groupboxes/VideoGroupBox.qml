@@ -37,7 +37,7 @@ GroupBox {
         }
     }
 
-    property var videoModelData
+    property var videoModelData: ({})
     property int sectionIndex
     signal removeSection(int secIndex)
 
@@ -117,7 +117,7 @@ GroupBox {
                 id: videoTextField
                 width: parent.width * 0.75
                 height: parent.height
-                text: root.videoModelData.video.path
+                text: (root.videoModelData && root.videoModelData.video) ? root.videoModelData.video.path : ""
                 placeholderText: "Enter the video path"
                 placeholderTextColor: "gray"
                 color: "white"

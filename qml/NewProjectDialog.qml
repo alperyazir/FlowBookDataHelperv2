@@ -12,6 +12,8 @@ Dialog {
     closePolicy: Popup.NoAutoClose // Prevents dialog from closing when clicking outside
     anchors.centerIn: parent
 
+    property string lastSelectedFolder: ""
+
     // Custom header
     header: Rectangle {
         color: "#1A2327"
@@ -915,7 +917,7 @@ Dialog {
                                         Layout.preferredWidth: 200
                                         placeholderText: "Enter Module Name"
                                         placeholderTextColor: "gray"
-                                        onTextChanged: model.name = text
+                                        onTextEdited: model.name = text
                                         color: "white"
                                         background: Rectangle {
                                             color: "#1A2327"
@@ -932,7 +934,7 @@ Dialog {
                                         validator: IntValidator {
                                             bottom: 1
                                         }
-                                        onTextChanged: model.startPage = text
+                                        onTextEdited: model.startPage = text
                                         color: "white"
                                         background: Rectangle {
                                             color: "#1A2327"
@@ -957,7 +959,7 @@ Dialog {
                                         validator: IntValidator {
                                             bottom: 1
                                         }
-                                        onTextChanged: model.endPage = text
+                                        onTextEdited: model.endPage = text
                                         color: "white"
                                         background: Rectangle {
                                             color: "#1A2327"

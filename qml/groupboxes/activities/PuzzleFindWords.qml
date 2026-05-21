@@ -47,7 +47,7 @@ Column {
         }
 
         FlowText {
-            text: activityModelData.type
+            text: (activityModelData && activityModelData.type) || ""
             color: "white"
             anchors.centerIn: undefined
             font.pixelSize: 15
@@ -75,7 +75,7 @@ Column {
             placeholderTextColor: "gray"
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            text: root.activityModelData.headerText
+            text: (root.activityModelData && root.activityModelData.headerText) || ""
             color: "white"
             onTextChanged: {
                 root.activityModelData.headerText = text;

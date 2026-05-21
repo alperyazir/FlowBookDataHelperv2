@@ -554,7 +554,7 @@ Item {
 
         Image {
             id: picture
-            source: qsTr("file:" + appPath + page.image_path)
+            source: page ? qsTr("file:" + appPath + page.image_path) : ""
             fillMode: Image.PreserveAspectFit
             width: Math.max(flick.contentWidth, flick.width)
             height: Math.max(flick.contentHeight, flick.height)
@@ -578,7 +578,7 @@ Item {
 
             Repeater {
                 id: sections
-                model: page.sections
+                model: page ? page.sections : []
                 Item {
                     id: sectionItem
                     property var currentSection: modelData
