@@ -37,6 +37,13 @@ ActivityTracker::ActivityTracker(QObject *parent)
     connect(&_flushTimer, &QTimer::timeout, this, &ActivityTracker::flushToDisk);
     _flushTimer.start();
 
+    // Periodic retry: catches the case where the server was offline at app
+    // startup / day rollover and came back later in the same session.
+    // scanAndUpload() is a cheap no-op when no past days are pending.
+    _retryTimer.setInterval(RETRY_INTERVAL_MS);
+    connect(&_retryTimer, &QTimer::timeout, this, &ActivityTracker::scanAndUpload);
+    _retryTimer.start();
+
     loadFromDisk();
     _currentDate = QDate::currentDate();
     scanAndUpload();
@@ -224,6 +231,11 @@ void ActivityTracker::loadFromDisk()
 
 void ActivityTracker::scanAndUpload()
 {
+    // Guard against overlapping uploads: app startup, day rollover, and the
+    // retry timer can all trigger this; we only want one POST in flight.
+    if (_uploadInFlight)
+        return;
+
     const QDate today = QDate::currentDate();
 
     QList<QDate> pastDays;
@@ -251,6 +263,7 @@ void ActivityTracker::scanAndUpload()
     QNetworkRequest req{QUrl(QString::fromLatin1(kUploadUrl))};
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
+    _uploadInFlight = true;
     QNetworkReply *reply = _nam->post(req, body);
     connect(reply, &QNetworkReply::finished, this, [this, reply, pastDays]() {
         const int status =
@@ -262,6 +275,7 @@ void ActivityTracker::scanAndUpload()
             qWarning() << "[ActivityTracker] upload FAIL status=" << status
                        << "err=" << reply->errorString();
         }
+        _uploadInFlight = false;
         reply->deleteLater();
     });
 }

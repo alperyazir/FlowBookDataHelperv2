@@ -39,6 +39,7 @@ private:
     static constexpr int EVAL_INTERVAL_MS  = 5 * 1000;
     static constexpr int TICK_INTERVAL_MS  = 10 * 1000;
     static constexpr int FLUSH_INTERVAL_MS = 60 * 1000;
+    static constexpr int RETRY_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 
     using HourBuckets = QMap<int, QMap<QString, int>>; // hour -> book -> seconds
 
@@ -61,8 +62,10 @@ private:
     QTimer _evalTimer;
     QTimer _tickTimer;
     QTimer _flushTimer;
+    QTimer _retryTimer;
 
     QNetworkAccessManager *_nam;
+    bool _uploadInFlight = false;
 };
 
 #endif
