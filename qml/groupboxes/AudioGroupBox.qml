@@ -39,7 +39,7 @@ GroupBox {
         }
     }
 
-    property var audioModelData: undefined
+    property var audioModelData: ({})
     property int sectionIndex
     signal removeSection(int secIndex)
 
@@ -121,7 +121,7 @@ GroupBox {
                 id: audioTextField
                 width: parent.width * 0.75
                 height: parent.height
-                text: root.audioModelData.audioPath
+                text: (root.audioModelData && root.audioModelData.audioPath) || ""
                 placeholderText: "Enter the audio path"
                 placeholderTextColor: "gray"
                 color: "white"

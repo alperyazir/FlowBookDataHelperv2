@@ -3,7 +3,9 @@ import QtQuick.Controls
 
 Rectangle {
     id: root
-    property var pages: config.bookSets[0].books[0].pages
+    property var pages: (config && config.bookSets && config.bookSets.length > 0
+                         && config.bookSets[0].books && config.bookSets[0].books.length > 0)
+                        ? config.bookSets[0].books[0].pages : []
     property int currentPageNumber: 0
     signal outlineEnabled(bool enabled)
     anchors.top: parent.top
@@ -239,8 +241,8 @@ Rectangle {
         }
         TextField {
             id: pageNumberInput
-            property int firstPage: pages[0].page_number
-            property int lastPage: pages[pages.length - 1].page_number
+            property int firstPage: (pages && pages.length > 0) ? pages[0].page_number : 0
+            property int lastPage: (pages && pages.length > 0) ? pages[pages.length - 1].page_number : 0
             width: 80
             height: parent.height
             color: "white" // text color
@@ -319,14 +321,18 @@ Rectangle {
     }
 
     Connections {
-        target: config.bookSets[0].books[0]
+        target: (config && config.bookSets && config.bookSets.length > 0
+                 && config.bookSets[0].books && config.bookSets[0].books.length > 0)
+                ? config.bookSets[0].books[0] : null
         function onModulesChanged() { root.setModuleText(); }
     }
 
     CheckBox {
         id: moduleSideListCB
         text: "isModuleSideLeft"
-        checked: config.bookSets[0].books[0].isModuleSideLeft
+        checked: (config && config.bookSets && config.bookSets.length > 0
+                  && config.bookSets[0].books && config.bookSets[0].books.length > 0)
+                 ? config.bookSets[0].books[0].isModuleSideLeft : false
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: moduleBtn.right
         anchors.leftMargin: 30

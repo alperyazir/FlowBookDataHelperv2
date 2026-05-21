@@ -11,11 +11,14 @@ Rectangle {
     property var section: undefined
     property int sectionIndex
 
-    property var audioModelData: undefined
-    property var videoModelData: undefined
-    property var activityModelData: undefined
-    property var sectionModelData: undefined
-    property var fillModelData: undefined
+    // Default to empty objects so child bindings like X.type === "..."
+    // return false (not undefined) before a section is selected. Avoids
+    // dozens of startup-time "Cannot read property" errors.
+    property var audioModelData: ({})
+    property var videoModelData: ({})
+    property var activityModelData: ({})
+    property var sectionModelData: ({})
+    property var fillModelData: ({})
     property var fillList: []
     property int fillIndex
     property bool audioVisible: false
@@ -23,8 +26,8 @@ Rectangle {
     property bool activityVisible: false
     property bool fillVisible: false
     property bool circleVisible: false
-    property bool fillwColorVisible: value
-    property bool drawMatchedVisible: value
+    property bool fillwColorVisible: false
+    property bool drawMatchedVisible: false
     property var circleList: undefined
     property int circleIndex
     property var fillWColorList: []

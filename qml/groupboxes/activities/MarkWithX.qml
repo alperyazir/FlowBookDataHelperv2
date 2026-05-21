@@ -6,7 +6,6 @@ import Qt.labs.platform
 import "../../../qml"
 
 Column {
-    property var words: wordsRepeater
     width: parent.width
 
     FileDialog {
@@ -48,7 +47,7 @@ Column {
         }
 
         FlowText {
-            text: activityModelData.type
+            text: (activityModelData && activityModelData.type) || ""
             color: "white"
             anchors.centerIn: undefined
             font.pixelSize: 15
@@ -77,7 +76,7 @@ Column {
             placeholderTextColor: "gray"
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            text: root.activityModelData.headerText
+            text: (root.activityModelData && root.activityModelData.headerText) || ""
             color: "white"
             onTextChanged: {
                 root.activityModelData.headerText = text;
@@ -114,7 +113,7 @@ Column {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             color: "white"
-            text: root.activityModelData.sectionPath
+            text: (root.activityModelData && root.activityModelData.sectionPath) || ""
             background: Rectangle {
                 color: "#1A2327"
                 border.color: parent.focus ? "#009ca6" : "#445055"
@@ -198,7 +197,7 @@ Column {
             width: parent.height * 2
             height: parent.height
             font.pixelSize: 15
-            text: root.activityModelData.markCount === 0 ? 2 : root.activityModelData.markCount
+            text: (root.activityModelData && root.activityModelData.markCount) ? root.activityModelData.markCount : 2
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             color: "white"

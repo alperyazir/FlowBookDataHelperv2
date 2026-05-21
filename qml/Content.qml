@@ -4,7 +4,9 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    property var pages: config.bookSets[0].books[0].pages
+    property var pages: (config && config.bookSets && config.bookSets.length > 0
+                         && config.bookSets[0].books && config.bookSets[0].books.length > 0)
+                        ? config.bookSets[0].books[0].pages : []
     property bool outlineEnabled
     property var currentPageDetails
     property int currentPageIndex: 0
@@ -29,6 +31,7 @@ Rectangle {
     }
 
     onCurrentPageIndexChanged: {
+        if (!pages || pages.length === 0) return;
         pageDetails.page = pages[root.currentPageIndex];
         pageDetails.setDefaultZoom();
         toolBar.currentPageNumber = root.currentPageIndex + pages[0].page_number;

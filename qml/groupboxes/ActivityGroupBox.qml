@@ -50,8 +50,8 @@ GroupBox {
         //}
     }
 
-    property var activityModelData: undefined
-    property var sectionModelData: undefined
+    property var activityModelData: ({})
+    property var sectionModelData: ({})
     signal removeSection
     title: qsTr("")
     width: parent.width * .98
@@ -199,7 +199,7 @@ GroupBox {
                 id: audioTextField
                 width: parent.width - 100
                 height: parent.height
-                text: root.sectionModelData.audioExtra !== null ? root.sectionModelData.audioExtra.path : ""
+                text: (root.sectionModelData && root.sectionModelData.audioExtra) ? root.sectionModelData.audioExtra.path : ""
                 placeholderText: "audio extra path "
                 placeholderTextColor: "gray"
                 color: "white"
