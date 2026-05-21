@@ -14,6 +14,14 @@
 
 bool BookSet::initialize(const QString &config_path)
 {
+    // RAII load guard: blocks saveToJson() for the whole load. Set true now,
+    // cleared on any exit path (success, early return, exception).
+    struct LoadGuard {
+        bool &flag;
+        LoadGuard(bool &f) : flag(f) { flag = true; }
+        ~LoadGuard() { flag = false; }
+    } loadGuard(_isLoading);
+
     QFile inFile(config_path + "/config.json");
     if (!inFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         qWarning() << "Error while opening config file:" << config_path + "/config.json";
@@ -64,32 +72,35 @@ bool BookSet::initialize(const QString &config_path)
             }
 
             auto bObj = b.toObject();
-            Book *book = new Book;
-            
+            Book *book = new Book(this);
+
             // Set basic properties
-            book->_type = bObj["type"].toInt();
+            book->_type = bObj["type"].toString();
             book->_name = bObj["name"].toString();
             book->_isModuleSideLeft = bObj["is_module_side_left"].toBool();
 
-            // Load modules
+            // Load modules. handleBooksModules creates Module/Page objects;
+            // reparent them under this book so the ownership chain is well
+            // defined (book deletes → modules deleted → pages deleted).
             auto modules = handleBooksModules(bObj["modules"].toArray());
-            book->_modules = modules;
-
-            // Add pages and games from modules
-            for (Module *m: book->_modules) {
-                if (m) {
-                    for(Page *p: m->_pages) {
-                        if (p) book->_pages.push_back(p);
-                    }
-
-                    for (Game *g: m->_games) {
-                        if (g) book->_games.push_back(g);
-                    }
-                }
+            for (Module *m : modules) {
+                if (m) m->setParent(book);
             }
+            book->_modules = modules;
 
             _books.push_back(book);
         }
+
+        // Baseline hash: hash what our toJson() would produce right now. Any
+        // future change to the in-memory model will diverge from this hash;
+        // saveToJson() short-circuits while they match.
+        try {
+            QByteArray baselineJson = QJsonDocument(toJson()).toJson();
+            _lastSavedHash = QCryptographicHash::hash(baselineJson, QCryptographicHash::Md5);
+        } catch (...) {
+            _lastSavedHash.clear();
+        }
+        _isDirty = false;
 
         qDebug() << "Reading Book is successful:" << _bookTitle;
         return true;
@@ -107,6 +118,7 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
     QVector<Module*> modules;
     for (const auto & m : doc) {
         auto mObj = m.toObject();
+        // Module's QObject parent is set to Book by the caller (initialize()).
         Module *module = new Module;
         module->_type = mObj["type"].toString();
         module->_name = mObj["name"].toString();
@@ -115,7 +127,7 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
         auto gArr = mObj["games"].toArray();
         for (const auto &g : gArr) {
             auto gObj = g.toObject();
-            Game *game = new Game;
+            Game *game = new Game(module);
             game->_name = gObj["name"].toString();
             game->_type = gObj["type"].toString();
             game->_imagePath = gObj["image_path"].toString();
@@ -171,7 +183,7 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
         auto cnts = mObj["pages"].toArray();
         for (const auto &c : cnts) {
             auto cObj = c.toObject();
-            Page *page = new Page;
+            Page *page = new Page(module);
             page->_page_number = cObj["page_number"].toInt();
             page->_image_path = cObj["image_path"].toString();
 
@@ -181,7 +193,7 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
 
 
                 auto sObj = s.toObject();
-                Section *section = new Section;
+                Section *section = new Section(page);
 
                 section->_title = sObj["title"].toString();
                 section->_type = sObj["type"].toString();

@@ -264,7 +264,7 @@ ApplicationWindow {
 
         Text {
             id: versionText
-            text: "v2.3.3"
+            text: "v2.4.0"
             color: "#009ca6"
             anchors.centerIn: parent
             font.pixelSize: 14
@@ -594,11 +594,19 @@ ApplicationWindow {
 
     Timer {
         id: saveTimer
-        interval: 60000 // 5 saniyede bir
+        interval: 60000 // every 60 seconds
         repeat: true
         running: true
         onTriggered: {
-            save()
+            // The C++ saveToJson(true) is fully guarded:
+            //   * skips while a load is in progress
+            //   * skips when the serialized hash matches the last save
+            //     (this is the real dirty check — bypasses UI markDirty races)
+            //   * refuses to write if books/modules collapsed to zero
+            // No-op ticks are cheap (one toJson + one md5 compare).
+            if (config && config.bookSets && config.bookSets.length > 0) {
+                config.bookSets[0].saveToJson(true);
+            }
         }
     }
 }

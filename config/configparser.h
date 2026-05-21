@@ -15,6 +15,9 @@
 
 #include <QCryptographicHash>
 #include <QFile>
+#include <QSaveFile>
+#include <QFileInfo>
+#include <QDateTime>
 #include <QTextStream>
 #include <QGuiApplication>
 #include <QDir>
@@ -2368,25 +2371,26 @@ signals:
 
 struct Book : public QObject {
     Q_OBJECT
-    Q_PROPERTY(int type READ type WRITE setType NOTIFY typeChanged)
+    Q_PROPERTY(QString type READ type WRITE setType NOTIFY typeChanged)
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(bool isModuleSideLeft READ isModuleSideLeft WRITE setIsModuleSideLeft NOTIFY isModuleSideLeftChanged)
     Q_PROPERTY(QVariantList modules READ modules WRITE setModules NOTIFY modulesChanged)
-    Q_PROPERTY(QVariantList pages READ pages WRITE setPages NOTIFY pagesChanged)
-    Q_PROPERTY(QVariantList games READ games WRITE setGames NOTIFY gamesChanged)
+    Q_PROPERTY(QVariantList pages READ pages NOTIFY pagesChanged)
+    Q_PROPERTY(QVariantList games READ games NOTIFY gamesChanged)
 
 public:
     explicit Book(QObject *parent = nullptr) : QObject(parent) {}
 
-    int _type;
+    QString _type;
     QString _name;
     bool _isModuleSideLeft;
     QVector<Module*> _modules;
-    QVector<Page*> _pages;
-    QVector<Game*> _games;
+    // NOTE: pages and games are computed flat views over _modules; not stored.
+    // Modules own their pages/games (Qt parent chain). Avoids dangling
+    // pointers and stale flat lists that caused crashes during save.
 
-    int type() const { return _type; }
-    void setType(int type) {
+    QString type() const { return _type; }
+    void setType(const QString &type) {
         if (_type != type) {
             _type = type;
             emit typeChanged();
@@ -2427,46 +2431,34 @@ public:
         emit modulesChanged();
     }
 
+    // Flat computed view across all modules. Safe to call any time — no
+    // stored pointer state that could go stale.
     QVariantList pages() const {
         QVariantList l;
-        for (Page *p : _pages) {
-            l << QVariant::fromValue(p);
-        }
-        return l;
-    }
-    void setPages(const QVariantList &pages) {
-        _pages.clear();
-        for (const QVariant &p : pages) {
-            Page *page = qobject_cast<Page*>(p.value<QObject*>());
-            if (page) {
-                _pages.append(page);
+        for (Module *m : _modules) {
+            if (!m) continue;
+            for (Page *p : m->_pages) {
+                if (p) l << QVariant::fromValue(p);
             }
         }
-        emit pagesChanged();
+        return l;
     }
 
     QVariantList games() const {
         QVariantList l;
-        for (Game *p : _games) {
-            l << QVariant::fromValue(p);
-        }
-        return l;
-    }
-    void setGames(const QVariantList &games) {
-        _games.clear();
-        for (const QVariant &g : games) {
-            Game *game = qobject_cast<Game*>(g.value<QObject*>());
-            if (game) {
-                _games.append(game);
+        for (Module *m : _modules) {
+            if (!m) continue;
+            for (Game *g : m->_games) {
+                if (g) l << QVariant::fromValue(g);
             }
         }
-        emit gamesChanged();
+        return l;
     }
 
     QJsonObject toJson() const {
         QJsonObject bookObj;
 
-        if (_type != 0) {
+        if (!_type.isEmpty()) {
             bookObj["type"] = _type;
         }
 
@@ -2495,14 +2487,19 @@ public:
         m->_type = "";
         _modules.append(m);
         emit modulesChanged();
+        emit pagesChanged();
+        emit gamesChanged();
         return m;
     }
 
     Q_INVOKABLE void removeModule(int index) {
         if (index < 0 || index >= _modules.size()) return;
         Module *m = _modules.takeAt(index);
+        // Cascade: pages and games owned by this module are deleted with it.
         if (m) m->deleteLater();
         emit modulesChanged();
+        emit pagesChanged();
+        emit gamesChanged();
     }
 
     Q_INVOKABLE void moveModule(int from, int to) {
@@ -2511,6 +2508,8 @@ public:
         if (from == to) return;
         _modules.move(from, to);
         emit modulesChanged();
+        emit pagesChanged();
+        emit gamesChanged();
     }
 
     Q_INVOKABLE void movePageToModule(int pageNumber, int targetModuleIndex) {
@@ -2533,16 +2532,12 @@ public:
             }
             if (moved) break;
         }
-        // Fallback: page might be unassigned (exists in book but no module owns it)
-        if (!moved) {
-            for (Page *p : _pages) {
-                if (p && p->_page_number == pageNumber) {
-                    moved = p;
-                    break;
-                }
-            }
-        }
         if (!moved) return;
+
+        // Reparent so the page's Qt parent matches its new owning module.
+        // Without this, removing the old module would delete the page even
+        // though the new module still references it.
+        moved->setParent(target);
 
         // Insert keeping pages sorted by page_number
         int insertIdx = target->_pages.size();
@@ -2556,6 +2551,7 @@ public:
         target->_pages.insert(insertIdx, moved);
         emit target->pagesChanged();
         emit modulesChanged();
+        emit pagesChanged();
     }
 
     // insertIndex < 0 → append to end of target module (preserves manual order).
@@ -2596,20 +2592,16 @@ public:
             if (changed) emit m->pagesChanged();
         }
 
-        // Orphan fallback
-        for (Page *p : _pages) {
-            if (p && wanted.contains(p->_page_number)
-                    && !already.contains(p->_page_number)) {
-                pagesToInsert.append(p);
-                already.insert(p->_page_number);
-            }
-        }
-
         if (pagesToInsert.isEmpty()) return;
 
         // Keep dragged pages in ascending page_number order for predictability.
         std::sort(pagesToInsert.begin(), pagesToInsert.end(),
                   [](Page *a, Page *b) { return a->_page_number < b->_page_number; });
+
+        // Reparent each moved page to its new owning module before inserting.
+        for (Page *p : pagesToInsert) {
+            if (p) p->setParent(target);
+        }
 
         if (insertIndex < 0 || insertIndex > target->_pages.size()) {
             for (Page *p : pagesToInsert) target->_pages.append(p);
@@ -2622,6 +2614,7 @@ public:
         }
         emit target->pagesChanged();
         emit modulesChanged();
+        emit pagesChanged();
     }
 
     Q_INVOKABLE void reorderPagesInModule(int moduleIndex, const QVariantList &newOrder) {
@@ -2639,6 +2632,7 @@ public:
         }
         m->_pages = reordered;
         emit m->pagesChanged();
+        emit pagesChanged();
     }
 
     Q_INVOKABLE void reorderModules(const QVariantList &newOrder) {
@@ -2671,23 +2665,10 @@ public:
             }
         }
 
-        Page *target = nullptr;
-        for (Page *p : _pages) {
-            if (p && p->_page_number == pageNumber) { target = p; break; }
-        }
-        if (!target) {
-            target = new Page(this);
-            target->_page_number = pageNumber;
-            int insertIdx = _pages.size();
-            for (int i = 0; i < _pages.size(); ++i) {
-                Page *p = _pages[i];
-                if (p && p->_page_number > pageNumber) { insertIdx = i; break; }
-            }
-            _pages.insert(insertIdx, target);
-            emit pagesChanged();
-        }
-
         Module *firstMod = _modules[0];
+        Page *target = new Page(firstMod);
+        target->_page_number = pageNumber;
+
         int insertIdx = firstMod->_pages.size();
         for (int i = 0; i < firstMod->_pages.size(); ++i) {
             Page *p = firstMod->_pages[i];
@@ -2696,24 +2677,14 @@ public:
         firstMod->_pages.insert(insertIdx, target);
         emit firstMod->pagesChanged();
         emit modulesChanged();
+        emit pagesChanged();
         return QString();
     }
 
+    // Kept for API stability. Pages always belong to a module now, so there
+    // are no orphans — returns an empty list.
     Q_INVOKABLE QVariantList unassignedPages() const {
-        QSet<Page*> assigned;
-        for (Module *m : _modules) {
-            if (!m) continue;
-            for (Page *p : m->_pages) {
-                if (p) assigned.insert(p);
-            }
-        }
-        QVariantList result;
-        for (Page *p : _pages) {
-            if (p && !assigned.contains(p)) {
-                result << QVariant::fromValue(p);
-            }
-        }
-        return result;
+        return QVariantList();
     }
 
     Q_INVOKABLE void renameModule(int index, const QString &name) {
@@ -2768,6 +2739,7 @@ struct BookSet : public QObject {
     Q_PROPERTY(bool fullscreen READ fullscreen WRITE setFullscreen NOTIFY fullscreenChanged)
     Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged)
     Q_PROPERTY(QString bookDirectoryName READ bookDirectoryName NOTIFY bookDirectoryNameChanged)
+    Q_PROPERTY(bool isDirty READ isDirty NOTIFY isDirtyChanged)
 
 public:
     explicit BookSet(QObject *parent = nullptr) : QObject(parent) {}
@@ -2776,20 +2748,31 @@ public:
     QString bookDirectoryName() const { return _bookDirectoryName; }
     Q_SIGNAL void bookDirectoryNameChanged();
 
+    // Crash-safe save state
+    bool _isLoading = false;
+    bool _isDirty = false;
+    QByteArray _lastSavedHash;
+
+    bool isDirty() const { return _isDirty; }
+    Q_INVOKABLE void markDirty() {
+        if (!_isDirty) {
+            _isDirty = true;
+            emit isDirtyChanged();
+        }
+    }
+
     bool initialize(const QString &config_path);
-    Q_INVOKABLE void saveToJson() {
+    Q_INVOKABLE void saveToJson(bool fromAutoSave = false) {
         try {
             static QMutex mutex;
             QMutexLocker locker(&mutex);
 
-            QString appDir = QGuiApplication::applicationDirPath();
-#ifdef Q_OS_MAC
-            appDir += "/../../../books";
-#else
-            appDir += "/books";
-#endif
+            // Hard guard: never save while a load is in progress (transient state)
+            if (_isLoading) {
+                qWarning("saveToJson: skipped because a load is in progress");
+                return;
+            }
 
-            // Create directory if it doesn't exist
             QDir dir(_bookDirectoryName);
             if (!dir.exists()) {
                 if (!dir.mkpath(".")) {
@@ -2798,89 +2781,118 @@ public:
                 }
             }
 
-            QString filePath = _bookDirectoryName + "/config.json";
-            QString tempFilePath = filePath + ".tmp";
+            const QString filePath = _bookDirectoryName + "/config.json";
+            const QString backupPath = filePath + ".bak";
+            const QString safePath = filePath + ".bak.safe";
 
-            // First write to a temporary file
-            QFile tempFile(tempFilePath);
-            if (!tempFile.open(QIODevice::WriteOnly)) {
-                qWarning("Couldn't open temporary file for writing: %s", qPrintable(tempFilePath));
-                return;
-            }
-
-            // CRASH-SAFE: JSON serialization with error checking
+            // Build the new JSON
             QJsonObject jsonObj;
             try {
                 jsonObj = toJson();
             } catch (...) {
-                qCritical("Exception during JSON serialization");
-                tempFile.close();
-                QFile::remove(tempFilePath);
+                qCritical("saveToJson: exception during JSON serialization, aborting");
                 return;
             }
-            
+
             if (jsonObj.isEmpty()) {
-                qWarning("JSON object is empty, aborting save");
-                tempFile.close();
-                QFile::remove(tempFilePath);
+                qWarning("saveToJson: serialized object is empty, aborting save");
                 return;
             }
 
             QJsonDocument saveDoc(jsonObj);
             QByteArray jsonData = saveDoc.toJson();
 
-            // Write to temporary file
-            if (tempFile.write(jsonData) != jsonData.size()) {
-                qWarning("Failed to write complete data to temporary file");
-                tempFile.close();
-                QFile::remove(tempFilePath);
+            // Cheap no-op check: if content hash matches the last successful save,
+            // skip without touching anything. Auto-save ticks short-circuit here.
+            QByteArray newHash = QCryptographicHash::hash(jsonData, QCryptographicHash::Md5);
+            if (newHash == _lastSavedHash) {
+                if (_isDirty) {
+                    _isDirty = false;
+                    emit isDirtyChanged();
+                }
                 return;
             }
 
-            // Ensure all data is written to disk
-            tempFile.flush();
-            tempFile.close();
+            // Catastrophic regression check vs. current on-disk file.
+            // If books/modules collapsed to zero from a non-zero state, abort.
+            bool regressionDetected = false;
+            QFile prevFile(filePath);
+            if (prevFile.exists() && prevFile.open(QIODevice::ReadOnly)) {
+                QByteArray prevData = prevFile.readAll();
+                prevFile.close();
 
-            // Create backup of existing file if it exists
-            QFile existingFile(filePath);
-            if (existingFile.exists()) {
-                QString backupPath = filePath + ".bak";
+                QJsonDocument prevDoc = QJsonDocument::fromJson(prevData);
+                if (!prevDoc.isNull() && prevDoc.isObject()) {
+                    QJsonObject prevRoot = prevDoc.object();
+                    QJsonArray prevBooks = prevRoot["books"].toArray();
+                    QJsonArray newBooks = jsonObj["books"].toArray();
+
+                    if (prevBooks.size() > 0 && newBooks.size() == 0) {
+                        regressionDetected = true;
+                    } else {
+                        int prevModules = 0, newModules = 0;
+                        for (const QJsonValue &b : prevBooks)
+                            prevModules += b.toObject()["modules"].toArray().size();
+                        for (const QJsonValue &b : newBooks)
+                            newModules += b.toObject()["modules"].toArray().size();
+
+                        if (prevModules > 0 && newModules == 0) {
+                            regressionDetected = true;
+                        }
+                    }
+                }
+            }
+
+            if (regressionDetected) {
+                qCritical("saveToJson: catastrophic regression detected (books/modules collapsed to 0). Aborting save without touching backups. autoSave=%d", fromAutoSave);
+                return;
+            }
+
+            // Rotate primary backup: current config.json -> .bak
+            if (QFile::exists(filePath)) {
                 QFile::remove(backupPath);
                 if (!QFile::copy(filePath, backupPath)) {
                     qWarning("Couldn't create backup file: %s", qPrintable(backupPath));
-                    QFile::remove(tempFilePath);
                     return;
                 }
             }
 
-            // Replace the original file with the temporary file
-            if (!QFile::remove(filePath)) {
-                qWarning("Couldn't remove original file: %s", qPrintable(filePath));
-                QFile::remove(tempFilePath);
+            // Atomic write of new content via QSaveFile (temp + rename under the hood)
+            QSaveFile saveFile(filePath);
+            if (!saveFile.open(QIODevice::WriteOnly)) {
+                qWarning("Couldn't open save file: %s", qPrintable(filePath));
                 return;
             }
-
-            if (!QFile::rename(tempFilePath, filePath)) {
-                qWarning("Couldn't rename temporary file to original: %s", qPrintable(filePath));
-                // Try to restore from backup
-                if (QFile::exists(filePath + ".bak")) {
-                    QFile::copy(filePath + ".bak", filePath);
+            if (saveFile.write(jsonData) != jsonData.size()) {
+                qWarning("Failed to write complete data to save file");
+                saveFile.cancelWriting();
+                return;
+            }
+            if (!saveFile.commit()) {
+                qWarning("Failed to commit save: %s", qPrintable(saveFile.errorString()));
+                // Restore from backup if commit failed mid-way
+                if (QFile::exists(backupPath) && !QFile::exists(filePath)) {
+                    QFile::copy(backupPath, filePath);
                 }
                 return;
             }
 
+            // Track last-successful state
+            _lastSavedHash = newHash;
+            if (_isDirty) {
+                _isDirty = false;
+                emit isDirtyChanged();
+            }
 
-            // Verify the written data
-            QFile verifyFile(filePath);
-            if (verifyFile.open(QIODevice::ReadOnly)) {
-                QByteArray verifyData = verifyFile.readAll();
-                verifyFile.close();
-
-                if (verifyData != jsonData) {
-                    qWarning("Data verification failed, restoring backup");
-                    QFile::remove(filePath);
-                    QFile::copy(filePath + ".bak", filePath);
-                }
+            // Independent safety net: refresh .bak.safe at most once every 5 minutes.
+            // This file survives 60-second auto-save churn and is the deepest recovery point.
+            QFileInfo safeInfo(safePath);
+            const qint64 fiveMinutes = 5 * 60;
+            bool needSafe = !safeInfo.exists() ||
+                            safeInfo.lastModified().secsTo(QDateTime::currentDateTime()) >= fiveMinutes;
+            if (needSafe) {
+                QFile::remove(safePath);
+                QFile::copy(filePath, safePath);
             }
         } catch(const QException & ex) {
             qCritical() << "QException caught while saving:" << ex.what();
@@ -3018,6 +3030,7 @@ signals:
     void booksChanged();
     void fullscreenChanged();
     void languageChanged();
+    void isDirtyChanged();
 
 };
 

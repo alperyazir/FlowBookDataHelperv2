@@ -109,6 +109,7 @@ Dialog {
         publisherNameEdit.text = "";
         bookTitleEdit.text = "";
         languageComboBox.currentIndex = 0;
+        typeComboBox.currentIndex = 0;
         coverPathTextField.text = "";
         audioFolderTextField.text = "";
         videoFolderTextField.text = "";
@@ -409,6 +410,73 @@ Dialog {
                                 verticalAlignment: Text.AlignVCenter
                             }
                             highlighted: languageComboBox.highlightedIndex === index
+                            background: Rectangle {
+                                color: highlighted ? "#2A3337" : "#1A2327"
+                            }
+                        }
+                    }
+                }
+
+                // Type
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    Label {
+                        text: "Type"
+                        Layout.preferredWidth: 120
+                        color: "white"
+                    }
+
+                    ComboBox {
+                        id: typeComboBox
+                        Layout.fillWidth: true
+                        model: ["not selected", "story"]
+                        currentIndex: 0
+
+                        background: Rectangle {
+                            color: "#1A2327"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            radius: 2
+                        }
+
+                        contentItem: Text {
+                            text: typeComboBox.displayText
+                            color: "white"
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 10
+                        }
+
+                        popup: Popup {
+                            y: typeComboBox.height
+                            width: typeComboBox.width
+                            implicitHeight: contentItem.implicitHeight
+                            padding: 1
+
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: typeComboBox.popup.visible ? typeComboBox.delegateModel : null
+
+                                ScrollIndicator.vertical: ScrollIndicator {}
+                            }
+
+                            background: Rectangle {
+                                color: "#1A2327"
+                                border.color: "#009ca6"
+                                border.width: 1
+                            }
+                        }
+
+                        delegate: ItemDelegate {
+                            width: typeComboBox.width
+                            contentItem: Text {
+                                text: modelData
+                                color: "white"
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            highlighted: typeComboBox.highlightedIndex === index
                             background: Rectangle {
                                 color: highlighted ? "#2A3337" : "#1A2327"
                             }
@@ -1044,6 +1112,7 @@ Dialog {
             "publisher_name": publisherNameEdit.text,
             "book_title": bookTitleEdit.text,
             "language": languageComboBox.currentText,
+            "book_type": typeComboBox.currentText,
             "book_pdf_path": (Qt.platform.os === "windows" && pdfPath.startsWith("/")) ? pdfPath.slice(1) : pdfPath,
             "book_cover_path": (Qt.platform.os === "windows" && bookCoverPath.startsWith("/")) ? bookCoverPath.slice(1) : bookCoverPath,
             "audio_path": (Qt.platform.os === "windows" && audioPath.startsWith("/")) ? audioPath.slice(1) : audioPath,

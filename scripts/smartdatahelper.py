@@ -100,6 +100,7 @@ def process_pdf_with_config(config_file, dpi=150):
     output_path = config.get("output_path", "")
     book_title = config.get("book_title", "")
     language = config.get("language", "en")
+    book_type = config.get("book_type", "")
 
     print(f"Yapılandırma parametreleri:", flush=True)
     print(f"  Publisher: {publisher_name}", flush=True)
@@ -373,6 +374,8 @@ def process_pdf_with_config(config_file, dpi=150):
 
         modules_config.append({"name": module_name, "pages": pages_config})
 
+    book_entry = {"type": book_type if book_type else "not selected", "modules": modules_config}
+
     config_json = {
         "publisher_name": publisher_name,
         "publisher_logo_path": "./publisher_logo/publisher_logo.png",
@@ -381,7 +384,7 @@ def process_pdf_with_config(config_file, dpi=150):
         "book_cover": "./books/{pdf_name}/images/book_cover.png",
         "language": language,
         "fullscreen": False,
-        "books": [{"modules": modules_config}],
+        "books": [book_entry],
     }
 
     # JSON dosyasını kaydet
