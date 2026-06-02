@@ -7,12 +7,9 @@ import sys
 import string
 import re
 
-import os
-
 os.environ["PYTHONUNBUFFERED"] = "1"
 
 sys.stdout.reconfigure(line_buffering=True)  # Python 3.7+
-from pathlib import Path
 
 try:
     import fitz
@@ -149,8 +146,8 @@ def process_pdf_with_config(config_file, dpi=150):
         print(f"PDF kopyalanıyor: {book_pdf_path} -> {raw_folder}", flush=True)
         shutil.copy2(book_pdf_path, os.path.join(raw_folder, pdf_filename))
         print(f"PDF kopyalandı.", flush=True)
-        
-         # Aynı klasördeki diğer PDF dosyalarını da kopyala
+
+        # Aynı klasördeki diğer PDF dosyalarını da kopyala
         pdf_dir = os.path.dirname(book_pdf_path)
 
         for filename in os.listdir(pdf_dir):
