@@ -44,6 +44,7 @@ private:
     
     QString getPlatformFolderName(const QString &platform) const;
     QString getLatestFlowBookVersion(const QString &platformPath) const;
+    static QString pythonExecutable();
 
     bool package(const QStringList &platforms, const QString &currentBookName);
 

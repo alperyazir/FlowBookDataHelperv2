@@ -8,6 +8,65 @@
 #include <QGuiApplication>
 #include <algorithm>
 #include <QtConcurrent>
+#include <QStandardPaths>
+
+QString PdfProcess::pythonExecutable()
+{
+    // QProcess does NOT use shell aliases, so "python" (only a shell alias on
+    // most setups) fails to start. We also can't just grab the first python3 on
+    // PATH: a GUI .app bundle runs with a minimal PATH where the first match is
+    // Apple's /usr/bin/python3 stub, which lacks PyMuPDF ("fitz"). So we probe
+    // candidate interpreters and pick the first one that can import fitz.
+    static QString cached;
+    if (!cached.isEmpty())
+        return cached;
+
+    QStringList candidates;
+    // Real interpreters that typically carry third-party packages come first.
+#ifdef Q_OS_WIN
+    // On Windows the binary is usually "python"; "python3" is often the
+    // Microsoft Store stub, so prefer "python" and the "py" launcher.
+    const QStringList preferred = {
+        QStandardPaths::findExecutable("python"),
+        QStandardPaths::findExecutable("py"),
+        QStandardPaths::findExecutable("python3")
+    };
+#else
+    const QStringList preferred = {
+        QStandardPaths::findExecutable("python3"),
+        QStandardPaths::findExecutable("python"),
+        "/opt/homebrew/bin/python3",
+        "/usr/local/bin/python3",
+        "/Library/Frameworks/Python.framework/Versions/Current/bin/python3",
+        "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+        "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3",
+        // Apple's stub is the last resort - it rarely has the deps installed.
+        "/usr/bin/python3"
+    };
+#endif
+    for (const QString &p : preferred) {
+        if (!p.isEmpty() && QFile::exists(p) && !candidates.contains(p))
+            candidates << p;
+    }
+
+    QString firstUsable;
+    for (const QString &path : candidates) {
+        if (firstUsable.isEmpty())
+            firstUsable = path; // remember a runnable interpreter as a fallback
+        QProcess probe;
+        probe.start(path, {"-c", "import fitz"});
+        if (probe.waitForFinished(5000) && probe.exitStatus() == QProcess::NormalExit
+            && probe.exitCode() == 0) {
+            cached = path; // this interpreter has the required modules
+            return cached;
+        }
+    }
+
+    // No interpreter could import fitz; fall back to a runnable one (the script
+    // will surface a clear ModuleNotFoundError if deps are genuinely missing).
+    cached = firstUsable.isEmpty() ? QStringLiteral("python3") : firstUsable;
+    return cached;
+}
 
 void PdfProcess::startProcessing(const QString &pdfConfig)
 {
@@ -132,7 +191,7 @@ void PdfProcess::startProcessing(const QString &pdfConfig)
      qDebug() << "SCRIPT PATH: " << arguments;
 
     // Start the process with python3 command
-    process->start("python", arguments);
+    process->start(pythonExecutable(), arguments);
 
     // Don't wait here - the process will emit signals as it proceeds
     qDebug() << "Python process started";
@@ -226,7 +285,7 @@ void PdfProcess::startAIAnalysis(const QString &configPath, const QString &setti
     qDebug() << "AI ANALYZER SCRIPT PATH: " << arguments;
 
     // Start the process
-    process->start("python", arguments);
+    process->start(pythonExecutable(), arguments);
 
     qDebug() << "AI Analyzer process started";
 }
@@ -777,7 +836,7 @@ void PdfProcess::cropSectionFromPdf(const QString &pdfPath, int pageIndex,
 
     qDebug() << "CROP SCRIPT ARGS:" << arguments;
 
-    process->start("python", arguments);
+    process->start(pythonExecutable(), arguments);
     qDebug() << "Crop process started";
 }
 
