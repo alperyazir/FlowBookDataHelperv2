@@ -49,6 +49,33 @@ QString PdfProcess::pythonExecutable()
             candidates << p;
     }
 
+#ifdef Q_OS_WIN
+    // A GUI app launched from Explorer inherits a PATH that may not contain
+    // Python (e.g. it was added to PATH after the session/Explorer started),
+    // so findExecutable above finds nothing. Scan the standard install roots
+    // directly so we locate python.exe regardless of PATH. Newest version
+    // first (Reversed sort: Python313 before Python311).
+    QStringList winRoots;
+    const QByteArray localAppData = qgetenv("LOCALAPPDATA");
+    if (!localAppData.isEmpty())
+        winRoots << QString::fromLocal8Bit(localAppData) + "/Programs/Python";
+    winRoots << "C:/Program Files/Python"
+             << "C:/Program Files (x86)/Python"
+             << "C:/";
+    for (const QString &root : winRoots) {
+        QDir dir(root);
+        if (!dir.exists())
+            continue;
+        const QStringList subs = dir.entryList({"Python3*"}, QDir::Dirs,
+                                               QDir::Name | QDir::Reversed);
+        for (const QString &sub : subs) {
+            const QString exe = dir.filePath(sub) + "/python.exe";
+            if (QFile::exists(exe) && !candidates.contains(exe))
+                candidates << exe;
+        }
+    }
+#endif
+
     QString firstUsable;
     for (const QString &path : candidates) {
         if (firstUsable.isEmpty())
