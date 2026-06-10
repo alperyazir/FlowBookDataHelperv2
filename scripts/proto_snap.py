@@ -29,6 +29,7 @@ from PIL import Image, ImageDraw
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from proto_inventory import (ZOOM, diff_answer_spans, find_blank_lines,
                              find_image_rects)
+from proto_cv import cv_snap_box, render_page_bgr
 
 # Snap tolerances (PDF points)
 DY_MAX = 10.0                 # blank baseline below answer bottom
@@ -145,6 +146,50 @@ def build_clickables(answers, blanks, tick_boxes):
     return results
 
 
+def merge_same_region(clickables):
+    """Multi-line labels on one banner snap to the same CV region;
+    they are one clickable, not several."""
+    def iou(a, b):
+        ix = max(0, min(a[2], b[2]) - max(a[0], b[0]))
+        iy = max(0, min(a[3], b[3]) - max(a[1], b[1]))
+        inter = ix * iy
+        if inter == 0:
+            return 0.0
+        area = lambda r: (r[2] - r[0]) * (r[3] - r[1])
+        return inter / (area(a) + area(b) - inter)
+
+    def absorb(host, c):
+        host["answer"] = dict(host["answer"])
+        host["answer"]["text"] += " " + c["answer"]["text"]
+        r1, r2 = host["rect"], c["rect"]
+        host["rect"] = [min(r1[0], r2[0]), min(r1[1], r2[1]),
+                        max(r1[2], r2[2]), max(r1[3], r2[3])]
+
+    out = []
+    leftovers = []
+    for c in clickables:
+        if c["snap"] == "cvbox":
+            host = next((o for o in out if o["snap"] == "cvbox"
+                         and iou(o["rect"], c["rect"]) > 0.5), None)
+            if host:
+                absorb(host, c)
+                continue
+        out.append(c)
+
+    # Lines whose own seeds found nothing still belong to the banner
+    # they touch (second line of a label overflowing the artwork).
+    def intersects(a, b):
+        return min(a[2], b[2]) > max(a[0], b[0]) and min(a[3], b[3]) > max(a[1], b[1])
+
+    for c in [c for c in out if c["snap"] == "none"]:
+        host = next((o for o in out if o["snap"] == "cvbox"
+                     and intersects(o["rect"], c["answer"]["bbox"])), None)
+        if host:
+            absorb(host, c)
+            out.remove(c)
+    return out
+
+
 def _inflated(span, pad=4.0):
     x0, y0, x1, y1 = span["bbox"]
     return [x0 - pad, y0 - pad, x1 + pad, y1 + pad]
@@ -201,6 +246,17 @@ def main():
         blanks = find_blank_lines(po)
         ticks = find_tick_boxes(po)
         clickables = build_clickables(answers, blanks, ticks)
+
+        # CV fallback: write-on areas drawn inside raster artwork.
+        unmatched = [c for c in clickables if c["snap"] == "none"]
+        if unmatched:
+            page_bgr = render_page_bgr(po)
+            for c in unmatched:
+                rect = cv_snap_box(page_bgr, c["answer"]["bbox"])
+                if rect:
+                    c["rect"] = rect
+                    c["snap"] = "cvbox"
+            clickables = merge_same_region(clickables)
 
         stats = {}
         for c in clickables:
