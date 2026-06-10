@@ -98,15 +98,52 @@ def diff_answer_drawings(orig_page, ans_page):
     return out
 
 
+BLANK_CHARS = set("._…")
+
+
+def find_underscore_runs(page, min_chars=4):
+    """Blanks typed as underscore/dot runs, possibly inside mixed spans
+    ("Hello, I am ______ . I like ____"). Uses per-char bboxes."""
+    runs = []
+    raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+    for b in raw["blocks"]:
+        if b["type"] != 0:
+            continue
+        for l in b["lines"]:
+            for s in l["spans"]:
+                run = []
+                for ch in s["chars"] + [{"c": "\0", "bbox": None}]:  # sentinel
+                    if ch["c"] in BLANK_CHARS:
+                        run.append(ch["bbox"])
+                    else:
+                        if len(run) >= min_chars:
+                            x0 = min(r[0] for r in run)
+                            y0 = min(r[1] for r in run)
+                            x1 = max(r[2] for r in run)
+                            y1 = max(r[3] for r in run)
+                            runs.append([x0, y0, x1, y1])
+                        run = []
+    return runs
+
+
 def find_blank_lines(page, min_w=15.0, max_h=3.0, merge_gap=6.0):
     """Horizontal rules / dash sequences students write on.
 
     Collects thin, wide vector segments and merges collinear pieces
     (dashed lines arrive as many short segments on one baseline).
     """
+    page_rect = page.rect
     segs = []
+    seen = set()
     for d in page.get_drawings():
         r = d["rect"]
+        # Off-page clip-art and duplicated objects produce garbage.
+        if not r.intersects(page_rect):
+            continue
+        key = (round(r.x0, 1), round(r.y0, 1), round(r.x1, 1), round(r.y1, 1))
+        if key in seen:
+            continue
+        seen.add(key)
         if r.height <= max_h and r.width >= 2.0:
             segs.append(r)
 
@@ -124,10 +161,8 @@ def find_blank_lines(page, min_w=15.0, max_h=3.0, merge_gap=6.0):
                 continue
         merged.append([r.x0, r.y0, r.x1, r.y1])
 
-    # Also: dotted blanks made of text dots ("......") or underscores.
-    for s in get_spans(page):
-        if re.fullmatch(r"[._…]{4,}", s["text"]):
-            merged.append(list(s["bbox"]))
+    # Also: blanks typed as underscore/dot character runs.
+    merged.extend(find_underscore_runs(page))
 
     return [m for m in merged if (m[2] - m[0]) >= min_w]
 
