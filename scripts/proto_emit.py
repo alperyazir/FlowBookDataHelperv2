@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from proto_inventory import diff_answer_spans, find_blank_lines, get_spans
 from proto_snap import build_clickables, find_tick_boxes, merge_same_region
 from proto_cv import cv_snap_box, render_page_bgr
+from proto_circle import build_circle_sections
 
 
 def find_pdf_pair(raw_dir):
@@ -107,7 +108,7 @@ def sections_from_clickables(clickables, sx, sy):
     }]
 
 
-def process_page(orig_doc, ans_doc, page_number, png_path):
+def process_page(orig_doc, ans_doc, page_number, png_path, crop_dir, crop_prefix):
     po, pa = orig_doc[page_number - 1], ans_doc[page_number - 1]
     answers = diff_answer_spans(po, pa)
     if not answers:
@@ -132,7 +133,13 @@ def process_page(orig_doc, ans_doc, page_number, png_path):
     stats = {}
     for c in clickables:
         stats[c["snap"]] = stats.get(c["snap"], 0) + 1
-    return sections_from_clickables(clickables, sx, sy), stats
+
+    sections = sections_from_clickables(clickables, sx, sy)
+    circles = build_circle_sections(po, pa, page_number, crop_dir, crop_prefix,
+                                    sx, sy, start_idx=len(sections) + 1)
+    if circles:
+        stats["circle"] = len(circles)
+    return sections + circles, stats
 
 
 def main():
@@ -176,7 +183,10 @@ def main():
             print(f"  page {pno}: image missing, skipped", flush=True)
             skipped += 1
             continue
-        sections, stats = process_page(orig_doc, ans_doc, pno, png_path)
+        crop_dir = os.path.dirname(png_path)
+        crop_prefix = page["image_path"].replace("\\", "/").rsplit("/", 1)[0] + "/"
+        sections, stats = process_page(orig_doc, ans_doc, pno, png_path,
+                                       crop_dir, crop_prefix)
         if sections is None:
             print(f"  page {pno}: no answer overlay", flush=True)
             continue
