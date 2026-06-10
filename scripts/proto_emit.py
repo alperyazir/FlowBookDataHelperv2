@@ -26,7 +26,7 @@ import sys
 import fitz
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from proto_inventory import diff_answer_spans, find_blank_lines
+from proto_inventory import diff_answer_spans, find_blank_lines, get_spans
 from proto_snap import build_clickables, find_tick_boxes, merge_same_region
 from proto_cv import cv_snap_box, render_page_bgr
 
@@ -84,48 +84,27 @@ def px(rect_pt, sx, sy):
 
 def sections_from_clickables(clickables, sx, sy):
     """Convert snapped clickables to config.json sections."""
-    fills, marks = [], []
+    fills = []
     for c in clickables:
-        entry_rect = px(c["rect"], sx, sy)
-        if c["answer"]["is_checkmark"]:
-            marks.append({
-                "coords": entry_rect,
-                "isCorrect": True,
-                "opacity": 1,
-            })
-        else:
-            ans = {
-                "coords": entry_rect,
-                "text": c["answer"]["text"],
-                "is_text_bold": True,
-                "opacity": 1,
-            }
-            if c["snap"] == "none":
-                ans["needs_review"] = True
-            fills.append(ans)
+        # Ticks are fill answers too: the student puts a "✓" in the box.
+        ans = {
+            "coords": px(c["rect"], sx, sy),
+            "text": "✓" if c["answer"]["is_checkmark"] else c["answer"]["text"],
+            "is_text_bold": True,
+            "opacity": 1,
+        }
+        if c["snap"] == "none":
+            ans["needs_review"] = True
+        fills.append(ans)
 
-    sections = []
-    if fills:
-        sections.append({
-            "type": "fill",
-            "activity": {"circleCount": 0, "markCount": 0},
-            "answer": fills,
-            "audio_extra": {},
-        })
-    if marks:
-        sections.append({
-            "activity": {
-                "type": "markwithx",
-                "answer": marks,
-                "circleCount": 0,
-                "markCount": len(marks),
-                "coords": {"x": 0, "y": 0, "w": 0, "h": 0},
-                "headerText": "",
-                "section_path": "",
-            },
-            "audio_extra": {},
-        })
-    return sections
+    if not fills:
+        return []
+    return [{
+        "type": "fill",
+        "activity": {"circleCount": 0, "markCount": 0},
+        "answer": fills,
+        "audio_extra": {},
+    }]
 
 
 def process_page(orig_doc, ans_doc, page_number, png_path):
@@ -133,7 +112,9 @@ def process_page(orig_doc, ans_doc, page_number, png_path):
     answers = diff_answer_spans(po, pa)
     if not answers:
         return None, {}
-    clickables = build_clickables(answers, find_blank_lines(po), find_tick_boxes(po))
+    blanks = find_blank_lines(po)
+    obstacles = [s["bbox"] for s in get_spans(po)] + blanks
+    clickables = build_clickables(answers, blanks, find_tick_boxes(po), obstacles)
     unmatched = [c for c in clickables if c["snap"] == "none"]
     if unmatched:
         page_bgr = render_page_bgr(po)

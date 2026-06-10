@@ -28,14 +28,15 @@ from PIL import Image, ImageDraw
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from proto_inventory import (ZOOM, diff_answer_spans, find_blank_lines,
-                             find_image_rects)
+                             find_image_rects, get_spans)
 from proto_cv import cv_snap_box, render_page_bgr
 
 # Snap tolerances (PDF points)
 DY_MAX = 10.0                 # blank baseline below answer bottom
 DY_MIN_FACTOR = 0.65          # ... or overlapping up to this fraction of height
 X_GAP_MAX = 12.0              # max horizontal gap between answer and blank
-BOX_HEIGHT_PAD = 3.0          # clickable height = font height + 2*pad
+BOX_HEIGHT_PAD = 3.0          # minimum padding above the answer text
+GROW_FACTOR = 2.2             # max clickable height in answer-text heights
 TICK_BOX_MIN, TICK_BOX_MAX = 6.0, 22.0
 TICK_DIST_MAX = 18.0
 
@@ -94,9 +95,14 @@ NON_ANSWER_RE = re.compile(
     r"students.{0,3}own answers|öğrencinin kendi cevabı", re.IGNORECASE)
 
 
-def build_clickables(answers, blanks, tick_boxes):
-    """Produce one clickable rect per answer."""
+def build_clickables(answers, blanks, tick_boxes, obstacles=None):
+    """Produce one clickable rect per answer.
+
+    obstacles: bboxes of pre-printed page content (text spans etc.);
+    blank-snapped boxes grow upward into free space until they hit one.
+    """
     answers = [s for s in answers if not NON_ANSWER_RE.search(s["text"])]
+    obstacles = obstacles or []
     # First pass: group text answers by the blank they snap to.
     by_blank = {}
     results = []
@@ -132,13 +138,19 @@ def build_clickables(answers, blanks, tick_boxes):
             cuts.append((a["bbox"][2] + b["bbox"][0]) / 2)
         cuts.append(bx1)
         for i, s in enumerate(spans):
-            h = (s["bbox"][3] - s["bbox"][1]) + 2 * BOX_HEIGHT_PAD
+            text_h = s["bbox"][3] - s["bbox"][1]
             bottom = max(by1, s["bbox"][3])
             x0 = min(cuts[i], s["bbox"][0])      # answer may stick out of the line
             x1 = max(cuts[i + 1], s["bbox"][2])
+            # Grow upward into free space, capped, stopping at content above.
+            top = bottom - GROW_FACTOR * text_h
+            for ob in obstacles:
+                if ob[2] > x0 and ob[0] < x1 and ob[3] <= s["bbox"][1] + 1:
+                    top = max(top, min(ob[3] + 1.5, s["bbox"][1]))
+            top = min(top, s["bbox"][1] - BOX_HEIGHT_PAD)   # always cover the answer
             results.append({
                 "answer": s,
-                "rect": [x0, bottom - h, x1, bottom],
+                "rect": [x0, top, x1, bottom],
                 "snap": "blank" if len(spans) == 1 else "blank_shared",
             })
 
@@ -245,7 +257,8 @@ def main():
         answers = diff_answer_spans(po, pa)
         blanks = find_blank_lines(po)
         ticks = find_tick_boxes(po)
-        clickables = build_clickables(answers, blanks, ticks)
+        obstacles = [s["bbox"] for s in get_spans(po)] + blanks
+        clickables = build_clickables(answers, blanks, ticks, obstacles)
 
         # CV fallback: write-on areas drawn inside raster artwork.
         unmatched = [c for c in clickables if c["snap"] == "none"]
