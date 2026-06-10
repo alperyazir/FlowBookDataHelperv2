@@ -35,8 +35,8 @@ from proto_cv import cv_snap_box, render_page_bgr
 DY_MAX = 10.0                 # blank baseline below answer bottom
 DY_MIN_FACTOR = 0.65          # ... or overlapping up to this fraction of height
 X_GAP_MAX = 12.0              # max horizontal gap between answer and blank
-BOX_HEIGHT_PAD = 3.0          # minimum padding above the answer text
-GROW_FACTOR = 2.2             # max clickable height in answer-text heights
+INLINE_PAD = 2.0              # symmetric padding around the answer line
+MAX_H_FACTOR = 1.6            # hard cap in answer-text heights
 TICK_BOX_MIN, TICK_BOX_MAX = 6.0, 22.0
 TICK_DIST_MAX = 18.0
 
@@ -142,12 +142,22 @@ def build_clickables(answers, blanks, tick_boxes, obstacles=None):
             bottom = max(by1, s["bbox"][3])
             x0 = min(cuts[i], s["bbox"][0])      # answer may stick out of the line
             x1 = max(cuts[i + 1], s["bbox"][2])
-            # Grow upward into free space, capped, stopping at content above.
-            top = bottom - GROW_FACTOR * text_h
+
+            # The box is a one-line writing slot: answer line height + pad.
+            top = bottom - (text_h + 2 * INLINE_PAD)
+            # Inline gap: match the line of printed neighbors on this row.
             for ob in obstacles:
-                if ob[2] > x0 and ob[0] < x1 and ob[3] <= s["bbox"][1] + 1:
-                    top = max(top, min(ob[3] + 1.5, s["bbox"][1]))
-            top = min(top, s["bbox"][1] - BOX_HEIGHT_PAD)   # always cover the answer
+                v_ov = min(ob[3], s["bbox"][3]) - max(ob[1], s["bbox"][1])
+                h_gap = max(ob[0] - x1, x0 - ob[2])
+                if v_ov >= text_h * 0.5 and h_gap < 30:
+                    top = min(top, ob[1] - 1)
+            top = max(top, bottom - MAX_H_FACTOR * text_h)
+            # Never overlap content strictly above this row.
+            above = [ob[3] for ob in obstacles
+                     if ob[2] > x0 and ob[0] < x1 and ob[3] <= s["bbox"][1] + 1]
+            if above:
+                top = max(top, max(above) + 1.5)
+            top = min(top, s["bbox"][1] - 1)     # always cover the answer text
             results.append({
                 "answer": s,
                 "rect": [x0, top, x1, bottom],
