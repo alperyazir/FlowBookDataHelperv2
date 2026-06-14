@@ -20,9 +20,12 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _bootstrap import ensure_runtime_deps
+ensure_runtime_deps()
+
 import fitz
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from proto_inventory import (diff_answer_drawings, find_image_rects,
                              get_spans, page_dict, page_drawings,
                              page_words, _cached)

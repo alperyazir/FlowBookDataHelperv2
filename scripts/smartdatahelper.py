@@ -11,12 +11,12 @@ os.environ["PYTHONUNBUFFERED"] = "1"
 
 sys.stdout.reconfigure(line_buffering=True)  # Python 3.7+
 
-try:
-    import fitz
-except ImportError:
-    print("PyMuPDF yükleniyor...", flush=True)
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "PyMuPDF"])
-    import fitz
+# Self-bootstrap the runtime packages before importing them.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _bootstrap import ensure_runtime_deps
+ensure_runtime_deps()
+
+import fitz
 
 # Türkçe karakterler için dönüşüm tablosu
 tr_chars = str.maketrans("ıİüÜöÖğĞşŞçÇ", "iIuUoOgGsSçC")

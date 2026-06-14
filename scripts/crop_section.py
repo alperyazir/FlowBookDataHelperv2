@@ -1,16 +1,12 @@
 import sys
 import os
 
-# Self-heal on a fresh machine: if PyMuPDF ("fitz") isn't present in the
-# interpreter the app picked, install it on the fly (same approach as
-# smartdatahelper.py) so crop works without manual setup.
-try:
-    import fitz
-except ImportError:
-    import subprocess
-    print("PyMuPDF yukleniyor...", flush=True)
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "PyMuPDF"])
-    import fitz
+# Self-bootstrap the runtime packages on a fresh machine before use.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _bootstrap import ensure_runtime_deps
+ensure_runtime_deps()
+
+import fitz
 
 if len(sys.argv) != 10:
     print("ERROR: Usage: crop_section.py <raw_dir> <page_index> <x> <y> <w> <h> <png_width> <png_height> <output_path>", flush=True)

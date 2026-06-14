@@ -3,22 +3,20 @@ import json
 import sys
 import re
 import argparse
-from PIL import Image
 
 os.environ["PYTHONUNBUFFERED"] = "1"
 sys.stdout.reconfigure(line_buffering=True)
 
-try:
-    import fitz
-except ImportError:
-    import subprocess
-    print("PyMuPDF yukleniyor...", flush=True)
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "PyMuPDF"])
-    import fitz
+# Self-bootstrap the runtime packages before importing them.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _bootstrap import ensure_runtime_deps
+ensure_runtime_deps()
+
+from PIL import Image
+import fitz
 
 # Diff-based detection (answered vs original PDF) — falls back to the
 # legacy answer-color detection if the modules are missing.
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     from proto_audio import build_audio_sections, build_video_section
     from proto_circle import build_circle_sections, build_markwithx_sections
