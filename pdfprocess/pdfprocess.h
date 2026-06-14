@@ -60,6 +60,9 @@ private:
     QString getPlatformFolderName(const QString &platform) const;
     QString getLatestFlowBookVersion(const QString &platformPath) const;
     static QString pythonExecutable();
+    // Python scripts ship inside the binary (scripts.qrc) and are
+    // extracted to a writable dir once per run; returns that dir.
+    static QString scriptsDir();
 
     bool package(const QStringList &platforms, const QString &currentBookName);
 

@@ -12,6 +12,47 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+QString PdfProcess::scriptsDir()
+{
+    static QString cached;
+    if (!cached.isEmpty())
+        return cached;
+
+    // Dev override: point at a live source dir to edit scripts without a
+    // rebuild (set FLOWBOOK_SCRIPTS_DIR=/path/to/scripts).
+    const QByteArray env = qgetenv("FLOWBOOK_SCRIPTS_DIR");
+    if (!env.isEmpty() && QDir(QString::fromLocal8Bit(env)).exists()) {
+        cached = QString::fromLocal8Bit(env);
+        qDebug() << "Scripts dir (env override):" << cached;
+        return cached;
+    }
+
+    // Extract the bundled scripts (scripts.qrc) to a writable dir once.
+    // Same path on macOS and Windows — no fragile relative navigation.
+    const QString dest =
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+        + "/scripts";
+    QDir().mkpath(dest);
+
+    const QDir res(":/scripts");
+    const QStringList files = res.entryList(QDir::Files);
+    for (const QString &name : files) {
+        const QString out = dest + "/" + name;
+        QFile::remove(out);                 // copy won't overwrite
+        if (QFile::copy(":/scripts/" + name, out)) {
+            QFile::setPermissions(out, QFileDevice::ReadOwner
+                                       | QFileDevice::WriteOwner
+                                       | QFileDevice::ReadGroup
+                                       | QFileDevice::ReadOther);
+        } else {
+            qWarning() << "scriptsDir: failed to extract" << name;
+        }
+    }
+    qDebug() << "Scripts extracted:" << files.size() << "->" << dest;
+    cached = dest;
+    return cached;
+}
+
 QString PdfProcess::pythonExecutable()
 {
     // QProcess does NOT use shell aliases, so "python" (only a shell alias on
@@ -202,14 +243,8 @@ void PdfProcess::startProcessing(const QString &pdfConfig)
         process->deleteLater();
     });
 
-    // Construct the path to the Python script
-    QString appDir = QGuiApplication::applicationDirPath();
-#ifdef Q_OS_MAC
-    appDir += "/../../..";
-#else
-    appDir += "/";
-#endif
-    QString scriptPath = appDir + "/scripts/smartdatahelper.py";
+    // Scripts are bundled (scripts.qrc) and extracted to a writable dir.
+    QString scriptPath = scriptsDir() + "/smartdatahelper.py";
 
 
 
@@ -315,13 +350,7 @@ void PdfProcess::startAIAnalysis(const QString &configPath, const QString &setti
     });
 
     // Construct the path to the Python script
-    QString appDir = QGuiApplication::applicationDirPath();
-#ifdef Q_OS_MAC
-    appDir += "/../../..";
-#else
-    appDir += "/";
-#endif
-    QString scriptPath = appDir + "/scripts/ai_analyzer.py";
+    QString scriptPath = scriptsDir() + "/ai_analyzer.py";
 
     // Set up the process arguments
     QStringList arguments;
@@ -864,13 +893,7 @@ void PdfProcess::cropSectionFromPdf(const QString &pdfPath, int pageIndex,
         process->deleteLater();
     });
 
-    QString appDir = QGuiApplication::applicationDirPath();
-#ifdef Q_OS_MAC
-    appDir += "/../../..";
-#else
-    appDir += "/";
-#endif
-    QString scriptPath = appDir + "/scripts/crop_section.py";
+    QString scriptPath = scriptsDir() + "/crop_section.py";
 
     QStringList arguments;
     arguments << "-u" << scriptPath
@@ -934,17 +957,11 @@ void PdfProcess::redetectCircleOptions(const QString &rawDir, int pageNumber,
         process->deleteLater();
     });
 
-    QString appDir = QGuiApplication::applicationDirPath();
-#ifdef Q_OS_MAC
-    appDir += "/../../..";
-#else
-    appDir += "/";
-#endif
     // matchTheWords has its own detector script; circle/markwithx
     // share proto_circle's --redetect (which takes a kind argument).
-    QString scriptPath = appDir + (kind == "match"
-                                   ? "/scripts/proto_match.py"
-                                   : "/scripts/proto_circle.py");
+    QString scriptPath = scriptsDir() + (kind == "match"
+                                   ? "/proto_match.py"
+                                   : "/proto_circle.py");
 
     QStringList arguments;
     arguments << "-u" << scriptPath << "--redetect"
@@ -1006,13 +1023,7 @@ void PdfProcess::detectHeaderText(const QString &rawDir, int pageNumber,
         process->deleteLater();
     });
 
-    QString appDir = QGuiApplication::applicationDirPath();
-#ifdef Q_OS_MAC
-    appDir += "/../../..";
-#else
-    appDir += "/";
-#endif
-    QString scriptPath = appDir + "/scripts/proto_circle.py";
+    QString scriptPath = scriptsDir() + "/proto_circle.py";
 
     QStringList arguments;
     arguments << "-u" << scriptPath << "--headertext"

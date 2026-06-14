@@ -1,0 +1,20 @@
+<RCC>
+    <qresource prefix="/">
+        <file>scripts/_bootstrap.py</file>
+        <file>scripts/ai_analyzer.py</file>
+        <file>scripts/crop_section.py</file>
+        <file>scripts/proto_annotate.py</file>
+        <file>scripts/proto_audio.py</file>
+        <file>scripts/proto_audit.py</file>
+        <file>scripts/proto_circle.py</file>
+        <file>scripts/proto_cv.py</file>
+        <file>scripts/proto_dragdrop.py</file>
+        <file>scripts/proto_emit.py</file>
+        <file>scripts/proto_eval.py</file>
+        <file>scripts/proto_inventory.py</file>
+        <file>scripts/proto_match.py</file>
+        <file>scripts/proto_puzzle.py</file>
+        <file>scripts/proto_snap.py</file>
+        <file>scripts/smartdatahelper.py</file>
+    </qresource>
+</RCC>
