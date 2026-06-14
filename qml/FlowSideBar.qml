@@ -42,6 +42,17 @@ Rectangle {
         }
     }
 
+    // Space shortcut: open the activity, or play/pause audio/video,
+    // depending on which panel is currently shown.
+    function triggerSpace() {
+        if (activityVisible)
+            activityGB.openActivityDialog();
+        else if (audioVisible)
+            audioGB.togglePlay();
+        else if (videoVisible)
+            videoGB.togglePlay();
+    }
+
     // FileDialog bileşeni
     FileDialog {
         id: fileDialog

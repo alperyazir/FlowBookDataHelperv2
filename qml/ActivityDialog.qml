@@ -18,6 +18,16 @@ Dialog {
     closePolicy: Popup.NoAutoClose // Prevents dialog from closing when clicking outside
     visible: false
 
+    // Escape closes the dialog and clears the section selection in one press.
+    Shortcut {
+        sequence: "Escape"
+        enabled: root.visible
+        onActivated: {
+            root.close();
+            sideBar.hideAllComponent();
+        }
+    }
+
 
     // Custom header
     header: Rectangle {

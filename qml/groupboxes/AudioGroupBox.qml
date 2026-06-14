@@ -22,6 +22,18 @@ GroupBox {
     // Stop playback when this panel is deselected (another section clicked).
     onVisibleChanged: if (!visible) playRecordAudio.stop()
 
+    // Play / pause / resume — used by the Play button and the Space shortcut.
+    function togglePlay() {
+        if (playRecordAudio.playbackState === MediaPlayer.PlayingState)
+            playRecordAudio.pause();
+        else if (playRecordAudio.playbackState === MediaPlayer.PausedState)
+            playRecordAudio.play();
+        else {
+            playRecordAudio.source = "file:" + appPath + audioTextField.text;
+            playRecordAudio.play();
+        }
+    }
+
     background: Rectangle {
         color: "#232f34"
         border.color: "#009ca6"
@@ -129,16 +141,7 @@ GroupBox {
                 variant: "primary"
                 Layout.preferredWidth: 80
                 Layout.preferredHeight: 32
-                onClicked: {
-                    if (playRecordAudio.playbackState === MediaPlayer.PlayingState)
-                        playRecordAudio.pause();
-                    else if (playRecordAudio.playbackState === MediaPlayer.PausedState)
-                        playRecordAudio.play();
-                    else {
-                        playRecordAudio.source = "file:" + appPath + audioTextField.text;
-                        playRecordAudio.play();
-                    }
-                }
+                onClicked: root.togglePlay()
             }
 
             Slider {

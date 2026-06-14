@@ -46,6 +46,33 @@ GroupBox {
         findPuzzle.updateData();
     }
 
+    // Open the activity preview/editor dialog for the current activity.
+    // Used by the "Activity" button and the Space shortcut.
+    function openActivityDialog() {
+        activityDialog.wordLists = root.activityModelData.words;
+        activityDialog.imageSource = root.activityModelData.sectionPath;
+        activityDialog.headerText = root.activityModelData.headerText;
+        activityDialog.answers = root.activityModelData.answers;
+        activityDialog.activityModelData = root.activityModelData;
+
+        if (root.activityModelData.type === "matchTheWords")
+            activityDialog.createActivityMatchTheWord();
+        else if (root.activityModelData.type === "dragdroppicture")
+            activityDialog.createActivityDragDropPicture();
+        else if (root.activityModelData.type === "dragdroppicturegroup")
+            activityDialog.createActivityDragDropPictureGroup();
+        else if (root.activityModelData.type === "fillpicture")
+            activityDialog.createActivityFillPicture();
+        else if (root.activityModelData.type === "puzzleFindWords")
+            activityDialog.createActivityFindPuzzle();
+        else if (root.activityModelData.type === "circle")
+            activityDialog.createActivityCircle();
+        else if (root.activityModelData.type === "markwithx")
+            activityDialog.createActivityMarkWithX();
+
+        activityDialog.open();
+    }
+
     // Browse for an extra audio file attached to the section.
     FileDialog {
         id: fileDialog
@@ -365,30 +392,7 @@ GroupBox {
                 variant: "secondary"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 36
-                onClicked: {
-                    activityDialog.wordLists = root.activityModelData.words;
-                    activityDialog.imageSource = root.activityModelData.sectionPath;
-                    activityDialog.headerText = root.activityModelData.headerText;
-                    activityDialog.answers = root.activityModelData.answers;
-                    activityDialog.activityModelData = root.activityModelData;
-
-                    if (root.activityModelData.type === "matchTheWords")
-                        activityDialog.createActivityMatchTheWord();
-                    else if (root.activityModelData.type === "dragdroppicture")
-                        activityDialog.createActivityDragDropPicture();
-                    else if (root.activityModelData.type === "dragdroppicturegroup")
-                        activityDialog.createActivityDragDropPictureGroup();
-                    else if (root.activityModelData.type === "fillpicture")
-                        activityDialog.createActivityFillPicture();
-                    else if (root.activityModelData.type === "puzzleFindWords")
-                        activityDialog.createActivityFindPuzzle();
-                    else if (root.activityModelData.type === "circle")
-                        activityDialog.createActivityCircle();
-                    else if (root.activityModelData.type === "markwithx")
-                        activityDialog.createActivityMarkWithX();
-
-                    activityDialog.open();
-                }
+                onClicked: root.openActivityDialog()
             }
 
             AppButton {

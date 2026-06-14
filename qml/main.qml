@@ -164,6 +164,26 @@ ApplicationWindow {
         }
     }
 
+    // Space: open the selected activity, or play/pause the selected audio/video.
+    Shortcut {
+        sequence: "Space"
+        enabled: (sideBar.activityVisible || sideBar.audioVisible || sideBar.videoVisible)
+                 && !typingInField && !awaitingActivityKey
+        onActivated: sideBar.triggerSpace()
+    }
+
+    // Escape: clear the current selection (hide the side panel, drop the
+    // on-page highlight). When the activity dialog is open, its own Escape
+    // handler closes it and clears the selection too.
+    Shortcut {
+        sequence: "Escape"
+        enabled: !activityDialog.visible
+                 && (sideBar.audioVisible || sideBar.videoVisible || sideBar.activityVisible
+                     || sideBar.fillVisible || sideBar.circleVisible
+                     || sideBar.fillwColorVisible || sideBar.drawMatchedVisible)
+        onActivated: sideBar.hideAllComponent()
+    }
+
     Shortcut {
         sequences: ["Delete", "Backspace"]
         onActivated: content.pageDetails.removeSelectedSection()

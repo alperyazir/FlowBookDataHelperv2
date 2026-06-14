@@ -659,6 +659,18 @@ Item {
                         y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.coords.y * (picture.paintedHeight / picture.sourceSize.height)
                         width: modelData.coords.width * (picture.paintedWidth / picture.sourceSize.width)
                         height: modelData.coords.height * (picture.paintedHeight / picture.sourceSize.height)
+                        // Highlight when this audio is the one open in the sidebar.
+                        Rectangle {
+                            visible: sideBar.audioVisible && sideBar.audioModelData === modelData
+                            anchors.centerIn: parent
+                            width: root.imageHeights + 14
+                            height: root.imageHeights + 14
+                            radius: 8
+                            color: "#3300e6e6"
+                            border.color: "#00e6e6"
+                            border.width: 2
+                        }
+
                         Image {
                             id: audioImage
                             source: "qrc:/icons/sound.svg"
@@ -703,6 +715,18 @@ Item {
                         y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.coords.y * (picture.paintedHeight / picture.sourceSize.height)
                         width: modelData.coords.width * (picture.paintedWidth / picture.sourceSize.width)
                         height: modelData.coords.height * (picture.paintedHeight / picture.sourceSize.height)
+                        // Highlight when this video is the one open in the sidebar.
+                        Rectangle {
+                            visible: sideBar.videoVisible && sideBar.videoModelData === modelData
+                            anchors.centerIn: parent
+                            width: root.imageHeights + 14
+                            height: root.imageHeights + 14
+                            radius: 8
+                            color: "#3300e6e6"
+                            border.color: "#00e6e6"
+                            border.width: 2
+                        }
+
                         Image {
                             id: videoImg
                             source: "qrc:/icons/video.svg"
@@ -903,12 +927,25 @@ Item {
                             height: originalHeight * (picture.paintedHeight / picture.sourceSize.height)
                             visible: sectionType === "circle" || sectionType === "circlewithextras"
                             Rectangle {
-
+                                id: circleBorder
+                                property bool isSelected: sideBar.circleVisible
+                                                          && sideBar.section === sectionData
+                                                          && sideBar.circleIndex === index
                                 color: "transparent"
-                                border.color: "black"
-                                border.width: 2
+                                border.color: isSelected ? "#00e6e6" : "black"
+                                border.width: isSelected ? 4 : 2
                                 radius: 5
                                 anchors.fill: parent
+                            }
+
+                            Rectangle {
+                                visible: circleBorder.isSelected
+                                anchors.fill: parent
+                                anchors.margins: -4
+                                color: "transparent"
+                                border.color: "#00e6e6"
+                                border.width: 2
+                                radius: 9
                             }
 
                             MouseArea {
@@ -989,6 +1026,19 @@ Item {
                                 width: modelData.isRound ? height : parent.width
                                 radius: modelData.isRound ? height / 2 : 2
                                 opacity: modelData.opacity ? modelData.opacity : 0.5
+                            }
+
+                            // Highlight when this block is the open answer.
+                            Rectangle {
+                                visible: sideBar.fillwColorVisible
+                                         && sideBar.section === sectionData
+                                         && sideBar.fillIndex === index
+                                anchors.fill: parent
+                                anchors.margins: -3
+                                color: "transparent"
+                                border.color: "#00e6e6"
+                                border.width: 3
+                                radius: 6
                             }
 
                             MouseArea {
@@ -1080,6 +1130,18 @@ Item {
                                     width: modelData.isRound ? height : beginRectItem.originalWidth * (picture.paintedWidth / picture.sourceSize.width)
                                     radius: modelData.isRound ? height / 2 : 2
                                     opacity: modelData.opacity ? modelData.opacity : 0.5
+                                }
+
+                                Rectangle {
+                                    visible: sideBar.drawMatchedVisible
+                                             && sideBar.section === sectionData
+                                             && sideBar.fillIndex === index
+                                    anchors.fill: parent
+                                    anchors.margins: -3
+                                    color: "transparent"
+                                    border.color: "#00e6e6"
+                                    border.width: 3
+                                    radius: 6
                                 }
                                 MouseArea {
                                     anchors.fill: parent
@@ -1278,6 +1340,18 @@ Item {
                                     opacity: modelData.opacity ? modelData.opacity : 0.5
                                 }
 
+                                Rectangle {
+                                    visible: sideBar.drawMatchedVisible
+                                             && sideBar.section === sectionData
+                                             && sideBar.fillIndex === index
+                                    anchors.fill: parent
+                                    anchors.margins: -3
+                                    color: "transparent"
+                                    border.color: "#00e6e6"
+                                    border.width: 3
+                                    radius: 6
+                                }
+
                                 MouseArea {
                                     anchors.fill: parent
                                     drag.target: parent
@@ -1366,6 +1440,18 @@ Item {
                         width: modelData.activity.coords.width * (picture.paintedWidth / picture.sourceSize.width)
                         height: modelData.activity.coords.height * (picture.paintedHeight / picture.sourceSize.height)
                         visible: modelData.activity.type !== ""
+                        // Highlight when this activity is the one open in the sidebar.
+                        Rectangle {
+                            visible: sideBar.activityVisible && sideBar.activityModelData === modelData.activity
+                            anchors.centerIn: parent
+                            width: root.imageHeights + 14
+                            height: root.imageHeights + 14
+                            radius: 8
+                            color: "#3300e6e6"
+                            border.color: "#00e6e6"
+                            border.width: 2
+                        }
+
                         Image {
                             id: activityImg
                             source: "qrc:/icons/activity.svg"

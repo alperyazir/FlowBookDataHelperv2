@@ -22,6 +22,18 @@ GroupBox {
     // Stop playback when this panel is deselected (another section clicked).
     onVisibleChanged: if (!visible) playRecord.stop()
 
+    // Play / pause / resume — used by the Play button and the Space shortcut.
+    function togglePlay() {
+        if (playRecord.playbackState === MediaPlayer.PlayingState)
+            playRecord.pause();
+        else if (playRecord.playbackState === MediaPlayer.PausedState)
+            playRecord.play();
+        else {
+            playRecord.source = "file:" + appPath + videoTextField.text;
+            playRecord.play();
+        }
+    }
+
     background: Rectangle {
         color: "#232f34"
         border.color: "#009ca6"
@@ -133,16 +145,7 @@ GroupBox {
                 variant: "primary"
                 Layout.preferredWidth: 80
                 Layout.preferredHeight: 32
-                onClicked: {
-                    if (playRecord.playbackState === MediaPlayer.PlayingState)
-                        playRecord.pause();
-                    else if (playRecord.playbackState === MediaPlayer.PausedState)
-                        playRecord.play();
-                    else {
-                        playRecord.source = "file:" + appPath + videoTextField.text;
-                        playRecord.play();
-                    }
-                }
+                onClicked: root.togglePlay()
             }
 
             Slider {
