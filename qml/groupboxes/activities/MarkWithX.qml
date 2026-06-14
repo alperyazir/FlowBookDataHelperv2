@@ -70,7 +70,7 @@ Column {
 
         // TextEdit bileşeni
         TextField {
-            width: parent.width * .75
+            width: parent.width * .75 - 60
             height: parent.height
             placeholderText: "Mark the right answer."
             placeholderTextColor: "gray"
@@ -86,6 +86,36 @@ Column {
                 border.color: parent.focus ? "#009ca6" : "#445055"
                 border.width: 1
                 radius: 4
+            }
+        }
+
+        // Draw a rect on the page; the instruction text inside it
+        // becomes the headerText (read from the original PDF).
+        Button {
+            width: 50
+            height: parent.height
+            anchors.verticalCenter: parent.verticalCenter
+
+            background: Rectangle {
+                color: parent.hovered ? "#00b3be" : "#009ca6"
+                border.color: "#007a82"
+                border.width: 1
+                radius: 4
+            }
+
+            contentItem: Text {
+                text: "Pick"
+                color: "white"
+                font.pixelSize: 12
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {
+                    content.startHeaderPickMode(root.activityModelData);
+                }
             }
         }
     }
@@ -150,8 +180,18 @@ Column {
             }
         }
 
+    }
+
+    // Crop re-runs box/mark detection inside the drawn rect.
+    Row {
+        width: parent.width * .9
+        spacing: 10
+        height: 40
+
+        Item { width: parent.width * .15; height: 1 }
+
         Button {
-            width: 50
+            width: parent.width * .75
             height: 36
             anchors.verticalCenter: parent.verticalCenter
 
@@ -165,7 +205,7 @@ Column {
             contentItem: Text {
                 text: "Crop"
                 color: "white"
-                font.pixelSize: 12
+                font.pixelSize: 13
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }

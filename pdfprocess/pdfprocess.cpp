@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <QtConcurrent>
 #include <QStandardPaths>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 QString PdfProcess::pythonExecutable()
 {
@@ -226,6 +228,17 @@ void PdfProcess::startProcessing(const QString &pdfConfig)
 
 void PdfProcess::startAIAnalysis(const QString &configPath, const QString &settingsPath)
 {
+    // Re-entry guard: a second concurrent run writes to the same
+    // config.json and competes for CPU/RAM, so both runs slow down and
+    // their PROGRESS streams interleave on the shared progress bar (the
+    // "80% -> 40%" jump). Ignore duplicate requests while one is live.
+    if (_aiAnalyzing) {
+        qDebug() << "AI Analysis already running — ignoring duplicate request";
+        return;
+    }
+    _aiAnalyzing = true;
+    emit aiAnalyzingChanged();
+
     qDebug() << "Starting AI Analysis with config:" << configPath << "settings:" << settingsPath;
 
     // Setup the process to run the Python script
@@ -273,6 +286,9 @@ void PdfProcess::startAIAnalysis(const QString &configPath, const QString &setti
                     }
                 }
 
+                _aiAnalyzing = false;
+                emit aiAnalyzingChanged();
+
                 if (exitStatus == QProcess::NormalExit && exitCode == 0) {
                     qDebug() << "AI Analysis completed successfully";
                     setLogMessages("AI Analysis completed successfully");
@@ -292,6 +308,8 @@ void PdfProcess::startAIAnalysis(const QString &configPath, const QString &setti
         QString errorMessage = "Process error: " + QString::number(error) + " - " + process->errorString();
         qDebug() << errorMessage;
         setLogMessages(errorMessage);
+        _aiAnalyzing = false;
+        emit aiAnalyzingChanged();
         emit aiAnalysisCompleted(false);
         process->deleteLater();
     });
@@ -341,6 +359,11 @@ void PdfProcess::setProgress(int newProgress)
         return;
     _progress = newProgress;
     emit progressChanged();
+}
+
+bool PdfProcess::aiAnalyzing() const
+{
+    return _aiAnalyzing;
 }
 
 QStringList PdfProcess::getTestVersions() const {
@@ -865,6 +888,144 @@ void PdfProcess::cropSectionFromPdf(const QString &pdfPath, int pageIndex,
 
     process->start(pythonExecutable(), arguments);
     qDebug() << "Crop process started";
+}
+
+void PdfProcess::redetectCircleOptions(const QString &rawDir, int pageNumber,
+                                       double x, double y, double w, double h,
+                                       double pngWidth, double pngHeight,
+                                       const QString &outputPath,
+                                       const QString &kind)
+{
+    qDebug() << "Redetecting" << kind << "options:" << rawDir << "page:" << pageNumber
+             << "rect:" << x << y << w << h << "png:" << pngWidth << pngHeight
+             << "output:" << outputPath;
+
+    QProcess *process = new QProcess(this);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    process->setProcessEnvironment(env);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [this, process, outputPath](int exitCode, QProcess::ExitStatus exitStatus) {
+                QString output = QString::fromUtf8(process->readAllStandardOutput());
+                qDebug() << "Redetect script output:" << output;
+
+                // The result is the last line that looks like a JSON object.
+                QString json;
+                const QStringList lines = output.split('\n', Qt::SkipEmptyParts);
+                for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
+                    QString t = it->trimmed();
+                    if (t.startsWith('{') && t.endsWith('}')) {
+                        json = t;
+                        break;
+                    }
+                }
+
+                bool ok = exitStatus == QProcess::NormalExit && exitCode == 0
+                          && !json.isEmpty() && !json.contains("\"error\"");
+                emit circleRedetectCompleted(ok, json, outputPath);
+                process->deleteLater();
+            });
+
+    connect(process, &QProcess::errorOccurred, [this, process, outputPath](QProcess::ProcessError error) {
+        qDebug() << "Redetect process error:" << error << process->errorString();
+        emit circleRedetectCompleted(false, QString(), outputPath);
+        process->deleteLater();
+    });
+
+    QString appDir = QGuiApplication::applicationDirPath();
+#ifdef Q_OS_MAC
+    appDir += "/../../..";
+#else
+    appDir += "/";
+#endif
+    // matchTheWords has its own detector script; circle/markwithx
+    // share proto_circle's --redetect (which takes a kind argument).
+    QString scriptPath = appDir + (kind == "match"
+                                   ? "/scripts/proto_match.py"
+                                   : "/scripts/proto_circle.py");
+
+    QStringList arguments;
+    arguments << "-u" << scriptPath << "--redetect"
+              << rawDir
+              << QString::number(pageNumber)
+              << QString::number(x, 'f', 2)
+              << QString::number(y, 'f', 2)
+              << QString::number(w, 'f', 2)
+              << QString::number(h, 'f', 2)
+              << QString::number(pngWidth, 'f', 2)
+              << QString::number(pngHeight, 'f', 2)
+              << outputPath;
+    if (kind != "match")
+        arguments << kind;
+
+    qDebug() << "REDETECT SCRIPT ARGS:" << arguments;
+    process->start(pythonExecutable(), arguments);
+}
+
+void PdfProcess::detectHeaderText(const QString &rawDir, int pageNumber,
+                                  double x, double y, double w, double h,
+                                  double pngWidth, double pngHeight)
+{
+    qDebug() << "Detecting header text:" << rawDir << "page:" << pageNumber
+             << "rect:" << x << y << w << h;
+
+    QProcess *process = new QProcess(this);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    process->setProcessEnvironment(env);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+                QString output = QString::fromUtf8(process->readAllStandardOutput());
+                qDebug() << "Headertext script output:" << output;
+
+                QString text;
+                bool ok = false;
+                const QStringList lines = output.split('\n', Qt::SkipEmptyParts);
+                for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
+                    QString t = it->trimmed();
+                    if (t.startsWith('{') && t.endsWith('}')) {
+                        QJsonDocument doc = QJsonDocument::fromJson(t.toUtf8());
+                        if (doc.isObject() && doc.object().contains("headerText")) {
+                            text = doc.object().value("headerText").toString();
+                            ok = exitStatus == QProcess::NormalExit && exitCode == 0;
+                        }
+                        break;
+                    }
+                }
+                emit headerTextDetected(ok, text);
+                process->deleteLater();
+            });
+
+    connect(process, &QProcess::errorOccurred, [this, process](QProcess::ProcessError error) {
+        qDebug() << "Headertext process error:" << error << process->errorString();
+        emit headerTextDetected(false, QString());
+        process->deleteLater();
+    });
+
+    QString appDir = QGuiApplication::applicationDirPath();
+#ifdef Q_OS_MAC
+    appDir += "/../../..";
+#else
+    appDir += "/";
+#endif
+    QString scriptPath = appDir + "/scripts/proto_circle.py";
+
+    QStringList arguments;
+    arguments << "-u" << scriptPath << "--headertext"
+              << rawDir
+              << QString::number(pageNumber)
+              << QString::number(x, 'f', 2)
+              << QString::number(y, 'f', 2)
+              << QString::number(w, 'f', 2)
+              << QString::number(h, 'f', 2)
+              << QString::number(pngWidth, 'f', 2)
+              << QString::number(pngHeight, 'f', 2);
+
+    process->start(pythonExecutable(), arguments);
 }
 
 bool PdfProcess::packageForPlatforms(const QStringList &platforms, const QString &currentBookName) {

@@ -7,11 +7,15 @@ import "../../../qml"
 
 Column {
     width: parent.width
+    spacing: 8
+
+    // Fixed label column so every row lines up.
+    readonly property int labelW: 92
+    readonly property int rowH: 36
 
     FileDialog {
         id: fileDialog
         title: "Select a File"
-        //folder: StandardPaths.home // Varsayılan başlangıç yolu, değiştirilecektir
 
         onAccepted: {
             var selectedFilePath = fileDialog.file + ""; // Seçilen dosyanın tam dosya yolu
@@ -33,49 +37,54 @@ Column {
     }
 
     Row {
-        width: parent.width * .9
+        width: parent.width * .94
         spacing: 10
-        height: 40
+        height: rowH
+
         FlowText {
-            id: textType
-            text: "Type: "
+            text: "Type:"
             color: "white"
             anchors.centerIn: undefined
-            width: parent.width * .15
+            width: labelW
+            height: parent.height
             font.pixelSize: 15
-            verticalAlignment: Text.AlignBottom
+            horizontalAlignment: Text.AlignRight
+            verticalAlignment: Text.AlignVCenter
         }
 
         FlowText {
             text: (activityModelData && activityModelData.type) || ""
             color: "white"
             anchors.centerIn: undefined
+            height: parent.height
             font.pixelSize: 15
-            verticalAlignment: Text.AlignBottom
+            verticalAlignment: Text.AlignVCenter
         }
     }
 
     Row {
-        width: parent.width * .9
+        width: parent.width * .94
         spacing: 10
-        height: 40
+        height: rowH
+
         FlowText {
-            text: "Header: "
+            text: "Header:"
             color: "white"
             anchors.centerIn: undefined
-            width: parent.width * .15
+            width: labelW
+            height: parent.height
             font.pixelSize: 15
-            verticalAlignment: Text.AlignBottom
+            horizontalAlignment: Text.AlignRight
+            verticalAlignment: Text.AlignVCenter
         }
 
-        // TextEdit bileşeni
         TextField {
-            width: parent.width * .75
+            width: parent.width - labelW - 2 * parent.spacing - 50
             height: parent.height
             placeholderText: "Circle the right answer."
             placeholderTextColor: "gray"
-            horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
+            leftPadding: 10
             text: (root.activityModelData && root.activityModelData.headerText) || ""
             color: "white"
             onTextChanged: {
@@ -88,30 +97,62 @@ Column {
                 radius: 4
             }
         }
+
+        // Draw a rect on the page; the instruction text inside it
+        // becomes the headerText (read from the original PDF).
+        Button {
+            width: 50
+            height: parent.height
+            anchors.verticalCenter: parent.verticalCenter
+
+            background: Rectangle {
+                color: parent.hovered ? "#00b3be" : "#009ca6"
+                border.color: "#007a82"
+                border.width: 1
+                radius: 4
+            }
+
+            contentItem: Text {
+                text: "Pick"
+                color: "white"
+                font.pixelSize: 12
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {
+                    content.startHeaderPickMode(root.activityModelData);
+                }
+            }
+        }
     }
 
     Row {
-        width: parent.width * .9
+        width: parent.width * .94
         spacing: 10
-        height: 40
+        height: rowH
+
         FlowText {
-            text: "Path: "
+            text: "Path:"
             color: "white"
             anchors.centerIn: undefined
-            width: parent.width * .15
+            width: labelW
+            height: parent.height
             font.pixelSize: 15
-            verticalAlignment: Text.AlignBottom
+            horizontalAlignment: Text.AlignRight
+            verticalAlignment: Text.AlignVCenter
         }
 
-        // TextEdit bileşeni
         TextField {
             id: audioTextField
-            width: parent.width * .75
+            width: parent.width - labelW - rowH - 2 * parent.spacing
             height: parent.height
             placeholderText: "Enter Image Path"
             placeholderTextColor: "gray"
-            horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
+            leftPadding: 10
             text: (root.activityModelData && root.activityModelData.sectionPath) || ""
             color: "white"
             background: Rectangle {
@@ -123,8 +164,8 @@ Column {
         }
 
         Button {
-            width: 36
-            height: 36
+            width: rowH
+            height: rowH
             anchors.verticalCenter: parent.verticalCenter
 
             background: Rectangle {
@@ -149,10 +190,19 @@ Column {
                 }
             }
         }
+    }
+
+    // Crop re-runs option detection inside the drawn rect too.
+    Row {
+        width: parent.width * .94
+        spacing: 10
+        height: rowH
+
+        Item { width: labelW; height: 1 }
 
         Button {
-            width: 50
-            height: 36
+            width: (parent.width - labelW - 2 * parent.spacing) / 2
+            height: rowH
             anchors.verticalCenter: parent.verticalCenter
 
             background: Rectangle {
@@ -165,7 +215,7 @@ Column {
             contentItem: Text {
                 text: "Crop"
                 color: "white"
-                font.pixelSize: 12
+                font.pixelSize: 13
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
@@ -173,6 +223,7 @@ Column {
             MouseArea {
                 anchors.fill: parent
                 onClicked: {
+                    // executeCrop auto-upgrades circle crops to re-detect
                     content.startCropMode(root.activityModelData);
                 }
             }
@@ -180,21 +231,24 @@ Column {
     }
 
     Row {
-        width: parent.width * .9
+        width: parent.width * .94
         spacing: 10
-        height: 40
+        height: rowH
+
         FlowText {
-            text: "Circle count: "
+            text: "Circle count:"
             color: "white"
             anchors.centerIn: undefined
-            width: parent.width * .15
+            width: labelW
+            height: parent.height
             font.pixelSize: 15
-            verticalAlignment: Text.AlignBottom
+            horizontalAlignment: Text.AlignRight
+            verticalAlignment: Text.AlignVCenter
         }
 
         TextField {
             id: cbCircleCount
-            width: parent.height * 2
+            width: 72
             height: parent.height
             font.pixelSize: 15
             text: (root.activityModelData && root.activityModelData.circleCount) ? root.activityModelData.circleCount : 2

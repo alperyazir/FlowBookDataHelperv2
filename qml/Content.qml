@@ -76,4 +76,12 @@ Rectangle {
     function startCropMode(targetObj, pathProperty) {
         pageDetails.startCropMode(targetObj, pathProperty);
     }
+
+    function startRedetectMode(targetObj) {
+        pageDetails.startRedetectMode(targetObj);
+    }
+
+    function startHeaderPickMode(targetObj) {
+        pageDetails.startHeaderPickMode(targetObj);
+    }
 }

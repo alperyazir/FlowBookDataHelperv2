@@ -112,25 +112,107 @@ Rectangle {
                 verticalAlignment: Text.AlignVCenter
             }
             onClicked: {
-                var bookDir = config.bookSets[0].bookDirectoryName;
-                var configPath = bookDir + "/config.json";
-                var settingsPath = appPath + "settings.json";
+                analyzeConfirmDialog.open();
+            }
+        }
 
-                console.log("AI Analyze - bookDir: " + bookDir);
-                console.log("AI Analyze - configPath: " + configPath);
-                console.log("AI Analyze - settingsPath: " + settingsPath);
+        Dialog {
+            id: analyzeConfirmDialog
+            modal: true
+            anchors.centerIn: Overlay.overlay
+            width: 420
+            padding: 20
 
-                // Save current changes first
-                save();
+            background: Rectangle {
+                color: "#1A2327"
+                border.color: "#009ca6"
+                border.width: 1
+                radius: 8
+            }
 
-                // Start AI analysis
-                pdfProcess.startAIAnalysis(configPath, settingsPath);
+            contentItem: Column {
+                spacing: 16
 
-                // Show progress dialog
-                flowProgress.reset();
-                flowProgress.statusText = "AI Analysis in progress...";
-                flowProgress.addLogMessage("Starting AI analysis...");
-                flowProgress.open();
+                Text {
+                    width: parent.width
+                    text: "Analyze, kitaptaki TÜM sayfaların mevcut bölümlerini "
+                          + "(fill, circle...) silip yeniden üretir. Elle yaptığınız "
+                          + "düzenlemelerin üzerine yazılır.\n\nDevam edilsin mi?"
+                    color: "white"
+                    font.pixelSize: 14
+                    wrapMode: Text.WordWrap
+                }
+
+                Row {
+                    anchors.right: parent.right
+                    spacing: 10
+
+                    Button {
+                        text: "Vazgeç"
+                        width: 90
+                        height: 36
+                        background: Rectangle {
+                            color: parent.hovered ? "#2A3337" : "#1A2327"
+                            border.color: "#445055"
+                            border.width: 1
+                            radius: 6
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: analyzeConfirmDialog.close()
+                    }
+
+                    Button {
+                        text: "Analiz Et"
+                        width: 90
+                        height: 36
+                        // Block a second launch while one analysis is live:
+                        // concurrent runs corrupt the shared progress bar and
+                        // race on config.json.
+                        enabled: !pdfProcess.aiAnalyzing
+                        background: Rectangle {
+                            color: !parent.enabled ? "#5a8d91"
+                                                   : (parent.hovered ? "#00b3be" : "#009ca6")
+                            radius: 6
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
+                            if (pdfProcess.aiAnalyzing)
+                                return;
+                            analyzeConfirmDialog.close();
+
+                            var bookDir = config.bookSets[0].bookDirectoryName;
+                            var configPath = bookDir + "/config.json";
+                            var settingsPath = appPath + "settings.json";
+
+                            console.log("AI Analyze - bookDir: " + bookDir);
+                            console.log("AI Analyze - configPath: " + configPath);
+                            console.log("AI Analyze - settingsPath: " + settingsPath);
+
+                            // Save current changes first
+                            save();
+
+                            // Start AI analysis
+                            pdfProcess.startAIAnalysis(configPath, settingsPath);
+
+                            // Show progress dialog
+                            flowProgress.reset();
+                            flowProgress.statusText = "AI Analysis in progress...";
+                            flowProgress.addLogMessage("Starting AI analysis...");
+                            flowProgress.open();
+                        }
+                    }
+                }
             }
         }
 
@@ -363,6 +445,112 @@ Rectangle {
     }
     function setModuleText() {
         moduleTxt.text = content.getModuleName();
+    }
+
+    // Clears every section the analysis/user added, on all pages.
+    Button {
+        id: clearBtn
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.right: parent.right
+        anchors.rightMargin: 10
+        text: "Clear"
+        width: 70
+        height: 36
+
+        background: Rectangle {
+            color: parent.hovered ? "#d9534f" : "#a94442"
+            radius: 6
+        }
+        contentItem: Text {
+            text: parent.text
+            color: "white"
+            font.bold: true
+            anchors.centerIn: parent
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+        onClicked: clearConfirmDialog.open()
+    }
+
+    Dialog {
+        id: clearConfirmDialog
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: 420
+        padding: 20
+
+        background: Rectangle {
+            color: "#1A2327"
+            border.color: "#d9534f"
+            border.width: 1
+            radius: 8
+        }
+
+        contentItem: Column {
+            spacing: 16
+
+            Text {
+                width: parent.width
+                text: "Clear, kitaptaki TÜM sayfaların bölümlerini (fill, audio, "
+                      + "video, aktiviteler...) siler. Bu işlem geri alınamaz.\n\n"
+                      + "Devam edilsin mi?"
+                color: "white"
+                font.pixelSize: 14
+                wrapMode: Text.WordWrap
+            }
+
+            Row {
+                anchors.right: parent.right
+                spacing: 10
+
+                Button {
+                    text: "Vazgeç"
+                    width: 90
+                    height: 36
+                    background: Rectangle {
+                        color: parent.hovered ? "#2A3337" : "#1A2327"
+                        border.color: "#445055"
+                        border.width: 1
+                        radius: 6
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        color: "white"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    onClicked: clearConfirmDialog.close()
+                }
+
+                Button {
+                    text: "Temizle"
+                    width: 90
+                    height: 36
+                    background: Rectangle {
+                        color: parent.hovered ? "#d9534f" : "#a94442"
+                        radius: 6
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        color: "white"
+                        font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    onClicked: {
+                        clearConfirmDialog.close();
+                        var n = 0;
+                        for (var i = 0; i < root.pages.length; i++) {
+                            if (root.pages[i].sections.length > 0) {
+                                root.pages[i].sections = [];
+                                n++;
+                            }
+                        }
+                        console.log("Clear: " + n + " sayfanin bolumleri silindi");
+                    }
+                }
+            }
+        }
     }
 
     // Rectangle {

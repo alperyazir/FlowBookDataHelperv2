@@ -21,10 +21,13 @@ Item {
 
     // Crop mode properties
     property bool cropMode: false
+    property bool cropRedetect: false      // crop also re-detects circle options
     property var cropActivity: null        // target object during crop mode
     property string cropPathProperty: ""   // property name to update ("sectionPath" or "imagePath")
     property var cropActivityRef: null     // kept after crop mode ends for onCropCompleted
     property string cropNewSectionPath: ""
+    property var cropPngRect: null         // crop rect in page-PNG px (for zone sync)
+    property bool cropHeaderPick: false    // rect picks the headerText, no crop
     property real cropStartX: 0
     property real cropStartY: 0
     property real cropEndX: 0
@@ -1435,18 +1438,39 @@ Item {
 
     function startCropMode(targetObj, pathProperty) {
         root.cropMode = true;
+        root.cropRedetect = false;
         root.cropActivity = targetObj;
         root.cropActivityRef = targetObj;
         root.cropPathProperty = pathProperty || "sectionPath";
         root.cropNewSectionPath = "";
+        root.cropPngRect = null;
+        root.cropHeaderPick = false;
         root.cropDrawing = false;
         mainMouseArea.cursorShape = Qt.CrossCursor;
         var currentPath = targetObj[root.cropPathProperty] || "";
         print("Crop mode started for property: " + root.cropPathProperty + " = " + currentPath);
     }
 
+    // Crop mode that re-runs circle option detection inside the drawn
+    // rect and replaces the activity's answers with the result.
+    function startRedetectMode(targetObj) {
+        startCropMode(targetObj, "sectionPath");
+        root.cropRedetect = true;
+        print("Redetect mode started");
+    }
+
+    // The drawn rect only PICKS the headerText (no crop, no answers):
+    // the instruction line's text is read from the original PDF.
+    function startHeaderPickMode(targetObj) {
+        startCropMode(targetObj, "sectionPath");
+        root.cropHeaderPick = true;
+        print("Header pick mode started");
+    }
+
     function endCropMode() {
         root.cropMode = false;
+        root.cropRedetect = false;
+        root.cropHeaderPick = false;
         root.cropActivity = null;
         root.cropDrawing = false;
         mainMouseArea.cursorShape = Qt.ArrowCursor;
@@ -1498,6 +1522,17 @@ Item {
         // Page index (0-based)
         var pageIndex = page.page_number - 1;
 
+        // Header pick: the rect only selects the instruction text.
+        if (root.cropHeaderPick) {
+            pdfProcess.detectHeaderText(
+                pdfPath, page.page_number,
+                originalX, originalY, originalW, originalH,
+                picture.sourceSize.width, picture.sourceSize.height
+            );
+            endCropMode();
+            return;
+        }
+
         // Output path: generate unique name to bust QML image cache
         var currentPath = root.cropActivity[root.cropPathProperty] || "";
         var sectionDir;
@@ -1515,11 +1550,42 @@ Item {
 
         // Store new path for onCropCompleted to update sectionPath
         root.cropNewSectionPath = newSectionPath;
+        // Store the crop rect (page-PNG px) so dragdrop zones can be
+        // re-derived from the page fills after the crop is saved.
+        root.cropPngRect = { x: originalX, y: originalY, w: originalW, h: originalH };
 
         print("Crop: PDF=" + pdfPath + " page=" + pageIndex);
         print("Crop: PNG coords x=" + originalX + " y=" + originalY + " w=" + originalW + " h=" + originalH);
         print("Crop: PNG size=" + picture.sourceSize.width + "x" + picture.sourceSize.height);
         print("Crop: Output=" + outputPath);
+
+        // Circle, markwithx and matchTheWords crops always re-detect:
+        // the activity type is known, so find the options / marks /
+        // word-item pairs under the drawn area too.
+        var cropActType = root.cropActivity ? String(root.cropActivity.type || "") : "";
+        if (!root.cropRedetect
+                && (cropActType === "circle" || cropActType === "markwithx"
+                    || cropActType === "matchTheWords")) {
+            root.cropRedetect = true;
+            print(cropActType + " crop auto-upgraded to re-detect");
+        }
+
+        if (root.cropRedetect) {
+            var kind = "circle";
+            if (cropActType === "markwithx")
+                kind = "markwithx";
+            else if (cropActType === "matchTheWords")
+                kind = "match";
+            // pdfPath is the book's raw/ dir; the script resolves the pair.
+            pdfProcess.redetectCircleOptions(
+                pdfPath, page.page_number,
+                originalX, originalY, originalW, originalH,
+                picture.sourceSize.width, picture.sourceSize.height,
+                outputPath, kind
+            );
+            endCropMode();
+            return;
+        }
 
         pdfProcess.cropSectionFromPdf(
             pdfPath, pageIndex,
@@ -1531,6 +1597,113 @@ Item {
         endCropMode();
     }
 
+    // Reads the freshly saved crop to learn its pixel size, then
+    // derives the dragdrop zones from the page fills (fills = master).
+    Image {
+        id: zoneSyncImage
+        visible: false
+        asynchronous: true
+        onStatusChanged: {
+            if (status === Image.Ready)
+                root.syncDragdropZones();
+        }
+    }
+
+    // Fills are the single source of truth: every fill whose center
+    // lies inside the freshly drawn crop becomes a drop zone in the
+    // crop's own pixel space; the fill texts become the word pool.
+    function syncDragdropZones() {
+        var act = root.cropActivityRef;
+        var r = root.cropPngRect;
+        if (!act || !r || r.w <= 0 || r.h <= 0)
+            return;
+        var imgW = zoneSyncImage.sourceSize.width;
+        var imgH = zoneSyncImage.sourceSize.height;
+        if (imgW <= 0 || imgH <= 0)
+            return;
+        var sx = imgW / r.w;
+        var sy = imgH / r.h;
+
+        var zones = [];
+        var secs = page.sections;
+        for (var i = 0; i < secs.length; i++) {
+            if (secs[i].type !== "fill")
+                continue;
+            var answers = secs[i].answers;
+            for (var j = 0; j < answers.length; j++) {
+                var c = answers[j].coords;
+                var cx = c.x + c.width / 2;
+                var cy = c.y + c.height / 2;
+                if (cx < r.x || cx > r.x + r.w || cy < r.y || cy > r.y + r.h)
+                    continue;
+                zones.push({
+                    x: Math.round((c.x - r.x) * sx),
+                    y: Math.round((c.y - r.y) * sy),
+                    w: Math.round(c.width * sx),
+                    h: Math.round(c.height * sy),
+                    text: answers[j].text || ""
+                });
+            }
+        }
+        if (zones.length === 0) {
+            print("Zone sync: no fills inside the crop, answers kept");
+            return;
+        }
+        zones.sort(function(a, b) { return (a.y - b.y) || (a.x - b.x); });
+
+        // Word pool = the fill texts under the crop, reading order.
+        var words = [];
+        for (var k = 0; k < zones.length; k++)
+            if (zones[k].text !== "" && words.indexOf(zones[k].text) === -1)
+                words.push(zones[k].text);
+
+        // Group variant: zones stacking into one column share a group
+        // (any word of that column is a valid drop).
+        if (act.type === "dragdroppicturegroup") {
+            var cols = [];
+            var byX = zones.slice().sort(function(a, b) { return a.x - b.x; });
+            for (var m = 0; m < byX.length; m++) {
+                var z = byX[m];
+                var host = null;
+                for (var n = 0; n < cols.length; n++) {
+                    var ov = Math.min(z.x + z.w, cols[n].x1) - Math.max(z.x, cols[n].x0);
+                    if (ov > 0.5 * Math.min(z.w, cols[n].x1 - cols[n].x0)) {
+                        host = cols[n];
+                        break;
+                    }
+                }
+                if (host) {
+                    host.zones.push(z);
+                    host.x0 = Math.min(host.x0, z.x);
+                    host.x1 = Math.max(host.x1, z.x + z.w);
+                } else {
+                    cols.push({ x0: z.x, x1: z.x + z.w, zones: [z] });
+                }
+            }
+            for (n = 0; n < cols.length; n++) {
+                var colTexts = cols[n].zones.map(function(q) { return q.text; });
+                for (m = 0; m < cols[n].zones.length; m++)
+                    cols[n].zones[m].group = colTexts;
+            }
+        }
+
+        while (act.answers.length > 0)
+            act.removeAnswer(0);
+        for (k = 0; k < zones.length; k++) {
+            var zz = zones[k];
+            act.createNewAnswer(zz.x, zz.y, zz.w, zz.h,
+                                act.type === "dragdroppicturegroup" ? "" : zz.text);
+            if (zz.group)
+                act.answers[act.answers.length - 1].group = zz.group;
+        }
+        if (act.type !== "fillpicture") {
+            // fillpicture has no word pool — the student types.
+            act.words = words;
+        }
+        print("Zone sync: " + zones.length + " zones derived from page fills"
+              + (act.type === "fillpicture" ? "" : ", " + words.length + " words"));
+    }
+
     Connections {
         target: pdfProcess
         function onCropCompleted(success, outputPath) {
@@ -1540,9 +1713,98 @@ Item {
                 if (root.cropActivityRef && root.cropNewSectionPath !== "") {
                     root.cropActivityRef[root.cropPathProperty] = root.cropNewSectionPath;
                     print(root.cropPathProperty + " updated to: " + root.cropNewSectionPath);
+                    // Dragdrop/fillpicture crops: re-derive zones from
+                    // the fills under the crop once the image size is
+                    // known (fillpicture = same sync, no word pool).
+                    var t = String(root.cropActivityRef.type || "");
+                    if ((t.indexOf("dragdroppicture") === 0 || t === "fillpicture")
+                            && root.cropPngRect) {
+                        zoneSyncImage.source = "";
+                        zoneSyncImage.source = "file:" + outputPath;
+                    }
                 }
             } else {
                 print("Crop failed for: " + outputPath);
+            }
+        }
+
+        function onHeaderTextDetected(success, text) {
+            if (!success || !root.cropActivityRef) {
+                print("Header pick failed or no target");
+                return;
+            }
+            if (text === "") {
+                print("Header pick: no text found in rect");
+                return;
+            }
+            root.cropActivityRef.headerText = text;
+            print("Header set: " + text);
+        }
+
+        function onCircleRedetectCompleted(success, resultJson, outputPath) {
+            if (!success) {
+                print("Circle redetect failed for: " + outputPath);
+                return;
+            }
+            var act = root.cropActivityRef;
+            if (!act) {
+                print("Redetect: no target activity");
+                return;
+            }
+            var res = JSON.parse(resultJson);
+
+            // matchTheWords: the result is word list + items, not
+            // answer boxes (and there is no section image to apply).
+            if (String(act.type || "") === "matchTheWords") {
+                if (!res.match_words || res.match_words.length === 0) {
+                    print("Match redetect: nothing found in rect, kept as is");
+                    return;
+                }
+                while (act.matchWord.length > 0)
+                    act.removeMatchWord(0);
+                for (var mi = 0; mi < res.match_words.length; mi++)
+                    act.createMatchWord(res.match_words[mi], "");
+                while (act.sentences.length > 0)
+                    act.removeSentences(0);
+                for (var si = 0; si < res.sentences.length; si++) {
+                    var sn = res.sentences[si];
+                    var rel = "";
+                    if (sn.image_path) {
+                        rel = sn.image_path;
+                        if (rel.indexOf(appPath) === 0)
+                            rel = "./" + rel.substring(appPath.length);
+                    }
+                    act.createSentences(sn.word || "", sn.sentence || "", rel);
+                }
+                print("Match redetect applied: " + res.match_words.length
+                      + " words, " + res.sentences.length + " items");
+                return;
+            }
+
+            // New crop image (unique name busts the QML image cache)
+            if (root.cropNewSectionPath !== "")
+                act.sectionPath = root.cropNewSectionPath;
+
+            if (res.answer.length === 0) {
+                print("Redetect: no options found in rect, crop applied, answers kept");
+                return;
+            }
+
+            // Replace answers with the redetected option boxes
+            while (act.answers.length > 0)
+                act.removeAnswer(0);
+            for (var i = 0; i < res.answer.length; i++) {
+                var a = res.answer[i];
+                act.createNewAnswer(a.coords.x, a.coords.y, a.coords.w, a.coords.h, "");
+                if (a.isCorrect)
+                    act.answers[act.answers.length - 1].isCorrect = true;
+            }
+            if (String(act.type || "") === "markwithx") {
+                act.markCount = res.markCount !== undefined ? res.markCount : 0;
+                print("Redetect applied: " + res.answer.length + " boxes, markCount=" + act.markCount);
+            } else {
+                act.circleCount = res.circleCount;
+                print("Redetect applied: " + res.answer.length + " options, circleCount=" + res.circleCount);
             }
         }
     }

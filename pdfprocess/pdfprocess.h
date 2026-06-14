@@ -19,12 +19,22 @@ public:
                                          double x, double y, double w, double h,
                                          double pngWidth, double pngHeight,
                                          const QString &outputPath);
+    Q_INVOKABLE void redetectCircleOptions(const QString &rawDir, int pageNumber,
+                                           double x, double y, double w, double h,
+                                           double pngWidth, double pngHeight,
+                                           const QString &outputPath,
+                                           const QString &kind = "circle");
+    Q_INVOKABLE void detectHeaderText(const QString &rawDir, int pageNumber,
+                                      double x, double y, double w, double h,
+                                      double pngWidth, double pngHeight);
 
     int _progress;
     QString _logMessages;
+    bool _aiAnalyzing = false;
 
     int progress() const;
     void setProgress(int newProgress);
+    bool aiAnalyzing() const;
     QString logMessages() const;
     void setLogMessages(const QString &newLogMessages);
     bool removeDir(const QString &dirPath);
@@ -34,13 +44,18 @@ public:
 signals:
     void progressChanged();
     void logMessagesChanged();
+    void aiAnalyzingChanged();
     void copyCompleted(bool success);
     void aiAnalysisCompleted(bool success);
     void cropCompleted(bool success, const QString &outputPath);
+    void circleRedetectCompleted(bool success, const QString &resultJson,
+                                 const QString &outputPath);
+    void headerTextDetected(bool success, const QString &text);
 
 private:
     Q_PROPERTY(int progress READ progress WRITE setProgress NOTIFY progressChanged FINAL)
     Q_PROPERTY(QString logMessages READ logMessages WRITE setLogMessages NOTIFY logMessagesChanged FINAL)
+    Q_PROPERTY(bool aiAnalyzing READ aiAnalyzing NOTIFY aiAnalyzingChanged FINAL)
     
     QString getPlatformFolderName(const QString &platform) const;
     QString getLatestFlowBookVersion(const QString &platformPath) const;
