@@ -157,12 +157,18 @@ def find_original_pdf(config_path):
         lower_name = pdf_file.lower()
         if "original" in lower_name or "soru" in lower_name:
             return os.path.join(raw_dir, pdf_file)
-    # If there are 2+ PDFs, the first one (not answered) is likely original
+    # If there are 2+ PDFs, the first non-answered one is likely original
+    # — but skip a separate cover/'kapak' file (few pages, wrong book).
     if len(pdf_files) >= 2:
         answered_keywords = ("cevap", "answer", "key")
+        cover_keywords = ("kapak", "cover", "kapag")
         for pdf_file in pdf_files:
-            if not any(kw in pdf_file.lower() for kw in answered_keywords):
-                return os.path.join(raw_dir, pdf_file)
+            low = pdf_file.lower()
+            if any(kw in low for kw in answered_keywords):
+                continue
+            if any(kw in low for kw in cover_keywords):
+                continue
+            return os.path.join(raw_dir, pdf_file)
     return None
 
 

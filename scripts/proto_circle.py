@@ -875,16 +875,51 @@ def build_markwithx_sections(po, pa, page_num, images_dir, prefix, sx, sy,
 
 # ---------------------------------------------------------------------------
 
+def _pdf_page_count(path):
+    try:
+        d = fitz.open(path)
+        n = len(d)
+        d.close()
+        return n
+    except Exception:
+        return 0
+
+
 def find_pdf_pair(raw_dir):
-    """Original + answered PDFs, by the same keywords ai_analyzer uses."""
+    """Original + answered PDFs. Answered = name has cevap/answer/key.
+    Original = the remaining book PDF. When several non-answered PDFs
+    exist (e.g. a separate cover / 'kapak' file alongside the book) pick
+    the one whose page count matches the answered PDF, so we never grab
+    the few-page cover (that crashed header-pick on amazing: the cover
+    has 3 pages, page 4 'not in document')."""
     pdfs = [f for f in os.listdir(raw_dir) if f.lower().endswith(".pdf")]
-    answered = original = None
+    answered = None
+    rest = []
     for f in pdfs:
         if any(k in f.lower() for k in ("cevap", "answer", "key")):
             answered = os.path.join(raw_dir, f)
         else:
-            original = os.path.join(raw_dir, f)
-    return original, answered
+            rest.append(os.path.join(raw_dir, f))
+    if not rest:
+        return None, answered
+    if len(rest) == 1:
+        return rest[0], answered
+    # Several candidates: prefer an explicit name, else drop obvious
+    # covers, else match the answered page count, else the longest PDF.
+    named = [p for p in rest if any(k in os.path.basename(p).lower()
+                                    for k in ("original", "soru"))]
+    if named:
+        return named[0], answered
+    cands = [p for p in rest if not any(k in os.path.basename(p).lower()
+                                        for k in ("kapak", "cover", "kapag"))] or rest
+    if len(cands) > 1 and answered:
+        npages = _pdf_page_count(answered)
+        match = [p for p in cands if _pdf_page_count(p) == npages]
+        if match:
+            cands = match
+    if len(cands) == 1:
+        return cands[0], answered
+    return max(cands, key=_pdf_page_count), answered
 
 
 def redetect(raw_dir, page_no, rect_px, png_size, out_path, kind="circle"):
