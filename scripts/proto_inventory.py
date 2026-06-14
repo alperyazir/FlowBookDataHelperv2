@@ -29,12 +29,78 @@ WHITE = 0xFFFFFF
 
 
 # ---------------------------------------------------------------------------
+# Page-level extraction cache: every detector re-parses the same page
+# (get_text("dict") alone costs ~1.5s on vector-heavy pages and used
+# to run 15-25x per page). The cache lives ON the fitz Page object, so
+# it is freed with the page.
+# ---------------------------------------------------------------------------
+
+def _cached(page, key, builder):
+    try:
+        store = page._fb_cache
+    except AttributeError:
+        store = {}
+        try:
+            page._fb_cache = store
+        except AttributeError:
+            return builder()        # exotic page object: just compute
+    if key not in store:
+        store[key] = builder()
+    return store[key]
+
+
+def page_dict(page, ws=False):
+    if ws:
+        return _cached(page, "dict_ws", lambda: page.get_text(
+            "dict", flags=fitz.TEXT_PRESERVE_WHITESPACE))
+    return _cached(page, "dict", lambda: page.get_text("dict"))
+
+
+def page_words(page):
+    return _cached(page, "words", lambda: page.get_text("words"))
+
+
+def page_plain_text(page):
+    return _cached(page, "plain", lambda: page.get_text())
+
+
+def page_drawings(page):
+    return _cached(page, "drawings", lambda: _build_drawings(page))
+
+
+def _build_drawings(page):
+    """get_cdrawings() returns the same data as get_drawings() but ~5x
+    faster: it leaves rect/points as plain tuples instead of building a
+    fitz.Rect/Point per vector (the dominant cost on illustrated pages —
+    Rise Up p13: 16.8s -> 3.2s for 380k drawings). Detectors read
+    d["rect"] as a Rect, so wrap just the rect back (cheap, ~0.3s); the
+    item operands are only ever read as op letters (item[0]), so leaving
+    them as tuples is fine."""
+    try:
+        draws = page.get_cdrawings()
+    except AttributeError:
+        return page.get_drawings()   # very old PyMuPDF: fall back
+    for d in draws:
+        d["rect"] = fitz.Rect(d["rect"])
+    return draws
+
+
+def page_rawdict_ws(page):
+    return _cached(page, "rawdict_ws", lambda: page.get_text(
+        "rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE))
+
+
+# ---------------------------------------------------------------------------
 # Extraction helpers
 # ---------------------------------------------------------------------------
 
 def get_spans(page):
+    return _cached(page, "spans", lambda: _build_spans(page))
+
+
+def _build_spans(page):
     spans = []
-    for b in page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]:
+    for b in page_dict(page, ws=True)["blocks"]:
         if b["type"] != 0:
             continue
         for l in b["lines"]:
@@ -55,10 +121,29 @@ def span_key(s):
     return (s["text"], round(s["bbox"][0]), round(s["bbox"][1]))
 
 
-def diff_answer_spans(orig_page, ans_page):
-    """Spans present in answered but not in original = answer overlay."""
-    okeys = {span_key(s) for s in get_spans(orig_page)}
-    new = [s for s in get_spans(ans_page) if span_key(s) not in okeys]
+def diff_answer_spans(orig_page, ans_page, tol=3.0):
+    return _cached(orig_page, ("diff_spans", id(ans_page), tol),
+                   lambda: _build_diff_spans(orig_page, ans_page, tol))
+
+
+def _build_diff_spans(orig_page, ans_page, tol):
+    """Spans present in answered but not in original = answer overlay.
+
+    Position matching is tolerant: some publishers re-typeset the
+    whole answered page with ~1pt drift, so "same text within tol"
+    counts as the same printed span, not as an answer."""
+    by_text = {}
+    for o in get_spans(orig_page):
+        by_text.setdefault(o["text"], []).append(o["bbox"])
+
+    def is_new(s):
+        for b in by_text.get(s["text"], ()):
+            if abs(b[0] - s["bbox"][0]) <= tol and \
+               abs(b[1] - s["bbox"][1]) <= tol:
+                return False
+        return True
+
+    new = [s for s in get_spans(ans_page) if is_new(s)]
 
     # Drop white halo twins: keep the non-white copy of duplicated spans.
     by_key = {}
@@ -82,19 +167,53 @@ def drawing_key(d):
             ops, str(d.get("color")), str(d.get("fill")))
 
 
-def diff_answer_drawings(orig_page, ans_page):
-    """Vector drawings present only in answered pdf (circles, strokes...)."""
-    okeys = {drawing_key(d) for d in orig_page.get_drawings()}
-    out = []
-    for d in ans_page.get_drawings():
-        if drawing_key(d) in okeys:
-            continue
+# When the answered page's vectors barely cancel against the original,
+# the survivors are re-rendered artwork, not answer marks. Heavily
+# illustrated books (Rise Up p13: 339k drawings survive a 380k-drawing
+# diff) re-rasterize/re-typeset their art on the answered side so almost
+# nothing matches. No real answer key draws this many marks — Goals_2's
+# busiest legit page leaves 5,514 — so above this we treat the page's
+# vector diff as unusable and defer it to the AI vision layer. This also
+# stops the circle/mark detectors from grinding through artwork noise.
+DIFF_DRAW_CAP = 10000
+
+
+def diff_answer_drawings(orig_page, ans_page, tol=3.0):
+    return _cached(orig_page, ("diff_draw", id(ans_page), tol),
+                   lambda: _build_diff_drawings(orig_page, ans_page, tol))
+
+
+def _build_diff_drawings(orig_page, ans_page, tol):
+    """Vector drawings present only in answered pdf (circles, strokes...).
+
+    Same drift tolerance as diff_answer_spans: a drawing with the same
+    shape signature within tol points is the same printed artwork."""
+    by_sig = {}
+    for d in page_drawings(orig_page):
         r = d["rect"]
+        sig = ("".join(item[0] for item in d["items"]),
+               str(d.get("color")), str(d.get("fill")),
+               round(r.width), round(r.height))
+        by_sig.setdefault(sig, []).append((r.x0, r.y0))
+    out = []
+    for d in page_drawings(ans_page):
+        r = d["rect"]
+        sig = ("".join(item[0] for item in d["items"]),
+               str(d.get("color")), str(d.get("fill")),
+               round(r.width), round(r.height))
+        if any(abs(x - r.x0) <= tol and abs(y - r.y0) <= tol
+               for x, y in by_sig.get(sig, ())):
+            continue
+        # Off-page clip-art bleed is not an answer mark.
+        if not r.intersects(ans_page.rect):
+            continue
         out.append({
             "bbox": [r.x0, r.y0, r.x1, r.y1],
             "ops": "".join(item[0] for item in d["items"]),
             "color": list(d["color"]) if d.get("color") else None,
         })
+    if len(out) > DIFF_DRAW_CAP:
+        return []        # vector layers don't align — defer to AI
     return out
 
 
@@ -105,7 +224,7 @@ def find_underscore_runs(page, min_chars=4):
     """Blanks typed as underscore/dot runs, possibly inside mixed spans
     ("Hello, I am ______ . I like ____"). Uses per-char bboxes."""
     runs = []
-    raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+    raw = page_rawdict_ws(page)
     for b in raw["blocks"]:
         if b["type"] != 0:
             continue
@@ -127,6 +246,11 @@ def find_underscore_runs(page, min_chars=4):
 
 
 def find_blank_lines(page, min_w=15.0, max_h=3.0, merge_gap=6.0):
+    return _cached(page, ("blanks", min_w, max_h, merge_gap),
+                   lambda: _build_blank_lines(page, min_w, max_h, merge_gap))
+
+
+def _build_blank_lines(page, min_w=15.0, max_h=3.0, merge_gap=6.0):
     """Horizontal rules / dash sequences students write on.
 
     Collects thin, wide vector segments and merges collinear pieces
@@ -135,7 +259,7 @@ def find_blank_lines(page, min_w=15.0, max_h=3.0, merge_gap=6.0):
     page_rect = page.rect
     segs = []
     seen = set()
-    for d in page.get_drawings():
+    for d in page_drawings(page):       # cached: was a 2nd full get_drawings()
         r = d["rect"]
         # Off-page clip-art and duplicated objects produce garbage.
         if not r.intersects(page_rect):
@@ -168,6 +292,10 @@ def find_blank_lines(page, min_w=15.0, max_h=3.0, merge_gap=6.0):
 
 
 def find_image_rects(page):
+    return _cached(page, "imgrects", lambda: _build_image_rects(page))
+
+
+def _build_image_rects(page):
     out = []
     for img in page.get_images(full=True):
         xref = img[0]

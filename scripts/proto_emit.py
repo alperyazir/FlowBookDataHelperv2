@@ -26,9 +26,7 @@ import sys
 import fitz
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from proto_inventory import diff_answer_spans, find_blank_lines, get_spans
-from proto_snap import build_clickables, find_tick_boxes, merge_same_region
-from proto_cv import cv_snap_box, render_page_bgr
+from proto_snap import snap_page
 from proto_circle import build_circle_sections
 
 
@@ -77,68 +75,19 @@ def make_skeleton(book_dir):
     }
 
 
-def px(rect_pt, sx, sy):
-    x0, y0, x1, y1 = rect_pt
-    return {"x": int(round(x0 * sx)), "y": int(round(y0 * sy)),
-            "w": int(round((x1 - x0) * sx)), "h": int(round((y1 - y0) * sy))}
-
-
-def sections_from_clickables(clickables, sx, sy):
-    """Convert snapped clickables to config.json sections."""
-    fills = []
-    for c in clickables:
-        # Ticks are fill answers too: the student puts a "✓" in the box.
-        ans = {
-            "coords": px(c["rect"], sx, sy),
-            "text": "✓" if c["answer"]["is_checkmark"] else c["answer"]["text"],
-            "is_text_bold": True,
-            "opacity": 1,
-        }
-        if c["snap"] == "none":
-            ans["needs_review"] = True
-        fills.append(ans)
-
-    if not fills:
-        return []
-    return [{
-        "type": "fill",
-        "activity": {"circleCount": 0, "markCount": 0},
-        "answer": fills,
-        "audio_extra": {},
-    }]
-
-
 def process_page(orig_doc, ans_doc, page_number, png_path, crop_dir, crop_prefix):
     po, pa = orig_doc[page_number - 1], ans_doc[page_number - 1]
-    answers = diff_answer_spans(po, pa)
-    if not answers:
-        return None, {}
-    blanks = find_blank_lines(po)
-    obstacles = [s["bbox"] for s in get_spans(po)] + blanks
-    clickables = build_clickables(answers, blanks, find_tick_boxes(po), obstacles)
-    unmatched = [c for c in clickables if c["snap"] == "none"]
-    if unmatched:
-        page_bgr = render_page_bgr(po)
-        for c in unmatched:
-            rect = cv_snap_box(page_bgr, c["answer"]["bbox"])
-            if rect:
-                c["rect"] = rect
-                c["snap"] = "cvbox"
-        clickables = merge_same_region(clickables)
-
     pix = fitz.Pixmap(png_path)
     sx, sy = pix.width / po.rect.width, pix.height / po.rect.height
     pix = None
 
-    stats = {}
-    for c in clickables:
-        stats[c["snap"]] = stats.get(c["snap"], 0) + 1
-
-    sections = sections_from_clickables(clickables, sx, sy)
+    sections, stats = snap_page(po, pa, sx, sy)
     circles = build_circle_sections(po, pa, page_number, crop_dir, crop_prefix,
                                     sx, sy, start_idx=len(sections) + 1)
     if circles:
         stats["circle"] = len(circles)
+    if not sections and not circles:
+        return None, {}
     return sections + circles, stats
 
 

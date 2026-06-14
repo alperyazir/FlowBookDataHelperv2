@@ -16,6 +16,28 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "PyMuPDF"])
     import fitz
 
+# Diff-based detection (answered vs original PDF) — falls back to the
+# legacy answer-color detection if the modules are missing.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from proto_audio import build_audio_sections, build_video_section
+    from proto_circle import build_circle_sections, build_markwithx_sections
+    from proto_match import build_match_sections
+    from proto_puzzle import build_puzzle_sections
+    from proto_dragdrop import build_dragdrop_sections
+    from proto_snap import snap_page
+    from proto_inventory import page_drawings
+    HAVE_DIFF = True
+except ImportError:
+    HAVE_DIFF = False
+
+# A handful of re-exported pages carry 1M+ vector drawings (e.g. the
+# "original" book's p27 = 1.47M). They take minutes to rasterize and
+# make every diff/detector crawl, with no usable deterministic result.
+# Above this drawing count we skip detection on the page and defer it to
+# the AI vision layer rather than freezing the editor for minutes.
+MONSTER_DRAW_CAP = 300000
+
 
 # ---------------------------------------------------------------------------
 # Normalize helpers — matches config.json format
@@ -785,6 +807,23 @@ def run_analysis(config_path, settings_path):
     config = load_config(config_path)
     config_dir = os.path.dirname(os.path.abspath(config_path))
 
+    # Per-book AI/human decisions that must survive re-analysis
+    # (e.g. which dragdrop pages are the group variant). Written by
+    # the AI verification pass or by hand.
+    overrides = {}
+    overrides_path = os.path.join(config_dir, "ai_overrides.json")
+    if os.path.exists(overrides_path):
+        with open(overrides_path, encoding="utf-8") as f:
+            overrides = json.load(f)
+        print(f"AI overrides loaded: {overrides}", flush=True)
+    dd_group_pages = set(overrides.get("dragdrop_group_pages", []))
+    skip_fill_pages = set(overrides.get("skip_fill_pages", []))
+    # AI vision layer writes the headphone/speaker (audio) and play
+    # (video) icon bboxes it sees, per page, in PDF points:
+    #   {"audio_icons": {"10": [[x0,y0,x1,y1], ...]}, "video_icons": {...}}
+    audio_icons = {int(k): v for k, v in overrides.get("audio_icons", {}).items()}
+    video_icons = {int(k): v for k, v in overrides.get("video_icons", {}).items()}
+
     print("PROGRESS:5%", flush=True)
     print("Config loaded successfully", flush=True)
 
@@ -825,6 +864,7 @@ def run_analysis(config_path, settings_path):
 
     # 6. Analyze each page
     analyzed_count = 0
+    next_video_no = 1
     skipped_count = 0
 
     for i, page_info in enumerate(all_pages):
@@ -870,23 +910,25 @@ def run_analysis(config_path, settings_path):
 
         print(f"  PNG: {png_width}x{png_height}, PDF page: {pdf_page.rect.width:.0f}x{pdf_page.rect.height:.0f}, Scale: {scale_x:.3f}x{scale_y:.3f}", flush=True)
 
-        # Save images to temp for debug
-        original_jpeg_path = os.path.join(temp_dir, f"original_{page_num}.jpg")
-        orig_pix = fitz.Pixmap(original_image_path)
-        orig_jpeg_bytes = orig_pix.tobytes("jpeg", 90)
-        with open(original_jpeg_path, "wb") as f:
-            f.write(orig_jpeg_bytes)
-        orig_pix = None
+        # Complexity guard up front: pathologically heavy pages (1M+
+        # drawings) are deferred to AI. Load the original page once here
+        # and reuse it for detection so the cdrawings cost is paid once.
+        original_page = None
+        if HAVE_DIFF and original_doc is not None:
+            original_page = original_doc.load_page(pdf_page_idx)
+            try:
+                n_draw = len(page_drawings(original_page))
+            except Exception:
+                n_draw = 0
+            if n_draw > MONSTER_DRAW_CAP:
+                print(f"  page {page_num}: {n_draw} drawings — too complex for "
+                      f"deterministic detection; skipping (defer to AI)", flush=True)
+                page_info["page_ref"]["sections"] = []
+                skipped_count += 1
+                continue
 
-        mat = fitz.Matrix(scale_x, scale_y)
-        ans_pix = pdf_page.get_pixmap(matrix=mat)
-        answered_jpeg_path = os.path.join(temp_dir, f"answered_{page_num}.jpg")
-        ans_jpeg_bytes = ans_pix.tobytes("jpeg", 85)
-        with open(answered_jpeg_path, "wb") as f:
-            f.write(ans_jpeg_bytes)
-        ans_pix = None
-
-        print(f"  Saved to temp: original_{page_num}.jpg, answered_{page_num}.jpg", flush=True)
+        # (Debug temp JPEGs removed: nothing reads them, and rendering the
+        # answered page in full cost 30-90s on pathologically heavy pages.)
 
         # Determine images directory and section_path prefix from image_path
         # image_path like "./books/BookName/images/Module_1/8.png"
@@ -907,28 +949,106 @@ def run_analysis(config_path, settings_path):
         # Clear any existing sections from previous runs
         page_info["page_ref"]["sections"] = []
 
-        # --- Fill detection (answer-colored text) ---
-        fill_sections = analyze_page_pdf(pdf_page, answer_rgb, scale_x, scale_y)
+        # --- Detection ---
+        # Preferred: diff the answered page against the original PDF
+        # (color independent, same engine as the editor's Re-detect
+        # button). Falls back to the legacy answer-color method when
+        # the original PDF or the diff modules are unavailable.
+        # original_page was already loaded (and its drawings cached) by
+        # the complexity guard above; reuse it so cdrawings runs once.
 
-        # --- Circle detection (multiple choice drawings) ---
-        circle_sections = detect_circle_activities(
-            pdf_page, answer_rgb, scale_x, scale_y,
-            page_num, pdf_page_idx, original_doc, images_dir,
-            section_path_prefix
-        )
+        fill_sections = []
+        circle_sections = []
+        cfg_sections = []
+        if original_page is not None:
+            # One detector failing must not kill the whole book run.
+            def safe(name, fn, default):
+                try:
+                    return fn()
+                except Exception as e:
+                    print(f"  {name} detection FAILED on page {page_num}: {e}",
+                          flush=True)
+                    return default
+            # Dragdrop activities AND fills both carry the pool-blank
+            # answers: the page view shows them as fills, the activity
+            # window shows them as drop zones (Alper, 2026-06-11).
+            dd_cfg, _dd_zones = safe("dragdrop", lambda: build_dragdrop_sections(
+                original_page, pdf_page, page_num, images_dir,
+                section_path_prefix, scale_x, scale_y, start_idx=1,
+                group_mode=(page_num in dd_group_pages)), ([], []))
+            fill_cfg = []
+            if page_num not in skip_fill_pages:
+                fill_cfg, fill_stats = safe("fill", lambda: snap_page(
+                    original_page, pdf_page, scale_x, scale_y), ([], {}))
+                if fill_stats:
+                    print(f"  Fill snap: {fill_stats}", flush=True)
+            book_prefix = section_path_prefix.split("/images/")[0]
+            audio_cfg = safe("audio", lambda: build_audio_sections(
+                original_page, scale_x, scale_y, page_num=page_num,
+                audio_dir=os.path.join(config_dir, "audio"),
+                audio_prefix=f"{book_prefix}/audio/",
+                icon_regions=audio_icons.get(page_num)), [])
+            video = safe("video", lambda: build_video_section(
+                original_page, scale_x, scale_y, next_video_no,
+                videos_dir=os.path.join(config_dir, "videos"),
+                video_prefix=f"{book_prefix}/videos/",
+                icon_regions=video_icons.get(page_num)), None)
+            if video is not None:
+                audio_cfg = audio_cfg + [video]
+                next_video_no += 1
+            circle_cfg = safe("circle", lambda: build_circle_sections(
+                original_page, pdf_page, page_num, images_dir,
+                section_path_prefix, scale_x, scale_y,
+                start_idx=len(dd_cfg) + 1), [])
+            markx_cfg = safe("markwithx", lambda: build_markwithx_sections(
+                original_page, pdf_page, page_num, images_dir,
+                section_path_prefix, scale_x, scale_y,
+                start_idx=len(dd_cfg) + len(circle_cfg) + 1), [])
+            if markx_cfg:
+                print(f"  MarkWithX: {len(markx_cfg)}", flush=True)
+            puzzle_cfg = safe("puzzle", lambda: build_puzzle_sections(
+                original_page, pdf_page, page_num, scale_x, scale_y), [])
+            if puzzle_cfg:
+                print(f"  PuzzleFindWords: {len(puzzle_cfg)} "
+                      f"({len(puzzle_cfg[0]['activity']['words'])} words)",
+                      flush=True)
+            match_cfg = safe("match", lambda: build_match_sections(
+                original_page, pdf_page, page_num, images_dir,
+                section_path_prefix, scale_x, scale_y), [])
+            if match_cfg:
+                print(f"  MatchTheWords: {len(match_cfg)}", flush=True)
+            cfg_sections = (fill_cfg + audio_cfg + dd_cfg + circle_cfg
+                            + markx_cfg + puzzle_cfg + match_cfg)
+            fill_count = len(fill_cfg)
+            circle_count = len(circle_cfg)
+            dd_count = len(dd_cfg)
+            if audio_cfg:
+                print(f"  Audio icons: {len(audio_cfg)}", flush=True)
+        else:
+            fill_sections = analyze_page_pdf(pdf_page, answer_rgb, scale_x, scale_y)
+            circle_sections = detect_circle_activities(
+                pdf_page, answer_rgb, scale_x, scale_y,
+                page_num, pdf_page_idx, original_doc, images_dir,
+                section_path_prefix
+            )
+            fill_count = len(fill_sections)
+            circle_count = len(circle_sections)
+            dd_count = 0
 
         # Combine all sections
         sections = fill_sections + circle_sections
 
-        if sections:
-            normalized = normalize_sections(sections)
+        if sections or cfg_sections:
+            normalized = normalize_sections(sections) + cfg_sections
             page_info["page_ref"]["sections"] = normalized
             analyzed_count += 1
 
-            fill_count = len(fill_sections)
-            circle_count = len(circle_sections)
-            answer_count = sum(len(s.get("answers", [])) for s in sections)
-            print(f"  Found {len(sections)} section(s): {fill_count} fill, {circle_count} circle, {answer_count} total answers", flush=True)
+            # puzzle/match activities carry words/sentences, not answer[]
+            answer_count = sum(len(s.get("answers", [])) for s in sections) \
+                + sum(len(s.get("activity", {}).get("answer", []))
+                      if "type" not in s
+                      else len(s.get("answer", [])) for s in cfg_sections)
+            print(f"  Found {len(sections) + len(cfg_sections)} section(s): {fill_count} fill, {dd_count} dragdrop, {circle_count} circle, {answer_count} total answers", flush=True)
             for s in sections:
                 if s.get("type") == "fill":
                     for ans in s.get("answers", []):
@@ -942,8 +1062,7 @@ def run_analysis(config_path, settings_path):
         else:
             print(f"  No answers found on this page", flush=True)
 
-    # 7. Close PDFs
-    answered_doc.close()
+    # 7. Close the original PDF.
     if original_doc:
         original_doc.close()
 
@@ -955,7 +1074,13 @@ def run_analysis(config_path, settings_path):
         json.dump(config, f, indent=4, ensure_ascii=False)
 
     print(f"Config saved: {config_path}", flush=True)
-    print(f"Temp images kept at: {temp_dir}", flush=True)
+
+    # Review renders for the AI verification pass are NOT generated here:
+    # they re-rasterize every page (30-90s each on pathologically heavy
+    # pages — doubled the Analyze time), the editor never reads them, and
+    # the /book-audit skill regenerates them on demand via
+    # proto_annotate.py. Keeping Analyze fast.
+    answered_doc.close()
 
     print("PROGRESS:100%", flush=True)
     print(f"Analysis complete! Analyzed: {analyzed_count}, Skipped: {skipped_count}", flush=True)
