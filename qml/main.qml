@@ -44,6 +44,14 @@ ApplicationWindow {
     // We wait a short window after `a` to see if the next key completes an activity combo.
     property bool awaitingActivityKey: false
 
+    // True while a text editor (header field, word pool, fill text...) holds
+    // focus, so single-key shortcuts (c / h / ...) don't steal characters
+    // from typing.
+    property bool typingInField: {
+        var fi = mainwindow.activeFocusItem;
+        return !!(fi && fi.cursorPosition !== undefined && fi.selectedText !== undefined);
+    }
+
     Timer {
         id: activityPrefixTimer
         interval: 450
@@ -101,10 +109,19 @@ ApplicationWindow {
         enabled: awaitingActivityKey
         onActivated: triggerActivityCombo("dragdroppicturegroup")
     }
+    // `c`: completes the a→c "add circle" combo, OR — when an activity panel is
+    // open on the right — crops that activity (smart crop / auto re-detect per
+    // type, exactly like its Crop button). Guarded so it never steals a 'c'
+    // typed into a text field.
     Shortcut {
         sequence: "c"
-        enabled: awaitingActivityKey
-        onActivated: triggerActivityCombo("circle")
+        enabled: !typingInField
+        onActivated: {
+            if (awaitingActivityKey)
+                triggerActivityCombo("circle");
+            else if (sideBar.activityVisible)
+                content.startCropMode(sideBar.activityModelData);
+        }
     }
     Shortcut {
         sequence: "m"
@@ -120,6 +137,14 @@ ApplicationWindow {
         sequence: "x"
         enabled: awaitingActivityKey
         onActivated: triggerActivityCombo("markwithx")
+    }
+
+    // `h`: pick the header text of the open activity (read the instruction
+    // line from the PDF inside the drawn rect), exactly like its Pick button.
+    Shortcut {
+        sequence: "h"
+        enabled: sideBar.activityVisible && !awaitingActivityKey && !typingInField
+        onActivated: content.startHeaderPickMode(sideBar.activityModelData)
     }
 
     Shortcut {

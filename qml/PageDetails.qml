@@ -46,8 +46,11 @@ Item {
     function _mouseToOriginal() {
         var x = hoverTracker.hovered ? hoverTracker.point.position.x : mainMouseArea.mouseX;
         var y = hoverTracker.hovered ? hoverTracker.point.position.y : mainMouseArea.mouseY;
-        var adjustedX = x - (flick.contentWidth / 2 - picture.paintedWidth / 2);
-        var adjustedY = y - (flick.contentHeight / 2 - picture.paintedHeight / 2);
+        // mouse is in viewport space; +contentX/Y maps it into the
+        // scrolled content, then -centering offset into painted space
+        // (must match the display formula or items drift when zoomed).
+        var adjustedX = (x + flick.contentX) - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+        var adjustedY = (y + flick.contentY) - (flick.contentHeight / 2 - picture.paintedHeight / 2);
         var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
         return { x: originalX, y: originalY };
@@ -82,10 +85,37 @@ Item {
         sideBar.fillIndex = activeSession.answers.length - 1;
     }
 
+    // Drop keyboard focus from whatever sidebar text field holds it, so
+    // typing stops and the c/h shortcuts work. Clearing the focused
+    // item's focus directly is more reliable than forceActiveFocus on a
+    // MouseArea (which doesn't always steal focus across the sidebar's
+    // focus scope). mainwindow is the ApplicationWindow (in scope here).
+    function clearTextFocus() {
+        var fi = mainwindow.activeFocusItem;
+        if (fi && fi !== mainMouseArea)
+            fi.focus = false;
+        mainMouseArea.forceActiveFocus();
+    }
+
+    // Open the right-side activity panel for a freshly created section
+    // (createNewActivity appends it, so it is the last one). Also moves
+    // keyboard focus off any sidebar text field so the c/h shortcuts work.
+    function openActivitySidebar(sec) {
+        if (!sec || !sec.activity) return;
+        sideBar.hideAllComponent();
+        sideBar.activityVisible = true;
+        sideBar.page = page;
+        sideBar.sectionIndex = page.sections.length - 1;
+        sideBar.activityModelData = sec.activity;
+        sideBar.sectionModelData = sec;
+        clearTextFocus();
+    }
+
     function addActivityAtMouse(activityType) {
         if (!root.page) return;
         var p = _mouseToOriginal();
-        root.page.createNewActivity(p.x, p.y, root.imageHeights, root.imageHeights, activityType);
+        openActivitySidebar(root.page.createNewActivity(
+            p.x, p.y, root.imageHeights, root.imageHeights, activityType));
         currentSelectionType = "";
     }
 
@@ -125,6 +155,9 @@ Item {
         property real lastY: 0
 
         onPressed: mouse => {
+                       // Any click on the page takes focus off a sidebar text
+                       // field (so editing stops and the c/h shortcuts work).
+                       root.clearTextFocus();
                        if (mouse.button === Qt.MiddleButton) {
                            dragging = true;
                            lastX = mouse.x;
@@ -391,14 +424,14 @@ Item {
                 MenuItem {
                     text: "Drag Drop Picture\t(A → D)"
                     onTriggered: {
-                        var adjustedX = mainMouseArea.mouseX - (flick.contentWidth / 2 - picture.paintedWidth / 2);
-                        var adjustedY = mainMouseArea.mouseY - (flick.contentHeight / 2 - picture.paintedHeight / 2);
+                        var adjustedX = (mainMouseArea.mouseX + flick.contentX) - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                        var adjustedY = (mainMouseArea.mouseY + flick.contentY) - (flick.contentHeight / 2 - picture.paintedHeight / 2);
 
                         // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
                         var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
                         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
-                        root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "dragdroppicture");
+                        openActivitySidebar(root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "dragdroppicture"));
                         // config.bookSets[0].saveToJson();
                         print("Changes Are Saved activity Drag Drop on Triggered");
                         currentSelectionType = "";
@@ -407,14 +440,14 @@ Item {
                 MenuItem {
                     text: "Drag Drop Picture Group\t(A → G)"
                     onTriggered: {
-                        var adjustedX = mainMouseArea.mouseX + flick.contentX;
-                        var adjustedY = mainMouseArea.mouseY + flick.contentY;
+                        var adjustedX = (mainMouseArea.mouseX + flick.contentX) - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                        var adjustedY = (mainMouseArea.mouseY + flick.contentY) - (flick.contentHeight / 2 - picture.paintedHeight / 2);
 
                         // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
                         var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
                         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
-                        root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "dragdroppicturegroup");
+                        openActivitySidebar(root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "dragdroppicturegroup"));
                         // config.bookSets[0].saveToJson();
                         print("Changes Are Saved activity Drag Drop Picture Group on Triggered");
                         currentSelectionType = "";
@@ -423,14 +456,14 @@ Item {
                 MenuItem {
                     text: "Fill Picture\t(A → F)"
                     onTriggered: {
-                        var adjustedX = mainMouseArea.mouseX + flick.contentX;
-                        var adjustedY = mainMouseArea.mouseY + flick.contentY;
+                        var adjustedX = (mainMouseArea.mouseX + flick.contentX) - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                        var adjustedY = (mainMouseArea.mouseY + flick.contentY) - (flick.contentHeight / 2 - picture.paintedHeight / 2);
 
                         // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
                         var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
                         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
-                        root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "fillpicture");
+                        openActivitySidebar(root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "fillpicture"));
                         // config.bookSets[0].saveToJson();
                         print("Changes Are Saved activity Fill Picture on Triggered");
                         currentSelectionType = "";
@@ -439,14 +472,14 @@ Item {
                 MenuItem {
                     text: "Circle\t(A → C)"
                     onTriggered: {
-                        var adjustedX = mainMouseArea.mouseX + flick.contentX;
-                        var adjustedY = mainMouseArea.mouseY + flick.contentY;
+                        var adjustedX = (mainMouseArea.mouseX + flick.contentX) - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                        var adjustedY = (mainMouseArea.mouseY + flick.contentY) - (flick.contentHeight / 2 - picture.paintedHeight / 2);
 
                         // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
                         var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
                         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
-                        root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "circle");
+                        openActivitySidebar(root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "circle"));
                         // config.bookSets[0].saveToJson();
                         print("Changes Are Saved Circle on Triggered");
                         currentSelectionType = "";
@@ -456,14 +489,14 @@ Item {
                 MenuItem {
                     text: "Match\t(A → M)"
                     onTriggered: {
-                        var adjustedX = mainMouseArea.mouseX + flick.contentX;
-                        var adjustedY = mainMouseArea.mouseY + flick.contentY;
+                        var adjustedX = (mainMouseArea.mouseX + flick.contentX) - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                        var adjustedY = (mainMouseArea.mouseY + flick.contentY) - (flick.contentHeight / 2 - picture.paintedHeight / 2);
 
                         // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
                         var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
                         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
-                        root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "matchTheWords");
+                        openActivitySidebar(root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "matchTheWords"));
                         // config.bookSets[0].saveToJson();
                         print("Changes Are Saved MenuItem onmatchTheWords Triggered");
                     }
@@ -472,14 +505,14 @@ Item {
                 MenuItem {
                     text: "Puzzle Find Words\t(A → P)"
                     onTriggered: {
-                        var adjustedX = mainMouseArea.mouseX + flick.contentX;
-                        var adjustedY = mainMouseArea.mouseY + flick.contentY;
+                        var adjustedX = (mainMouseArea.mouseX + flick.contentX) - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                        var adjustedY = (mainMouseArea.mouseY + flick.contentY) - (flick.contentHeight / 2 - picture.paintedHeight / 2);
 
                         // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
                         var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
                         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
-                        root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "puzzleFindWords");
+                        openActivitySidebar(root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "puzzleFindWords"));
                         // config.bookSets[0].saveToJson();
                         print("Changes Are Saved MenuItem Puzzle Find Words Triggered");
                         currentSelectionType = "";
@@ -489,14 +522,14 @@ Item {
                 MenuItem {
                     text: "Mark With X\t(A → X)"
                     onTriggered: {
-                        var adjustedX = mainMouseArea.mouseX + flick.contentX;
-                        var adjustedY = mainMouseArea.mouseY + flick.contentY;
+                        var adjustedX = (mainMouseArea.mouseX + flick.contentX) - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                        var adjustedY = (mainMouseArea.mouseY + flick.contentY) - (flick.contentHeight / 2 - picture.paintedHeight / 2);
 
                         // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
                         var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
                         var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
-                        root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "markwithx");
+                        openActivitySidebar(root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "markwithx"));
                         // config.bookSets[0].saveToJson();
                         print("Changes Are Saved MenuItem Mark With X Triggered");
                         currentSelectionType = "";
@@ -567,6 +600,11 @@ Item {
                 anchors.fill: parent
                 propagateComposedEvents: true
                 pressAndHoldInterval: 500
+
+                // A click on the page image drops focus from any sidebar
+                // text field (this MouseArea, not mainMouseArea, gets the
+                // left-clicks on the page).
+                onPressed: root.clearTextFocus()
 
                 onWheel: function (wheel) {
                     if (wheel.angleDelta.y / 120 * flick.contentWidth * 0.1 + flick.contentWidth > flick.width && wheel.angleDelta.y / 120 * flick.contentHeight * 0.1 + flick.contentHeight > flick.height) {
@@ -1312,6 +1350,9 @@ Item {
                                 sideBar.sectionIndex = index;
                                 sideBar.activityModelData = modelData.activity;
                                 sideBar.sectionModelData = modelData;
+                                // Move focus off any sidebar text field so the
+                                // c/h shortcuts fire on this just-clicked activity.
+                                root.clearTextFocus();
                             }
 
                             onReleased: {

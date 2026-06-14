@@ -135,9 +135,9 @@ Rectangle {
 
                 Text {
                     width: parent.width
-                    text: "Analyze, kitaptaki TÜM sayfaların mevcut bölümlerini "
-                          + "(fill, circle...) silip yeniden üretir. Elle yaptığınız "
-                          + "düzenlemelerin üzerine yazılır.\n\nDevam edilsin mi?"
+                    text: "Analyze deletes and regenerates the existing sections "
+                          + "(fill, circle...) on ALL pages of the book. Any manual "
+                          + "edits you made will be overwritten.\n\nContinue?"
                     color: "white"
                     font.pixelSize: 14
                     wrapMode: Text.WordWrap
@@ -148,7 +148,7 @@ Rectangle {
                     spacing: 10
 
                     Button {
-                        text: "Vazgeç"
+                        text: "Cancel"
                         width: 90
                         height: 36
                         background: Rectangle {
@@ -167,7 +167,7 @@ Rectangle {
                     }
 
                     Button {
-                        text: "Analiz Et"
+                        text: "Analyze"
                         width: 90
                         height: 36
                         // Block a second launch while one analysis is live:
@@ -491,9 +491,9 @@ Rectangle {
 
             Text {
                 width: parent.width
-                text: "Clear, kitaptaki TÜM sayfaların bölümlerini (fill, audio, "
-                      + "video, aktiviteler...) siler. Bu işlem geri alınamaz.\n\n"
-                      + "Devam edilsin mi?"
+                text: "Clear deletes the sections (fill, audio, video, "
+                      + "activities...) on ALL pages of the book. This cannot be "
+                      + "undone.\n\nContinue?"
                 color: "white"
                 font.pixelSize: 14
                 wrapMode: Text.WordWrap
@@ -504,7 +504,7 @@ Rectangle {
                 spacing: 10
 
                 Button {
-                    text: "Vazgeç"
+                    text: "Cancel"
                     width: 90
                     height: 36
                     background: Rectangle {
@@ -523,7 +523,7 @@ Rectangle {
                 }
 
                 Button {
-                    text: "Temizle"
+                    text: "Clear"
                     width: 90
                     height: 36
                     background: Rectangle {
@@ -546,7 +546,7 @@ Rectangle {
                                 n++;
                             }
                         }
-                        console.log("Clear: " + n + " sayfanin bolumleri silindi");
+                        console.log("Clear: removed sections from " + n + " page(s)");
                     }
                 }
             }
