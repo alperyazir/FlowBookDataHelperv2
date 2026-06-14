@@ -561,7 +561,11 @@ def header_text_in_rect(page, rect_pt):
         parts.append(" ".join(row))
     text = re.sub(r"\s+", " ", " ".join(parts)).strip()
     text = re.sub(r"^(\d{1,2}\.)( \1)+", r"\1", text)
-    return re.sub(r"\b(\S+)( \1)+\b", r"\1", text).strip()
+    text = re.sub(r"\b(\S+)( \1)+\b", r"\1", text).strip()
+    # Drop the leading exercise number the rect inevitably catches
+    # ("1 Complete the table..." -> "Complete the table...").
+    text = re.sub(r"^\d{1,2}\s*[.)]?\s+", "", text).strip()
+    return text
 
 
 def headertext(raw_dir, page_no, rect_px, png_size):

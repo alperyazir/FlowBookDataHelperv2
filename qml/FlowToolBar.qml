@@ -453,8 +453,8 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         anchors.right: parent.right
         anchors.rightMargin: 10
-        text: "Clear"
-        width: 70
+        text: "Clear Book"
+        width: 96
         height: 36
 
         background: Rectangle {
@@ -470,6 +470,31 @@ Rectangle {
             verticalAlignment: Text.AlignVCenter
         }
         onClicked: clearConfirmDialog.open()
+    }
+
+    // Clears the sections on the currently shown page only.
+    Button {
+        id: clearPageBtn
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.right: clearBtn.left
+        anchors.rightMargin: 8
+        text: "Clear Page"
+        width: 96
+        height: 36
+
+        background: Rectangle {
+            color: parent.hovered ? "#d9534f" : "#a94442"
+            radius: 6
+        }
+        contentItem: Text {
+            text: parent.text
+            color: "white"
+            font.bold: true
+            anchors.centerIn: parent
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+        onClicked: clearPageConfirmDialog.open()
     }
 
     Dialog {
@@ -547,6 +572,84 @@ Rectangle {
                             }
                         }
                         console.log("Clear: removed sections from " + n + " page(s)");
+                    }
+                }
+            }
+        }
+    }
+
+    // Confirms clearing the sections of the currently shown page only.
+    Dialog {
+        id: clearPageConfirmDialog
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: 420
+        padding: 20
+
+        background: Rectangle {
+            color: "#1A2327"
+            border.color: "#d9534f"
+            border.width: 1
+            radius: 8
+        }
+
+        contentItem: Column {
+            spacing: 16
+
+            Text {
+                width: parent.width
+                text: "Clear deletes the sections on the current page (page "
+                      + root.currentPageNumber + ") only. This cannot be undone."
+                      + "\n\nContinue?"
+                color: "white"
+                font.pixelSize: 14
+                wrapMode: Text.WordWrap
+            }
+
+            Row {
+                anchors.right: parent.right
+                spacing: 10
+
+                Button {
+                    text: "Cancel"
+                    width: 90
+                    height: 36
+                    background: Rectangle {
+                        color: parent.hovered ? "#2A3337" : "#1A2327"
+                        border.color: "#445055"
+                        border.width: 1
+                        radius: 6
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        color: "white"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    onClicked: clearPageConfirmDialog.close()
+                }
+
+                Button {
+                    text: "Clear"
+                    width: 90
+                    height: 36
+                    background: Rectangle {
+                        color: parent.hovered ? "#d9534f" : "#a94442"
+                        radius: 6
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        color: "white"
+                        font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    onClicked: {
+                        clearPageConfirmDialog.close();
+                        if (content.pageDetails && content.pageDetails.page) {
+                            content.pageDetails.page.sections = [];
+                            console.log("Clear page: page " + root.currentPageNumber);
+                        }
                     }
                 }
             }
