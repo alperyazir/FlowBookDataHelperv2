@@ -143,8 +143,13 @@ def process_pdf_with_config(config_file, dpi=150):
     # 3. PDF'i raw klasörüne kopyala
     if os.path.exists(book_pdf_path):
         print(f"PROGRESS:3%", flush=True)  # PDF kopyalamaya başlandı
-        print(f"PDF kopyalanıyor: {book_pdf_path} -> {raw_folder}", flush=True)
-        shutil.copy2(book_pdf_path, os.path.join(raw_folder, pdf_filename))
+        # Copy the main/book PDF as "original.<ext>" so the detection
+        # scripts (find_pdf_pair / find_original_pdf) reliably pick it as
+        # the original instead of a similarly-named cover. The answered
+        # PDF keeps its own name (already marked with answer/cevap).
+        pdf_ext = os.path.splitext(pdf_filename)[1] or ".pdf"
+        print(f"PDF kopyalanıyor: {book_pdf_path} -> {raw_folder}/original{pdf_ext}", flush=True)
+        shutil.copy2(book_pdf_path, os.path.join(raw_folder, "original" + pdf_ext))
         print(f"PDF kopyalandı.", flush=True)
 
         # Aynı klasördeki diğer PDF dosyalarını da kopyala
