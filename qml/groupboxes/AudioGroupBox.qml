@@ -3,26 +3,32 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Qt.labs.platform
 import QtMultimedia
-// import QtQuick.Controls.Material
 
 import "../../qml"
+import "../newComponents"
 
 GroupBox {
     id: root
     title: ""
     width: parent.width * .98
+    padding: 14
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.verticalCenter: parent.verticalCenter
-    padding: 15
+
+    property var audioModelData: ({})
+    property int sectionIndex
+    signal removeSection(int secIndex)
+
+    // Stop playback when this panel is deselected (another section clicked).
+    onVisibleChanged: if (!visible) playRecordAudio.stop()
 
     background: Rectangle {
         color: "#232f34"
         border.color: "#009ca6"
         border.width: 1
-        radius: 6
+        radius: 8
     }
 
-    // FileDialog component
     FileDialog {
         id: fileDialog
         title: "Select a File"
@@ -30,195 +36,99 @@ GroupBox {
             var selectedFilePath = fileDialog.file + "";
             if (selectedFilePath) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
-                if (newPath) {
+                if (newPath)
                     root.audioModelData.audioPath = newPath;
-                } else {
+                else
                     console.log("Books klasörü bulunamadı.");
-                }
             }
         }
     }
 
-    property var audioModelData: ({})
-    property int sectionIndex
-    signal removeSection(int secIndex)
+    MediaPlayer {
+        id: playRecordAudio
+        audioOutput: AudioOutput {}
+        onSourceChanged: play()
+        // Keep the slider in sync after a drag breaks the value binding.
+        onPositionChanged: if (!audioSlider.pressed) audioSlider.value = position
+    }
 
-
-
-    Column {
+    ColumnLayout {
         anchors.fill: parent
-        anchors.leftMargin: 5
-        anchors.rightMargin: 5
-        spacing: 10
+        spacing: 12
 
-        // Header with title and close button
-        Row {
-            width: parent.width
-            height: parent.height / 9
-            spacing: 3
-
-            Text {
-                text: "Audio"
-                color: "white"
-                font.pixelSize: 24
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
-            Item {
-                width: parent.width - closeButton.width - parent.width * .2
-                height: 1
-            }
-
-            Button {
-                id: closeButton
-                text: "X"
-                width: height
-                height: parent.height / 2
-                anchors.verticalCenter: parent.verticalCenter
-
-                background: Rectangle {
-                    color: parent.hovered ? "#2A3337" : "#1A2327"
-                    border.color: "#009ca6"
-                    border.width: 1
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font.pixelSize: 14
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        playRecordAudio.stop();
-                        audioTextField.focus = false;
-                        sideBar.audioVisible = false;
-                    }
-                }
+        PanelHeader {
+            Layout.fillWidth: true
+            title: "Audio"
+            onCloseClicked: {
+                playRecordAudio.stop();
+                audioTextField.focus = false;
+                sideBar.audioVisible = false;
             }
         }
 
-        // Path input row
-        Row {
-            width: parent.width
-            spacing: 3
-            height: parent.height / 9
+        Rectangle { Layout.fillWidth: true; height: 1; color: "#2a3f48" }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
 
             Text {
-                text: "Path:"
-                color: "white"
-                font.pixelSize: 14
-                width: parent.width * 0.1
-                anchors.verticalCenter: parent.verticalCenter
+                text: "Path"
+                color: "#8aa0a8"
+                font.pixelSize: 13
+                Layout.preferredWidth: 44
             }
 
-            TextField {
+            AppTextField {
                 id: audioTextField
-                width: parent.width * 0.75
-                height: parent.height
-                text: (root.audioModelData && root.audioModelData.audioPath) || ""
+                Layout.fillWidth: true
+                Layout.preferredHeight: 34
                 placeholderText: "Enter the audio path"
-                placeholderTextColor: "gray"
-                color: "white"
-
-                background: Rectangle {
-                    color: "#1A2327"
-                    border.color: parent.focus ? "#009ca6" : "#445055"
-                    border.width: 1
-                    radius: 4
-                }
-
-                onAccepted: {
-                    root.audioModelData.audioPath = audioTextField.text;
-                    audioTextField.focus = false;
-                }
-
-                onTextChanged: {
-                    root.audioModelData.audioPath = audioTextField.text;
-                }
+                text: (root.audioModelData && root.audioModelData.audioPath) || ""
+                onTextEdited: root.audioModelData.audioPath = text
             }
 
-            Button {
-                width: parent.width * 0.1
-                height: parent.height
-                anchors.verticalCenter: parent.verticalCenter
-
-                background: Rectangle {
-                    color: parent.hovered ? "#2A3337" : "#1A2327"
-                    border.color: "#009ca6"
-                    border.width: 1
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: "..."
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        fileDialog.folder = "file:" + appPath + root.audioModelData.path;
-                        fileDialog.open();
-                    }
+            AppButton {
+                text: "…"
+                variant: "secondary"
+                Layout.preferredWidth: 40
+                Layout.preferredHeight: 34
+                leftPadding: 0; rightPadding: 0
+                onClicked: {
+                    fileDialog.folder = "file:" + appPath + (root.audioModelData.audioPath || "");
+                    fileDialog.open();
                 }
             }
         }
 
-        // Audio controls
-        Row {
-            id: audioContrller
-            property bool isPlaying: playRecordAudio.playbackState === MediaPlayer.PlayingState
-            width: parent.width
-            height: parent.height / 9
-            spacing: 3
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
 
-            Button {
-                id: playPauseButton
-                width: parent.width * 0.15
-                height: parent.height
-                anchors.verticalCenter: parent.verticalCenter
-
-                background: Rectangle {
-                    color: parent.hovered ? "#00b3be" : "#009ca6"
-                    radius: parent.width / 2
-                }
-
-                contentItem: Text {
-                    text: audioContrller.isPlaying ? "Pause" : "Play"
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        if (!audioContrller.isPlaying) {
-                            playRecordAudio.source = "file:" + appPath + audioTextField.text;
-                            playRecordAudio.play();
-                        } else {
-                            playRecordAudio.pause();
-                        }
+            AppButton {
+                text: playRecordAudio.playbackState === MediaPlayer.PlayingState ? "Pause" : "Play"
+                variant: "primary"
+                Layout.preferredWidth: 80
+                Layout.preferredHeight: 32
+                onClicked: {
+                    if (playRecordAudio.playbackState === MediaPlayer.PlayingState)
+                        playRecordAudio.pause();
+                    else if (playRecordAudio.playbackState === MediaPlayer.PausedState)
+                        playRecordAudio.play();
+                    else {
+                        playRecordAudio.source = "file:" + appPath + audioTextField.text;
+                        playRecordAudio.play();
                     }
                 }
             }
 
             Slider {
                 id: audioSlider
-                enabled: true
-                to: playRecordAudio.duration
+                Layout.fillWidth: true
+                from: 0
+                to: playRecordAudio.duration > 0 ? playRecordAudio.duration : 1
                 value: playRecordAudio.position
-                width: parent.width * 0.65
-                height: parent.height
-                anchors.verticalCenter: parent.verticalCenter
+                onMoved: if (playRecordAudio.seekable) playRecordAudio.setPosition(value)
 
                 background: Rectangle {
                     x: audioSlider.leftPadding
@@ -227,7 +137,6 @@ GroupBox {
                     height: 4
                     radius: 2
                     color: "#1A2327"
-
                     Rectangle {
                         width: audioSlider.visualPosition * parent.width
                         height: parent.height
@@ -235,174 +144,45 @@ GroupBox {
                         radius: 2
                     }
                 }
-
                 handle: Rectangle {
                     x: audioSlider.leftPadding + audioSlider.visualPosition * (audioSlider.availableWidth - width)
                     y: audioSlider.topPadding + audioSlider.availableHeight / 2 - height / 2
+                    width: 16
+                    height: 16
+                    radius: 8
                     color: "#009ca6"
                     border.color: "white"
                     border.width: 1
-                    radius: 6
-                    width: 16
-                    height: 16
-                }
-
-                onMoved: {
-                    if (playRecordAudio.seekable) {
-                        playRecordAudio.setPosition(value);
-                    }
                 }
             }
 
-            Button {
-                id: stopButton
-                width: parent.width * 0.15
-                height: parent.height
-                anchors.verticalCenter: parent.verticalCenter
+            AppButton {
                 text: "Stop"
-
-                background: Rectangle {
-                    color: parent.hovered ? "#2A3337" : "#1A2327"
-                    border.color: "#009ca6"
-                    border.width: 1
-                    radius: parent.width / 2
-                }
-
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        playRecordAudio.stop();
-                    }
-                }
+                variant: "secondary"
+                Layout.preferredWidth: 70
+                Layout.preferredHeight: 32
+                onClicked: playRecordAudio.stop()
             }
         }
 
-        // Save/Delete buttons
-        Row {
-            spacing: 10
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: parent.width
-            height: parent.height * 0.1
+        Item { Layout.fillHeight: true }
 
-            Button {
-                text: "Delete"
-                width: parent.width / 3
-                height: parent.height * .8
-
-                background: Rectangle {
-                    color: parent.hovered ? "#bf4040" : "#a63030"
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                onClicked: {
-                    confirmBox.visible = true;
-                }
-            }
-        }
-
-        // Confirmation dialog
-        Rectangle {
-            id: confirmBox
-            property string type
-            property int index
-            color: "#1A2327"
-            border.color: "#a63030"
-            border.width: 1
-            radius: 6
-            visible: false
-            anchors.horizontalCenter: parent.horizontalCenter
-            height: parent.height * 0.2
-            width: parent.width * 0.8
-
-            Column {
-                anchors.centerIn: parent
-                spacing: 5
-
-                Text {
-                    text: "Are you sure you want to delete?"
-                    font.pixelSize: 16
-                    color: "white"
-                    anchors.horizontalCenter: parent.horizontalCenter
-                }
-
-                Row {
-                    spacing: 20
-                    anchors.horizontalCenter: parent.horizontalCenter
-
-                    Button {
-                        text: "Yes"
-                        width: 80
-                        height: 36
-
-                        background: Rectangle {
-                            color: parent.hovered ? "#bf4040" : "#a63030"
-                            radius: 4
-                        }
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: "white"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        onClicked: {
-                            removeSection(root.sectionIndex);
-                            confirmBox.visible = false;
-                            sideBar.audioVisible = false;
-                        }
-                    }
-
-                    Button {
-                        text: "No"
-                        width: 80
-                        height: 36
-
-                        background: Rectangle {
-                            color: parent.hovered ? "#2A3337" : "#1A2327"
-                            border.color: "#445055"
-                            border.width: 1
-                            radius: 4
-                        }
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: "white"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        onClicked: {
-                            confirmBox.visible = false;
-                        }
-                    }
-                }
-            }
+        AppButton {
+            text: "Delete"
+            variant: "danger"
+            Layout.fillWidth: true
+            Layout.preferredHeight: 36
+            onClicked: confirmBox.ask("section", root.sectionIndex)
         }
     }
 
-    MediaPlayer {
-        id: playRecordAudio
-        audioOutput: AudioOutput {}
-        onPositionChanged: {
-            audioSlider.value = position;
-        }
-        onSourceChanged: {
-            play();
+    ConfirmDelete {
+        id: confirmBox
+        onConfirmed: function(kind, idx) {
+            if (kind === "section") {
+                root.removeSection(root.sectionIndex);
+                sideBar.audioVisible = false;
+            }
         }
     }
 }

@@ -3,26 +3,27 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Qt.labs.platform
 
-import "../../../qml"
+import "../../newComponents"
 
-Column {
-    // property var words: wordsRepeater
-    // property var sentences: sentencesRepeater
+// Match-the-words editor: shared chrome (no single section image) + two
+// editable columns. Left = the items to match (word + optional picture),
+// Right = the sentences, each pointing back to a left item by its index.
+ColumnLayout {
+    id: match
+    spacing: 12
+
+    // The per-row model object whose imagePath the browse dialog writes to.
     property var activeImage
-    width: parent.width
 
     FileDialog {
         id: fileDialog
         title: "Select a File"
-        //folder: StandardPaths.home // Varsayılan başlangıç yolu, değiştirilecektir
-
         onAccepted: {
-            var selectedFilePath = fileDialog.file + ""; // Seçilen dosyanın tam dosya yolu
+            var selectedFilePath = fileDialog.file + "";
             if (selectedFilePath) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
                 if (newPath) {
-                    activeImage.imagePath = newPath;
-                    print("activeImage", activeImage);
+                    match.activeImage.imagePath = newPath;
                 } else {
                     console.log("Books klasörü bulunamadı.");
                 }
@@ -30,491 +31,239 @@ Column {
                 console.log("Dosya yolu geçersiz.");
             }
         }
-
-        onRejected: {
-            console.log("File selection was canceled");
-        }
+        onRejected: console.log("File selection was canceled")
     }
 
-    Row {
-        width: parent.width * .9
-        spacing: 10
-        height: parent.height * .1
-        FlowText {
-            id: textType
-            text: "Type: "
-            color: "white"
-            anchors.centerIn: undefined
-            width: parent.width * .15
-            font.pixelSize: 15
-            verticalAlignment: Text.AlignBottom
-        }
-
-        FlowText {
-            text: (activityModelData && activityModelData.type) || ""
-            color: "white"
-            anchors.centerIn: undefined
-            font.pixelSize: 15
-            verticalAlignment: Text.AlignBottom
-        }
+    ActivityFields {
+        Layout.fillWidth: true
+        activityModelData: root.activityModelData
+        showPath: false
+        showCrop: true
+        headerPlaceholder: "Match the words."
     }
 
-    Row {
-        width: parent.width * .9
-        spacing: 10
-        height: parent.height * .1
-        FlowText {
-            text: "Header: "
-            color: "white"
-            anchors.centerIn: undefined
-            width: parent.width * .15
-            verticalAlignment: Text.AlignBottom
+    // ----- Left column: items -----
+    ColumnLayout {
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        spacing: 8
+
+        Text {
+            text: "Left  ·  items"
+            color: "#cfe8ea"
+            font.pixelSize: 14
+            font.bold: true
         }
 
-        // TextEdit bileşeni
-        TextField {
-            width: parent.width * .75 - 60
-            height: parent.height
-            placeholderText: "Complete the sentences."
-            placeholderTextColor: "gray"
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            text: (root.activityModelData && root.activityModelData.headerText) || ""
-            color: "white"
-            onTextChanged: {
-                root.activityModelData.headerText = text;
-            }
-            background: Rectangle {
-                color: "#1A2327"
-                border.color: parent.focus ? "#009ca6" : "#445055"
-                border.width: 1
-                radius: 4
-            }
-        }
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            radius: 8
+            color: "#16242b"
+            border.color: "#2a3f48"
+            border.width: 1
 
-        // Draw a rect on the page; the instruction text inside it
-        // becomes the headerText (read from the original PDF).
-        Button {
-            width: 50
-            height: parent.height
-            anchors.verticalCenter: parent.verticalCenter
-
-            background: Rectangle {
-                color: parent.hovered ? "#00b3be" : "#009ca6"
-                border.color: "#007a82"
-                border.width: 1
-                radius: 4
-            }
-
-            contentItem: Text {
-                text: "Pick"
-                color: "white"
-                font.pixelSize: 12
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-
-            MouseArea {
+            ColumnLayout {
                 anchors.fill: parent
-                onClicked: {
-                    content.startHeaderPickMode(root.activityModelData);
-                }
-            }
-        }
-    }
+                anchors.margins: 8
+                spacing: 8
 
-    // Crop detects the word list, the lettered items (text or
-    // picture) and their pairs inside the drawn rect.
-    Row {
-        width: parent.width * .9
-        spacing: 10
-        height: 40
+                ScrollView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
 
-        Item { width: parent.width * .15; height: 1 }
+                    ListView {
+                        id: wordsRepeater
+                        spacing: 5
+                        boundsBehavior: Flickable.StopAtBounds
+                        model: root.activityModelData.matchWord
 
-        Button {
-            width: parent.width * .75
-            height: 36
-            anchors.verticalCenter: parent.verticalCenter
+                        delegate: RowLayout {
+                            width: ListView.view ? ListView.view.width : 0
+                            spacing: 6
+                            property string wordText: tf.text
+                            property string imagePathText: pictureEdit.text
 
-            background: Rectangle {
-                color: parent.hovered ? "#00b3be" : "#009ca6"
-                border.color: "#007a82"
-                border.width: 1
-                radius: 4
-            }
-
-            contentItem: Text {
-                text: "Crop"
-                color: "white"
-                font.pixelSize: 13
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                onClicked: {
-                    content.startCropMode(root.activityModelData);
-                }
-            }
-        }
-    }
-
-    GroupBox {
-        id: wordsGB
-        title: "Left"
-        width: parent.width
-        height: parent.height * .40
-        anchors.horizontalCenter: parent.horizontalCenter
-        Column {
-            width: parent.width
-            height: parent.height
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 2
-
-            ScrollView {
-                id: scrol1
-                width: parent.width
-                height: parent.height * 0.9
-                ScrollBar.vertical.interactive: true
-                clip: true
-                ListView {
-                    id: wordsRepeater
-                    property var data: ({})
-                    width: parent.width
-                    height: parent.height
-                    model: root.activityModelData.matchWord
-                    delegate: Row {
-                        property string wordText: tf.text
-                        property string imagePathText: pictureEdit.text
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: scrol1.width
-                        height: scrol1.height / 5
-                        FlowText {
-                            text: index
-                            width: parent.width * 0.05
-                            height: parent.height
-                            color: "white"
-
-                            anchors.centerIn: undefined
-                        }
-                        TextField {
-                            id: tf
-                            width: parent.width * 0.35
-                            height: parent.height
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            text: modelData.word
-                            placeholderText: "add..."
-                            placeholderTextColor: "gray"
-                            color: "white"
-                            background: Rectangle {
-                                color: "#1A2327"
-                                border.color: parent.focus ? "#009ca6" : "#445055"
-                                border.width: 1
-                                radius: 4
+                            Text {
+                                text: index
+                                color: "#4fd2dc"
+                                font.pixelSize: 13
+                                font.bold: true
+                                Layout.preferredWidth: 16
+                                horizontalAlignment: Text.AlignHCenter
                             }
-
-                            onAccepted: {
-                                updateData()
-                                focus = false
+                            AppTextField {
+                                id: tf
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 30
+                                text: modelData.word
+                                placeholderText: "word…"
+                                onAccepted: { updateData(); focus = false; }
                             }
-                        }
-                        TextField {
-                            id: pictureEdit
-                            width: parent.width * 0.35
-                            height: parent.height
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            text: modelData.imagePath
-                            placeholderText: "add path..."
-                            placeholderTextColor: "gray"
-                            color: "white"
-                            background: Rectangle {
-                                color: "#1A2327"
-                                border.color: parent.focus ? "#009ca6" : "#445055"
-                                border.width: 1
-                                radius: 4
+                            AppTextField {
+                                id: pictureEdit
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 30
+                                text: modelData.imagePath
+                                placeholderText: "image path…"
+                                onAccepted: { updateData(); focus = false; }
                             }
-
-                            onAccepted: {
-                                updateData()
-                                focus = false
-                            }
-                        }
-                        Button {
-                            width: parent.width * 0.075
-                            height: parent.height
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            background: Rectangle {
-                                color: parent.hovered ? "#2A3337" : "#1A2327"
-                                border.color: "#009ca6"
-                                border.width: 1
-                                radius: 4
-                            }
-
-                            contentItem: FlowText {
-                                text: "..."
-                                color: "white"
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
+                            AppButton {
+                                text: "…"
+                                variant: "secondary"
+                                Layout.preferredWidth: 30
+                                Layout.preferredHeight: 30
+                                leftPadding: 0; rightPadding: 0
                                 onClicked: {
-                                    activeImage = modelData;
+                                    match.activeImage = modelData;
                                     fileDialog.folder = "file:" + appPath + root.activityModelData.sectionPath;
                                     fileDialog.open();
                                 }
                             }
-                        }
-                        Button {
-                            width: parent.width * 0.075
-                            height: parent.height
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            background: Rectangle {
-                                color: parent.hovered ? "#00b3be" : "#009ca6"
-                                border.color: "#007a82"
-                                border.width: 1
-                                radius: 4
-                            }
-
-                            contentItem: FlowText {
+                            AppButton {
                                 text: "Crop"
-                                color: "white"
+                                variant: "primary"
+                                Layout.preferredWidth: 46
+                                Layout.preferredHeight: 30
+                                leftPadding: 0; rightPadding: 0
+                                onClicked: content.startCropMode(modelData, "imagePath")
                             }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: {
-                                    content.startCropMode(modelData, "imagePath");
-                                }
-                            }
-                        }
-                        Button {
-                            width: parent.width * 0.075
-                            height: parent.height
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "X"
-
-                            background: Rectangle {
-                                color: parent.hovered ? "#bf4040" : "#a63030"
-                                radius: 4
-                            }
-
-                            contentItem: FlowText {
-                                text: parent.text
-                                color: "white"
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: {
-                                    root.activityModelData.removeMatchWord(index);
-                                }
+                            AppButton {
+                                text: "✕"
+                                variant: "danger"
+                                Layout.preferredWidth: 30
+                                Layout.preferredHeight: 30
+                                leftPadding: 0; rightPadding: 0
+                                onClicked: root.activityModelData.removeMatchWord(index)
                             }
                         }
                     }
                 }
-            }
 
-            Button {
-                text: "Add New"
-                anchors.horizontalCenter: parent.horizontalCenter
-                onClicked: {
-                    updateData();
-                    root.activityModelData.createMatchWord("", "");
+                AppButton {
+                    text: "+  Add item"
+                    variant: "secondary"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 32
+                    onClicked: {
+                        updateData();
+                        root.activityModelData.createMatchWord("", "");
+                    }
                 }
             }
         }
     }
 
-    GroupBox {
-        id: rightGB
-        title: "Right"
-        width: parent.width
-        height: parent.height * .40
-        anchors.horizontalCenter: parent.horizontalCenter
-        Column {
-            width: parent.width
-            height: parent.height
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 2
+    // ----- Right column: sentences -----
+    ColumnLayout {
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        spacing: 8
 
-            ScrollView {
-                id: scrol2
-                width: parent.width
-                height: parent.height * 0.9
-                ScrollBar.vertical.interactive: true
-                clip: true
+        Text {
+            text: "Right  ·  sentences"
+            color: "#cfe8ea"
+            font.pixelSize: 14
+            font.bold: true
+        }
 
-                ListView {
-                    id: sentencesRepeater
-                    width: parent.width
-                    height: parent.height
-                    model: root.activityModelData.sentences
-                    delegate: Row {
-                        property string wordText: matchedLeft.text
-                        property string imagePathText: pictureEditRight.text
-                        property string sentenceText: sentenceTxt.text
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            radius: 8
+            color: "#16242b"
+            border.color: "#2a3f48"
+            border.width: 1
 
-                        width: scrol2.width
-                        height: scrol2.height / 5
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        TextField {
-                            id: matchedLeft
-                            width: parent.width * 0.07
-                            height: parent.height
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            text: getMathcedIndex(modelData.word)
-                            placeholderText: "."
-                            placeholderTextColor: "gray"
-                            color: "white"
-                            background: Rectangle {
-                                color: "#1A2327"
-                                border.color: parent.focus ? "#009ca6" : "#445055"
-                                border.width: 1
-                                radius: 4
-                            }
-                        }
-                        TextField {
-                            id: sentenceTxt
-                            width: parent.width * 0.34
-                            height: parent.height
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            text: modelData.sentence
-                            placeholderText: "add..."
-                            placeholderTextColor: "gray"
-                            color: "white"
-                            background: Rectangle {
-                                color: "#1A2327"
-                                border.color: parent.focus ? "#009ca6" : "#445055"
-                                border.width: 1
-                                radius: 4
-                            }
-                            onAccepted: {
-                                updateData()
-                                focus = false
-                            }
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 8
+                spacing: 8
 
-                        }
-                        TextField {
-                            id: pictureEditRight
-                            width: parent.width * 0.34
-                            height: parent.height
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            text: modelData.imagePath
-                            placeholderText: "add path..."
-                            placeholderTextColor: "gray"
-                            color: "white"
-                            background: Rectangle {
-                                color: "#1A2327"
-                                border.color: parent.focus ? "#009ca6" : "#445055"
-                                border.width: 1
-                                radius: 4
-                            }
-                            onAccepted: {
-                                updateData()
-                                focus = false
-                            }
-                        }
-                        Button {
-                            width: parent.width * 0.075
-                            height: parent.height
-                            anchors.verticalCenter: parent.verticalCenter
+                ScrollView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
 
-                            background: Rectangle {
-                                color: parent.hovered ? "#2A3337" : "#1A2327"
-                                border.color: "#009ca6"
-                                border.width: 1
-                                radius: 4
-                            }
+                    ListView {
+                        id: sentencesRepeater
+                        spacing: 5
+                        boundsBehavior: Flickable.StopAtBounds
+                        model: root.activityModelData.sentences
 
-                            contentItem: Text {
-                                text: "..."
-                                color: "white"
+                        delegate: RowLayout {
+                            width: ListView.view ? ListView.view.width : 0
+                            spacing: 6
+                            property string wordText: matchedLeft.text
+                            property string imagePathText: pictureEditRight.text
+                            property string sentenceText: sentenceTxt.text
+
+                            AppTextField {
+                                id: matchedLeft
+                                Layout.preferredWidth: 30
+                                Layout.preferredHeight: 30
                                 horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
+                                text: getMathcedIndex(modelData.word)
+                                placeholderText: "#"
                             }
-
-                            MouseArea {
-                                anchors.fill: parent
+                            AppTextField {
+                                id: sentenceTxt
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 30
+                                text: modelData.sentence
+                                placeholderText: "sentence…"
+                                onAccepted: { updateData(); focus = false; }
+                            }
+                            AppTextField {
+                                id: pictureEditRight
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 30
+                                text: modelData.imagePath
+                                placeholderText: "image path…"
+                                onAccepted: { updateData(); focus = false; }
+                            }
+                            AppButton {
+                                text: "…"
+                                variant: "secondary"
+                                Layout.preferredWidth: 30
+                                Layout.preferredHeight: 30
+                                leftPadding: 0; rightPadding: 0
                                 onClicked: {
-                                    activeImage = modelData;
+                                    match.activeImage = modelData;
                                     fileDialog.folder = "file:" + appPath + root.activityModelData.sectionPath;
                                     fileDialog.open();
                                 }
                             }
-                        }
-                        Button {
-                            width: parent.width * 0.075
-                            height: parent.height
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            background: Rectangle {
-                                color: parent.hovered ? "#00b3be" : "#009ca6"
-                                border.color: "#007a82"
-                                border.width: 1
-                                radius: 4
-                            }
-
-                            contentItem: Text {
+                            AppButton {
                                 text: "Crop"
-                                color: "white"
-                                font.pixelSize: 10
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
+                                variant: "primary"
+                                Layout.preferredWidth: 46
+                                Layout.preferredHeight: 30
+                                leftPadding: 0; rightPadding: 0
+                                onClicked: content.startCropMode(modelData, "imagePath")
                             }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: {
-                                    content.startCropMode(modelData, "imagePath");
-                                }
-                            }
-                        }
-                        Button {
-                            width: parent.width * 0.075
-                            height: parent.height
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "X"
-
-                            background: Rectangle {
-                                color: parent.hovered ? "#bf4040" : "#a63030"
-                                radius: 4
-                            }
-
-                            contentItem: Text {
-                                text: parent.text
-                                color: "white"
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: {
-                                    root.activityModelData.removeSentences(index);
-                                }
+                            AppButton {
+                                text: "✕"
+                                variant: "danger"
+                                Layout.preferredWidth: 30
+                                Layout.preferredHeight: 30
+                                leftPadding: 0; rightPadding: 0
+                                onClicked: root.activityModelData.removeSentences(index)
                             }
                         }
                     }
                 }
-            }
 
-            Button {
-                text: "Add New"
-                anchors.horizontalCenter: parent.horizontalCenter
-                onClicked: {
-                    updateData()
-                    root.activityModelData.createSentences("", "", "");
+                AppButton {
+                    text: "+  Add sentence"
+                    variant: "secondary"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 32
+                    onClicked: {
+                        updateData();
+                        root.activityModelData.createSentences("", "", "");
+                    }
                 }
             }
         }
@@ -529,8 +278,6 @@ Column {
     }
 
     function updateData() {
-
-
         for (var i = 0; i < wordsRepeater.count; i++) {
             var item = wordsRepeater.itemAtIndex(i);
             if (item !== null) {
@@ -539,14 +286,14 @@ Column {
             }
         }
         // Match sentence
-        for (var i = 0; i < sentencesRepeater.count; i++) {
-            var item = sentencesRepeater.itemAtIndex(i);
-            if (item !== null) {
-                root.activityModelData.sentences[i].imagePath = item.imagePathText;
-                root.activityModelData.sentences[i].sentence = item.sentenceText;
-                var witem = wordsRepeater.itemAtIndex(parseInt(item.wordText));
+        for (var j = 0; j < sentencesRepeater.count; j++) {
+            var sitem = sentencesRepeater.itemAtIndex(j);
+            if (sitem !== null) {
+                root.activityModelData.sentences[j].imagePath = sitem.imagePathText;
+                root.activityModelData.sentences[j].sentence = sitem.sentenceText;
+                var witem = wordsRepeater.itemAtIndex(parseInt(sitem.wordText));
                 if (witem !== null) {
-                    root.activityModelData.sentences[i].word = witem.wordText;
+                    root.activityModelData.sentences[j].word = witem.wordText;
                 }
             }
         }

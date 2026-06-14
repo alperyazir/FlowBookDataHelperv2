@@ -2,26 +2,17 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Qt.labs.platform
-import QtMultimedia
-// import QtQuick.Controls.Material
 
 import "../../qml"
+import "../newComponents"
 
 GroupBox {
     id: root
     title: ""
     width: parent.width * .98
+    padding: 14
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.verticalCenter: parent.verticalCenter
-    anchors.margins: 10
-    padding: 10
-
-    background: Rectangle {
-        color: "#232f34"
-        border.color: "#009ca6"
-        border.width: 1
-        radius: 6
-    }
 
     property var fillList: []
     property int fillIndex
@@ -30,340 +21,314 @@ GroupBox {
     signal removeSection(int secIndex)
     signal removeAnswer(int answerIndex)
 
-    Column {
-        anchors.fill: parent
-        anchors.leftMargin: 5
-        anchors.rightMargin: 5
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: 5
+    // --- Multi-selection state (indices into fillList) ---
+    // Reassigned wholesale on every change so delegate bindings re-evaluate.
+    property var selectedList: []
+    readonly property int selCount: selectedList.length
+    readonly property bool allSelected: fillList && fillList.length > 0
+                                        && selectedList.length === fillList.length
+    // True when every selected row is already bold (drives the Bold toggle).
+    readonly property bool selectionBold: {
+        if (selectedList.length === 0)
+            return false;
+        for (var k = 0; k < selectedList.length; k++) {
+            var i = selectedList[k];
+            if (i < 0 || i >= fillList.length || !fillList[i].isTextBold)
+                return false;
+        }
+        return true;
+    }
+    // The list changes identity on add/remove; stale indices would be wrong.
+    onFillListChanged: selectedList = []
 
-        // Header with title and close button
-        Row {
-            width: parent.width
-            height: parent.height * 0.1
-            spacing: 10
+    function isSel(i) {
+        return root.selectedList.indexOf(i) !== -1;
+    }
+    function toggleSel(i) {
+        var arr = root.selectedList.slice();
+        var p = arr.indexOf(i);
+        if (p === -1)
+            arr.push(i);
+        else
+            arr.splice(p, 1);
+        root.selectedList = arr;
+    }
+    function selectAll() {
+        var arr = [];
+        for (var i = 0; i < root.fillList.length; i++)
+            arr.push(i);
+        root.selectedList = arr;
+    }
+    function boldSelected(b) {
+        for (var k = 0; k < root.selectedList.length; k++) {
+            var i = root.selectedList[k];
+            if (i >= 0 && i < root.fillList.length)
+                root.fillList[i].isTextBold = b;
+        }
+    }
+    function deleteSelected() {
+        // Remove from the highest index down so earlier indices stay valid.
+        var arr = root.selectedList.slice().sort(function (a, b) { return b - a; });
+        for (var k = 0; k < arr.length; k++)
+            root.removeAnswer(arr[k]);
+        root.selectedList = [];
+    }
+
+    background: Rectangle {
+        color: "#232f34"
+        border.color: "#009ca6"
+        border.width: 1
+        radius: 8
+    }
+
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: 12
+
+        PanelHeader {
+            Layout.fillWidth: true
+            title: "Fill"
+            onCloseClicked: sideBar.fillVisible = false
+        }
+
+        Rectangle { Layout.fillWidth: true; height: 1; color: "#2a3f48" }
+
+        // --- Selection toolbar ---
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            AppButton {
+                text: root.allSelected ? "Clear" : "Select all"
+                variant: "secondary"
+                Layout.preferredWidth: 100
+                Layout.preferredHeight: 30
+                enabled: root.fillList && root.fillList.length > 0
+                onClicked: root.allSelected ? root.selectedList = [] : root.selectAll()
+            }
 
             Text {
-                text: "Fill"
-                color: "white"
-                font.pixelSize: 24
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
+                text: root.selCount + " selected"
+                color: root.selCount > 0 ? "#4fd2dc" : "#5e7178"
+                font.pixelSize: 12
             }
 
-            Item {
-                width: parent.width - closeButton.width - parent.width*.2
-                height: 1
-            }
+            Item { Layout.fillWidth: true }
 
-            Button {
-                id: closeButton
-                text: "X"
-                width: height
-                height: parent.height / 2
-                anchors.verticalCenter: parent.verticalCenter
+            // Single Bold toggle for the whole selection (binding-driven, so a
+            // click doesn't break its checked state).
+            Rectangle {
+                Layout.preferredWidth: boldRow.implicitWidth + 12
+                Layout.preferredHeight: 30
+                radius: 6
+                color: "transparent"
+                opacity: root.selCount > 0 ? 1 : 0.4
 
-                background: Rectangle {
-                    color: parent.hovered ? "#2A3337" : "#1A2327"
-                    border.color: "#009ca6"
-                    border.width: 1
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font.pixelSize: 14
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        sideBar.fillVisible = false;
+                Row {
+                    id: boldRow
+                    anchors.centerIn: parent
+                    spacing: 6
+                    Rectangle {
+                        width: 20
+                        height: 20
+                        radius: 4
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: root.selectionBold ? "#009ca6" : "#1A2327"
+                        border.color: root.selectionBold ? "#009ca6" : "#445055"
+                        border.width: 1
+                        Text {
+                            anchors.centerIn: parent
+                            text: "✓"
+                            color: "white"
+                            font.pixelSize: 12
+                            visible: root.selectionBold
+                        }
+                    }
+                    Text {
+                        text: "Bold"
+                        color: "#cfe8ea"
+                        font.pixelSize: 13
+                        anchors.verticalCenter: parent.verticalCenter
                     }
                 }
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: root.selCount > 0
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.boldSelected(!root.selectionBold)
+                }
+            }
+
+            AppButton {
+                text: "Delete"
+                variant: "danger"
+                Layout.preferredWidth: 80
+                Layout.preferredHeight: 30
+                enabled: root.selCount > 0
+                onClicked: confirmBox.ask("selected", -1)
             }
         }
 
-        ScrollView {
-            id: scrollView
-            width: parent.width
-            height: parent.height * 0.6 - parent.spacing * 4
-            clip: true
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            radius: 8
+            color: "#16242b"
+            border.color: "#2a3f48"
+            border.width: 1
 
-            Column {
-                width: parent.width
-                spacing: 5
+            ScrollView {
+                anchors.fill: parent
+                anchors.margins: 8
+                clip: true
 
                 ListView {
                     id: rectRepeater
-                    width: parent.width
-                    height: scrollView.height * 0.9
-                    orientation: ListView.Vertical
+                    spacing: 6
                     model: root.fillList
-                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
 
-                    delegate: ItemDelegate {
-                        width: parent.width
-                        height: scrollView.height / 9
-                        background: Rectangle {
-                            color: "#1A2327"
-                            border.color: "#445055"
-                            border.width: 1
-                            radius: 4
+                    delegate: Rectangle {
+                        // The row currently selected on the page (fillIndex) gets a
+                        // bright cyan border; multi-selected rows get a teal tint.
+                        readonly property bool pageSelected: index === root.fillIndex
+                        width: ListView.view ? ListView.view.width : 0
+                        height: 46
+                        radius: 6
+                        color: root.isSel(index) ? "#15323a" : "#1A2327"
+                        border.color: pageSelected ? "#00e6e6"
+                                      : (root.isSel(index) ? "#009ca6" : "#2f4751")
+                        border.width: (pageSelected || root.isSel(index)) ? 2 : 1
+
+                        // Clicking anywhere on the row (gaps) marks this fill as
+                        // the one selected on the page. Declared first so the
+                        // controls below stay on top and handle their own clicks.
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: sideBar.fillIndex = index
                         }
 
-                        Row {
-                            width: parent.width
-                            height: parent.height
-                            spacing: 5
-                            anchors.verticalCenter: parent.verticalCenter
-                            anchors.leftMargin: 3
-                            anchors.rightMargin: 3
-                            anchors.topMargin: 3
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 6
 
-                            TextField {
-                                id: rectTextField
-                                width: parent.width * 0.25
-                                height: parent.height
+                            // Selection box — fully binding-driven so it tracks
+                            // selectedList (a CheckBox would break its binding on click).
+                            Rectangle {
+                                Layout.preferredWidth: 20
+                                Layout.preferredHeight: 20
+                                radius: 4
+                                color: root.isSel(index) ? "#009ca6" : "#1A2327"
+                                border.color: root.isSel(index) ? "#009ca6" : "#445055"
+                                border.width: 1
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "✓"
+                                    color: "white"
+                                    font.pixelSize: 12
+                                    visible: root.isSel(index)
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: root.toggleSel(index)
+                                }
+                            }
+
+                            AppTextField {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 30
+                                placeholderText: "text"
                                 text: modelData.text
-                                color: "white"
-
-                                background: Rectangle {
-                                    color: "#1A2327"
-                                    border.color: parent.focus ? "#009ca6" : "#445055"
-                                    border.width: 1
-                                    radius: 4
-                                }
-
-                                onTextChanged: {
-                                    modelData.text = text;
-                                }
+                                onTextEdited: modelData.text = text
+                                onActiveFocusChanged: if (activeFocus) sideBar.fillIndex = index
                             }
-
-                            TextField {
-                                id: rectTextColorField
-                                width: parent.width * 0.15
-                                height: parent.height
-                                text: modelData.textColor
-                                color: "white"
+                            AppTextField {
+                                Layout.preferredWidth: 56
+                                Layout.preferredHeight: 30
+                                horizontalAlignment: Text.AlignHCenter
                                 placeholderText: "color"
-                                placeholderTextColor: "gray"
-
-                                background: Rectangle {
-                                    color: "#1A2327"
-                                    border.color: parent.focus ? "#009ca6" : "#445055"
-                                    border.width: 1
-                                    radius: 4
-                                }
-
-                                onTextChanged: {
-                                    modelData.textColor = text;
-                                }
+                                text: modelData.textColor
+                                onTextEdited: modelData.textColor = text
+                                onActiveFocusChanged: if (activeFocus) sideBar.fillIndex = index
                             }
 
-                            CheckBox {
-                                width: parent.width * 0.1
-                                height: parent.height
-                                checked: modelData.isTextBold
-
-                                onCheckedChanged: {
-                                    modelData.isTextBold = checked
+                            // Per-row bold toggle — binding-driven so bulk Bold
+                            // updates it too.
+                            Rectangle {
+                                Layout.preferredWidth: 28
+                                Layout.preferredHeight: 28
+                                radius: 4
+                                color: modelData.isTextBold ? "#009ca6" : "#1A2327"
+                                border.color: modelData.isTextBold ? "#009ca6" : "#445055"
+                                border.width: 1
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "B"
+                                    color: "white"
+                                    font.bold: true
+                                    font.pixelSize: 13
                                 }
-                            }
-
-                            FlowText {
-                                text: "Rot:"
-                                color: "white"
-                                width: parent.width * 0.10
-                                height: parent.height * 0.6
-                                anchors.verticalCenter: parent.verticalCenter
-                                anchors.centerIn: undefined
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: modelData.isTextBold = !modelData.isTextBold
+                                }
                             }
 
                             SpinBox {
-                                id: rectRotationField
-                                width: parent.width * 0.20
-                                height: parent.height
+                                id: rot
+                                Layout.preferredWidth: 84
+                                Layout.preferredHeight: 30
                                 value: modelData.rotation
                                 editable: true
                                 from: -180
                                 to: 180
+                                onValueChanged: modelData.rotation = value
 
                                 background: Rectangle {
                                     color: "#1A2327"
-                                    border.color: parent.focus ? "#009ca6" : "#445055"
+                                    border.color: rot.activeFocus ? "#009ca6" : "#3a4f57"
                                     border.width: 1
-                                    radius: 4
+                                    radius: 6
                                 }
-
                                 contentItem: TextInput {
-                                    text: rectRotationField.textFromValue(rectRotationField.value, rectRotationField.locale)
+                                    text: rot.textFromValue(rot.value, rot.locale)
                                     color: "white"
+                                    font.pixelSize: 13
                                     horizontalAlignment: Qt.AlignHCenter
                                     verticalAlignment: Qt.AlignVCenter
-                                }
-
-                                onValueChanged: {
-                                    modelData.rotation = value;
+                                    readOnly: !rot.editable
+                                    validator: rot.validator
                                 }
                             }
 
-                            Button {
-                                width: parent.width * 0.10
-                                height: parent.height * 0.8
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: "X"
-
-                                background: Rectangle {
-                                    color: parent.hovered ? "#bf4040" : "#a63030"
-                                    radius: 4
-                                }
-
-                                contentItem: Text {
-                                    text: parent.text
-                                    color: "white"
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: {
-                                        confirmBox.visible = true;
-                                        confirmBox.type = "answer";
-                                        confirmBox.index = index;
-                                        // config.bookSets[0].saveToJson();
-                                    }
-                                }
+                            AppButton {
+                                text: "✕"
+                                variant: "danger"
+                                Layout.preferredWidth: 28
+                                Layout.preferredHeight: 28
+                                leftPadding: 0; rightPadding: 0
+                                onClicked: confirmBox.ask("answer", index)
                             }
                         }
                     }
                 }
             }
         }
+    }
 
-        // Save/Delete buttons
-        Row {
-            spacing: 10
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: parent.width
-            height: parent.height * 0.1
-
-            Button {
-                text: "Delete"
-                width: parent.width / 3
-                height: parent.height * .8
-                enabled: root.fillIndex >= 0 && root.fillIndex < root.fillList.length
-
-                background: Rectangle {
-                    color: !parent.enabled ? "#555555"
-                         : (parent.hovered ? "#bf4040" : "#a63030")
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                onClicked: {
-                    if (root.fillIndex < 0 || root.fillIndex >= root.fillList.length) return;
-                    confirmBox.visible = true;
-                    confirmBox.type = "answer";
-                    confirmBox.index = root.fillIndex;
-                }
+    ConfirmDelete {
+        id: confirmBox
+        onConfirmed: function(kind, idx) {
+            if (kind === "section") {
+                root.removeSection(root.sectionIndex);
+                sideBar.fillVisible = false;
+            } else if (kind === "answer") {
+                root.removeAnswer(idx);
+            } else if (kind === "selected") {
+                root.deleteSelected();
             }
         }
-
-        // Confirmation dialog
-        Rectangle {
-            id: confirmBox
-            property string type
-            property int index
-            color: "#1A2327"
-            border.color: "#a63030"
-            border.width: 1
-            radius: 6
-            visible: false
-            anchors.horizontalCenter: parent.horizontalCenter
-            height: parent.height * 0.2
-            width: parent.width * 0.8
-
-            Column {
-                anchors.centerIn: parent
-                spacing: 5
-
-                Text {
-                    text: "Are you sure you want to delete?"
-                    font.pixelSize: 16
-                    color: "white"
-                    anchors.horizontalCenter: parent.horizontalCenter
-                }
-
-                Row {
-                    spacing: 20
-                    anchors.horizontalCenter: parent.horizontalCenter
-
-                    Button {
-                        text: "Yes"
-                        width: 80
-                        height: 36
-
-                        background: Rectangle {
-                            color: parent.hovered ? "#bf4040" : "#a63030"
-                            radius: 4
-                        }
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: "white"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        onClicked: {
-                            if (confirmBox.type === "section") {
-                                root.removeSection(root.sectionIndex);
-                                sideBar.fillVisible = false;
-                            } else if (confirmBox.type === "answer") {
-                                root.removeAnswer(confirmBox.index);
-                            }
-                            confirmBox.visible = false;
-                        }
-                    }
-
-                    Button {
-                        text: "No"
-                        width: 80
-                        height: 36
-
-                        background: Rectangle {
-                            color: parent.hovered ? "#2A3337" : "#1A2327"
-                            border.color: "#445055"
-                            border.width: 1
-                            radius: 4
-                        }
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: "white"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        onClicked: {
-                            confirmBox.visible = false;
-                        }
-                    }
-                }
-            }
-        }
-
     }
 }

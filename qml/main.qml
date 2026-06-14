@@ -12,6 +12,10 @@ ApplicationWindow {
     visible: true
     color: "#232f34"
 
+    // When true the 60s saveTimer auto-saves; when false the user must
+    // save manually (Save / Ctrl+S). Toggled from the Settings menu.
+    property bool autoSaveEnabled: true
+
     function save() {
         console.log("Ctrl+S shortcut activated!");
 
@@ -147,6 +151,19 @@ ApplicationWindow {
         onActivated: content.startHeaderPickMode(sideBar.activityModelData)
     }
 
+    // `b`: toggle bold on the fill currently selected on the page.
+    Shortcut {
+        sequence: "b"
+        enabled: sideBar.fillVisible && !typingInField && !awaitingActivityKey
+        onActivated: {
+            if (sideBar.section && sideBar.fillIndex >= 0
+                && sideBar.fillIndex < sideBar.section.answers.length) {
+                var ans = sideBar.section.answers[sideBar.fillIndex];
+                ans.isTextBold = !ans.isTextBold;
+            }
+        }
+    }
+
     Shortcut {
         sequences: ["Delete", "Backspace"]
         onActivated: content.pageDetails.removeSelectedSection()
@@ -167,14 +184,14 @@ ApplicationWindow {
         id: content
         anchors.bottom: parent.bottom
         anchors.left: parent.left
-        anchors.leftMargin: parent.width / 5.5
+        anchors.leftMargin: parent.width / 9
         anchors.top: toolBar.bottom
-        width: parent.width / 2
+        width: parent.width / 1.95
     }
 
     FlowSideBar {
         id: sideBar
-        width: parent.width / 3.5
+        width: parent.width / 3
         anchors.right: parent.right
         anchors.top: toolBar.bottom
         anchors.bottom: parent.bottom
@@ -621,7 +638,7 @@ ApplicationWindow {
         id: saveTimer
         interval: 60000 // every 60 seconds
         repeat: true
-        running: true
+        running: mainwindow.autoSaveEnabled
         onTriggered: {
             // The C++ saveToJson(true) is fully guarded:
             //   * skips while a load is in progress

@@ -6,23 +6,56 @@ import QtMultimedia
 
 import "../../qml"
 import "activities"
+import "../newComponents"
 
 GroupBox {
     id: root
 
-    // FileDialog bileşeni
+    property var activityModelData: ({})
+    property var sectionModelData: ({})
+    signal removeSection
+
+    title: qsTr("")
+    width: parent.width * .98
+    padding: 14
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.verticalCenter: parent.verticalCenter
+
+    // Stop the extra-audio preview when this panel is deselected.
+    onVisibleChanged: if (!visible) playRecordAudio.stop()
+
+    // Extra audio is optional: collapsed to an "Add" button until the user
+    // asks for it, or auto-expanded when the section already carries one.
+    property bool audioRequested: false
+    readonly property bool hasAudioExtra: !!(sectionModelData && sectionModelData.audioExtra && sectionModelData.audioExtra.path)
+    readonly property bool audioExpanded: audioRequested || hasAudioExtra
+    onSectionModelDataChanged: audioRequested = false
+
+    background: Rectangle {
+        color: "#232f34"
+        border.color: "#009ca6"
+        border.width: 1
+        radius: 8
+    }
+
+    function saveRemains() {
+        matchthewords.updateData();
+        ddpicture.updateData();
+        ddppicturegroup.updateData();
+        fillpicture.updateData();
+        findPuzzle.updateData();
+    }
+
+    // Browse for an extra audio file attached to the section.
     FileDialog {
         id: fileDialog
         title: "Select a File"
-        //folder: StandardPaths.home // Varsayılan başlangıç yolu, değiştirilecektir
-
         onAccepted: {
-            var selectedFilePath = fileDialog.file + ""; // Seçilen dosyanın tam dosya yolu
+            var selectedFilePath = fileDialog.file + "";
             if (selectedFilePath) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
                 if (newPath) {
                     if (root.sectionModelData.audioExtra === null) {
-                        print("audio extra is null creating new one");
                         root.sectionModelData.createAudioExtra(newPath);
                     } else {
                         root.sectionModelData.audioExtra.path = newPath;
@@ -34,386 +67,304 @@ GroupBox {
                 console.log("Dosya yolu geçersiz.");
             }
         }
-
-        onRejected: {
-            console.log("File selection was canceled");
-        }
+        onRejected: console.log("File selection was canceled")
     }
 
-    function saveRemains() {
-        //if (matchthewords.visible) {
-        matchthewords.updateData()
-        ddpicture.updateData()
-        ddppicturegroup.updateData()
-        fillpicture.updateData()
-        findPuzzle.updateData()
-        //}
+    MediaPlayer {
+        id: playRecordAudio
+        audioOutput: AudioOutput {}
+        onSourceChanged: play()
+        // Keep the slider in sync after a drag breaks the value binding.
+        onPositionChanged: if (!extraAudioSlider.pressed) extraAudioSlider.value = position
     }
 
-    property var activityModelData: ({})
-    property var sectionModelData: ({})
-    signal removeSection
-    title: qsTr("")
-    width: parent.width * .98
-    anchors.horizontalCenter: parent.horizontalCenter
-    anchors.verticalCenter: parent.verticalCenter
-    onActivityModelDataChanged: {}
-
-    background: Rectangle {
-        color: "#232f34"
-        border.color: "#009ca6"
-        border.width: 1
-        radius: 6
-    }
-
-    // Custom title style
-    Column {
+    ColumnLayout {
         anchors.fill: parent
-        anchors.leftMargin: 5
-        anchors.rightMargin: 5
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: 5
+        spacing: 12
 
-        // Header with title and close button
-        Row {
-            width: parent.width
-            height: parent.height * 0.1
+        // ----- Header -----
+        RowLayout {
+            Layout.fillWidth: true
             spacing: 10
 
             Text {
                 text: "Activity"
                 color: "white"
-                font.pixelSize: 24
+                font.pixelSize: 22
                 font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
             }
 
-            Item {
-                width: parent.width - closeButton.width - parent.width * .5
-                height: 1
-            }
-
-            Button {
-                id: closeButton
-                text: "X"
-                width: height
-                height: parent.height / 2
-                anchors.verticalCenter: parent.verticalCenter
-
-                background: Rectangle {
-                    color: parent.hovered ? "#2A3337" : "#1A2327"
-                    border.color: "#009ca6"
-                    border.width: 1
-                    radius: 4
+            Rectangle {
+                radius: 11
+                height: 22
+                visible: headerBadge.text.length > 0
+                Layout.preferredWidth: headerBadge.implicitWidth + 22
+                color: "#11343a"
+                border.color: "#1c5a63"
+                border.width: 1
+                Text {
+                    id: headerBadge
+                    anchors.centerIn: parent
+                    text: (root.activityModelData && root.activityModelData.type) || ""
+                    color: "#4fd2dc"
+                    font.pixelSize: 12
+                    font.bold: true
                 }
+            }
 
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font.pixelSize: 14
+            Item { Layout.fillWidth: true }
+
+            Rectangle {
+                id: closeButton
+                width: 30
+                height: 30
+                radius: 6
+                color: closeMouse.containsMouse ? "#2A3337" : "#1A2327"
+                border.color: "#3a5560"
+                border.width: 1
+                Text {
+                    anchors.centerIn: parent
+                    text: "✕"
+                    color: "#cfe8ea"
+                    font.pixelSize: 13
                 }
                 MouseArea {
+                    id: closeMouse
                     anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onClicked: {
-                        root.saveRemains()
+                        root.saveRemains();
                         sideBar.activityVisible = false;
-
                     }
                 }
             }
         }
 
+        Rectangle { Layout.fillWidth: true; height: 1; color: "#2a3f48" }
+
+        // ----- Activity-specific editor (only the matching one is shown) -----
         DragDropPicture {
             id: ddpicture
             visible: root.activityModelData.type === "dragdroppicture"
             enabled: visible
-            width: parent.width
-            height: parent.height * 0.6
+            Layout.fillWidth: true
+            Layout.fillHeight: true
         }
-
         MatchTheWords {
             id: matchthewords
             visible: root.activityModelData.type === "matchTheWords"
             enabled: visible
-            width: parent.width
-            height: parent.height * 0.7
+            Layout.fillWidth: true
+            Layout.fillHeight: true
         }
-
         DragDropPictureGroup {
             id: ddppicturegroup
             visible: root.activityModelData.type === "dragdroppicturegroup"
             enabled: visible
-            width: parent.width
-            height: parent.height * 0.5
+            Layout.fillWidth: true
+            Layout.fillHeight: true
         }
-
         FillPicture {
             id: fillpicture
             visible: root.activityModelData.type === "fillpicture"
             enabled: visible
-            width: parent.width
-            height: parent.height * 0.5
+            Layout.fillWidth: true
+            Layout.fillHeight: true
         }
-
         PuzzleFindWords {
             id: findPuzzle
             visible: root.activityModelData.type === "puzzleFindWords"
             enabled: visible
-            width: parent.width
-            height: parent.height * 0.5
+            Layout.fillWidth: true
+            Layout.fillHeight: true
         }
-
         Circle {
             id: activityCircle
             visible: root.activityModelData.type === "circle"
             enabled: visible
-            width: parent.width
-            height: parent.height * 0.5
+            Layout.fillWidth: true
+            Layout.fillHeight: true
         }
-
         MarkWithX {
             id: activityMarkWithX
             visible: root.activityModelData.type === "markwithx"
             enabled: visible
-            width: parent.width
-            height: parent.height * 0.5
+            Layout.fillWidth: true
+            Layout.fillHeight: true
         }
 
-        Row {
-            width: parent.width * .9
-            spacing: 10
-            height: parent.height * 0.05
-
-            Text {
-                text: " Path:"
-                color: "white"
-                font.pixelSize: 14
-                width: 60
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
-            TextField {
-                id: audioTextField
-                width: parent.width - 100
-                height: parent.height
-                text: (root.sectionModelData && root.sectionModelData.audioExtra) ? root.sectionModelData.audioExtra.path : ""
-                placeholderText: "audio extra path "
-                placeholderTextColor: "gray"
-                color: "white"
-
-                background: Rectangle {
-                    color: "#1A2327"
-                    border.color: parent.focus ? "#009ca6" : "#445055"
-                    border.width: 1
-                    radius: 4
-                }
-                onAccepted: {
-                    //Audio Extra
-                    if (root.sectionModelData.audioExtra === null) {
-                        print("audio extra is null creating new one");
-                        root.sectionModelData.createAudioExtra(audioTextField.text);
-                    } else {
-                        root.sectionModelData.audioExtra.path = audioTextField.text;
-                    }
-
-                    // config.bookSets[0].saveToJson();
-                }
-            }
-
-            Button {
-                width: parent.height
-                height: parent.height
-                anchors.verticalCenter: parent.verticalCenter
-
-                background: Rectangle {
-                    color: parent.hovered ? "#2A3337" : "#1A2327"
-                    border.color: "#009ca6"
-                    border.width: 1
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: "..."
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        fileDialog.folder = "file:" + appPath;
-                        fileDialog.open();
-                    }
-                }
-            }
+        // ----- Extra audio (optional) -----
+        AppButton {
+            visible: !root.audioExpanded
+            text: "+  Add extra audio"
+            variant: "secondary"
+            Layout.fillWidth: true
+            Layout.preferredHeight: 34
+            onClicked: root.audioRequested = true
         }
 
-        Row {
-            id: audioContrller
-            property bool isPlaying: playRecordAudio.playbackState === MediaPlayer.PlayingState
-            width: parent.width
-            height: parent.height * 0.05
-            spacing: 10
+        Rectangle {
+            visible: root.audioExpanded
+            Layout.fillWidth: true
+            Layout.preferredHeight: audioCol.implicitHeight + 20
+            radius: 8
+            color: "#16242b"
+            border.color: "#2a3f48"
+            border.width: 1
 
-            Button {
-                id: playPauseButton
-                width: parent.width / 4
-                height: parent.height
-                anchors.verticalCenter: parent.verticalCenter
+            ColumnLayout {
+                id: audioCol
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 8
 
-                background: Rectangle {
-                    color: parent.hovered ? "#00b3be" : "#009ca6"
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: audioContrller.isPlaying ? "Pause" : "Play"
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        if (!audioContrller.isPlaying) {
-                            playRecordAudio.source = "file:" + appPath + audioTextField.text;
-                            playRecordAudio.play();
-                        } else {
-                            playRecordAudio.pause();
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: "Extra audio"
+                        color: "#cfe8ea"
+                        font.pixelSize: 13
+                        font.bold: true
+                        Layout.fillWidth: true
+                    }
+                    Rectangle {
+                        width: 24
+                        height: 24
+                        radius: 6
+                        color: rmAudioMouse.containsMouse ? "#2A3337" : "transparent"
+                        border.color: "#3a5560"
+                        border.width: 1
+                        Text {
+                            anchors.centerIn: parent
+                            text: "✕"
+                            color: "#8aa0a8"
+                            font.pixelSize: 11
+                        }
+                        MouseArea {
+                            id: rmAudioMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                playRecordAudio.stop();
+                                audioTextField.text = "";
+                                if (root.sectionModelData && root.sectionModelData.audioExtra)
+                                    root.sectionModelData.audioExtra.path = "";
+                                root.audioRequested = false;
+                            }
                         }
                     }
                 }
-            }
 
-            Slider {
-                id: audioSlider
-                enabled: true
-                to: playRecordAudio.duration
-                value: playRecordAudio.position
-                width: parent.width - playPauseButton.width - stopButton.width - 20
-                height: parent.height
-                anchors.verticalCenter: parent.verticalCenter
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
 
-                background: Rectangle {
-                    x: audioSlider.leftPadding
-                    y: audioSlider.topPadding + audioSlider.availableHeight / 2 - height / 2
-                    width: audioSlider.availableWidth
-                    height: 4
-                    radius: 2
-                    color: "#1A2327"
+                    AppTextField {
+                        id: audioTextField
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 32
+                        placeholderText: "audio extra path"
+                        text: (root.sectionModelData && root.sectionModelData.audioExtra) ? root.sectionModelData.audioExtra.path : ""
+                        onAccepted: {
+                            if (root.sectionModelData.audioExtra === null) {
+                                root.sectionModelData.createAudioExtra(audioTextField.text);
+                            } else {
+                                root.sectionModelData.audioExtra.path = audioTextField.text;
+                            }
+                        }
+                    }
 
-                    Rectangle {
-                        width: audioSlider.visualPosition * parent.width
-                        height: parent.height
-                        color: "#009ca6"
-                        radius: 2
+                    AppButton {
+                        text: "…"
+                        variant: "secondary"
+                        Layout.preferredWidth: 40
+                        Layout.preferredHeight: 32
+                        leftPadding: 0; rightPadding: 0
+                        onClicked: {
+                            fileDialog.folder = "file:" + appPath;
+                            fileDialog.open();
+                        }
                     }
                 }
 
-                handle: Rectangle {
-                    x: audioSlider.leftPadding + audioSlider.visualPosition * (audioSlider.availableWidth - width)
-                    y: audioSlider.topPadding + audioSlider.availableHeight / 2 - height / 2
-                    color: "#009ca6"
-                    border.color: "white"
-                    border.width: 1
-                    radius: 6
-                    width: 16
-                    height: 16
-                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
 
-                onMoved: {
-                    if (playRecordAudio.seekable) {
-                        playRecordAudio.setPosition(value);
+                    AppButton {
+                        text: playRecordAudio.playbackState === MediaPlayer.PlayingState ? "Pause" : "Play"
+                        variant: "primary"
+                        Layout.preferredWidth: 80
+                        Layout.preferredHeight: 32
+                        onClicked: {
+                            if (playRecordAudio.playbackState === MediaPlayer.PlayingState)
+                                playRecordAudio.pause();
+                            else if (playRecordAudio.playbackState === MediaPlayer.PausedState)
+                                playRecordAudio.play();
+                            else {
+                                playRecordAudio.source = "file:" + appPath + audioTextField.text;
+                                playRecordAudio.play();
+                            }
+                        }
                     }
-                }
-            }
 
-            Button {
-                id: stopButton
-                width: parent.width / 4
-                height: parent.height
-                anchors.verticalCenter: parent.verticalCenter
-                text: "Stop"
+                    Slider {
+                        id: extraAudioSlider
+                        Layout.fillWidth: true
+                        from: 0
+                        to: playRecordAudio.duration > 0 ? playRecordAudio.duration : 1
+                        value: playRecordAudio.position
+                        onMoved: if (playRecordAudio.seekable) playRecordAudio.setPosition(value)
 
-                background: Rectangle {
-                    color: parent.hovered ? "#2A3337" : "#1A2327"
-                    border.color: "#009ca6"
-                    border.width: 1
-                    radius: 4
-                }
+                        background: Rectangle {
+                            x: extraAudioSlider.leftPadding
+                            y: extraAudioSlider.topPadding + extraAudioSlider.availableHeight / 2 - height / 2
+                            width: extraAudioSlider.availableWidth
+                            height: 4
+                            radius: 2
+                            color: "#1A2327"
+                            Rectangle {
+                                width: extraAudioSlider.visualPosition * parent.width
+                                height: parent.height
+                                color: "#009ca6"
+                                radius: 2
+                            }
+                        }
+                        handle: Rectangle {
+                            x: extraAudioSlider.leftPadding + extraAudioSlider.visualPosition * (extraAudioSlider.availableWidth - width)
+                            y: extraAudioSlider.topPadding + extraAudioSlider.availableHeight / 2 - height / 2
+                            width: 16
+                            height: 16
+                            radius: 8
+                            color: "#009ca6"
+                            border.color: "white"
+                            border.width: 1
+                        }
+                    }
 
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        playRecordAudio.stop();
+                    AppButton {
+                        text: "Stop"
+                        variant: "secondary"
+                        Layout.preferredWidth: 70
+                        Layout.preferredHeight: 32
+                        onClicked: playRecordAudio.stop()
                     }
                 }
             }
         }
 
-        states: [
-            State {
-                name: "playing"
-                when: playRecordAudio.playbackState === MediaPlayer.PlayingState
-
-                PropertyChanges {
-                    playPauseButton.text: "Pause"
-                }
-            },
-            State {
-                name: "paused"
-                when: playRecordAudio.playbackState === MediaPlayer.PausedState || playRecordAudio.playbackState === MediaPlayer.StoppedState
-
-                PropertyChanges {
-                    playPauseButton.text: "Play"
-                }
-            }
-        ]
-
-        MediaPlayer {
-            id: playRecordAudio
-            audioOutput:
-                //volume: volumeSlider.value / 100.0
-                AudioOutput {}
-            onSourceChanged: {
-                play();
-            }
-        }
-
-        Row {
+        // ----- Actions -----
+        RowLayout {
+            Layout.fillWidth: true
             spacing: 10
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: parent.width
-            height: parent.height * 0.05
-            Button {
-                text: "Activity"
-                width: parent.width / 4
-                height: parent.height * .8
-                background: Rectangle {
-                    color: parent.hovered ? "#2A3337" : "#1A2327"
-                    border.color: "#009ca6"
-                    border.width: 1
-                    radius: 4
-                }
 
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
+            AppButton {
+                text: "Activity"
+                variant: "secondary"
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
                 onClicked: {
                     activityDialog.wordLists = root.activityModelData.words;
                     activityDialog.imageSource = root.activityModelData.sectionPath;
@@ -440,105 +391,62 @@ GroupBox {
                 }
             }
 
-            Button {
+            AppButton {
                 text: "Delete"
-                width: parent.width / 4
-                height: parent.height * .8
-
-                background: Rectangle {
-                    color: parent.hovered ? "#bf4040" : "#a63030"
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                onClicked: {
-                    confirmBox.visible = true;
-                }
-            }
-        }
-
-        Rectangle {
-            id: confirmBox
-            property string type
-            property int index
-            color: "#1A2327"
-            border.color: "#a63030"
-            border.width: 1
-            radius: 6
-            visible: false
-            anchors.horizontalCenter: parent.horizontalCenter
-            height: parent.height * 0.05
-            width: parent.width * 0.8
-
-            Column {
-                anchors.centerIn: parent
-                spacing: 5
-
-                Text {
-                    text: "Are you sure you want to delete?"
-                    font.pixelSize: 16
-                    color: "white"
-                    anchors.horizontalCenter: parent.horizontalCenter
-                }
-
-                Row {
-                    spacing: 20
-                    anchors.horizontalCenter: parent.horizontalCenter
-
-                    Button {
-                        text: "Yes"
-                        width: 80
-                        height: 20
-
-                        background: Rectangle {
-                            color: parent.hovered ? "#bf4040" : "#a63030"
-                            radius: 4
-                        }
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: "white"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        onClicked: {
-                            removeSection();
-                            confirmBox.visible = false;
-                            sideBar.activityVisible = false;
-                        }
-                    }
-
-                    Button {
-                        text: "No"
-                        width: 80
-                        height: 20
-
-                        background: Rectangle {
-                            color: parent.hovered ? "#2A3337" : "#1A2327"
-                            border.color: "#445055"
-                            border.width: 1
-                            radius: 4
-                        }
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: "white"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        onClicked: {
-                            confirmBox.visible = false;
-                        }
-                    }
-                }
+                variant: "danger"
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                onClicked: confirmBox.visible = true
             }
         }
     }
 
+    // ----- Delete confirmation overlay -----
+    Rectangle {
+        id: confirmBox
+        anchors.centerIn: parent
+        width: parent.width * 0.8
+        height: confirmCol.implicitHeight + 28
+        radius: 8
+        color: "#1A2327"
+        border.color: "#a63030"
+        border.width: 1
+        visible: false
+        z: 100
+
+        ColumnLayout {
+            id: confirmCol
+            anchors.centerIn: parent
+            spacing: 12
+
+            Text {
+                text: "Are you sure you want to delete?"
+                font.pixelSize: 15
+                color: "white"
+                Layout.alignment: Qt.AlignHCenter
+            }
+
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                spacing: 16
+
+                AppButton {
+                    text: "Yes"
+                    variant: "danger"
+                    Layout.preferredWidth: 90
+                    onClicked: {
+                        removeSection();
+                        confirmBox.visible = false;
+                        sideBar.activityVisible = false;
+                    }
+                }
+                AppButton {
+                    text: "No"
+                    variant: "secondary"
+                    Layout.preferredWidth: 90
+                    onClicked: confirmBox.visible = false
+                }
+            }
+        }
+    }
 }

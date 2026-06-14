@@ -56,17 +56,39 @@ Item {
         return { x: originalX, y: originalY };
     }
 
+    // Open the right-side Audio panel for a freshly created (last) section.
+    function openAudioSidebar(sec) {
+        if (!sec) return;
+        sideBar.hideAllComponent();
+        sideBar.audioVisible = true;
+        sideBar.page = page;
+        sideBar.sectionIndex = page.sections.length - 1;
+        sideBar.audioModelData = sec;
+        clearTextFocus();
+    }
+
+    // Open the right-side Video panel for a freshly created (last) section.
+    function openVideoSidebar(sec) {
+        if (!sec) return;
+        sideBar.hideAllComponent();
+        sideBar.videoVisible = true;
+        sideBar.page = page;
+        sideBar.sectionIndex = page.sections.length - 1;
+        sideBar.videoModelData = sec;
+        clearTextFocus();
+    }
+
     function addAudioAtMouse() {
         if (!root.page) return;
         var p = _mouseToOriginal();
-        root.page.createNewAudioSection(p.x, p.y, root.imageHeights, root.imageHeights, "");
+        openAudioSidebar(root.page.createNewAudioSection(p.x, p.y, root.imageHeights, root.imageHeights, ""));
         currentSelectionType = "";
     }
 
     function addVideoAtMouse() {
         if (!root.page) return;
         var p = _mouseToOriginal();
-        root.page.createNewVideoSection(p.x, p.y, root.imageHeights, root.imageHeights, "");
+        openVideoSidebar(root.page.createNewVideoSection(p.x, p.y, root.imageHeights, root.imageHeights, ""));
         currentSelectionType = "";
     }
 
@@ -268,7 +290,7 @@ Item {
                     var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
                     var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
-                    root.page.createNewAudioSection(originalX, originalY, root.imageHeights, root.imageHeights, "");
+                    openAudioSidebar(root.page.createNewAudioSection(originalX, originalY, root.imageHeights, root.imageHeights, ""));
                     // config.bookSets[0].saveToJson();
                     print("Changes Are Saved activity Audio on Triggered");
                     currentSelectionType = "";
@@ -284,7 +306,7 @@ Item {
                     var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
                     var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
 
-                    root.page.createNewVideoSection(originalX, originalY, root.imageHeights, root.imageHeights, "");
+                    openVideoSidebar(root.page.createNewVideoSection(originalX, originalY, root.imageHeights, root.imageHeights, ""));
                     // config.bookSets[0].saveToJson();
                     print("Changes Are Saved activity Video on Triggered");
                     currentSelectionType = "";
@@ -733,16 +755,29 @@ Item {
                             visible: sectionType === "fill"
 
                             Rectangle {
+                                id: fillBg
                                 property bool isSelected: sideBar.fillVisible
                                                           && sideBar.section === sectionData
                                                           && sideBar.fillIndex === index
 
                                 color: "#7bd5bd"
-                                border.color: isSelected ? "#009ca6" : "black"
-                                border.width: isSelected ? 3 : 2
+                                border.color: isSelected ? "#00e6e6" : "black"
+                                border.width: isSelected ? 4 : 2
                                 radius: 5
                                 anchors.fill: parent
-                                opacity: 0.4
+                                opacity: isSelected ? 0.65 : 0.4
+                            }
+
+                            // Bright outer ring so the selected fill clearly
+                            // stands out from the others on the page.
+                            Rectangle {
+                                visible: fillBg.isSelected
+                                anchors.fill: parent
+                                anchors.margins: -4
+                                color: "transparent"
+                                border.color: "#00e6e6"
+                                border.width: 2
+                                radius: 9
                             }
 
                             FlowText {

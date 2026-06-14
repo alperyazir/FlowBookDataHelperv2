@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import "newComponents"
 
 Rectangle {
     id: root
@@ -16,103 +17,81 @@ Rectangle {
     border.color: "#009ca6" // Turquoise border
     border.width: 1
 
+    // ===== Menu bar (top row) =====
     Row {
-        width: parent.width / 3
-        height: parent.height
-        spacing: 8
+        id: menuRow
+        height: 30
+        spacing: 2
         anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: 0
         anchors.left: parent.left
-        anchors.leftMargin: 10
-        Button {
-            anchors.verticalCenter: parent.verticalCenter
-            text: "Create"
-            width: 70
-            height: 40
-            background: Rectangle {
-                color: "#009ca6"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                color: "white"
-                font.bold: true
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                anchors.centerIn: parent
-            }
-            onClicked: {
-                console.log("Create clicked");
-                newProjectDialog.open();
+        anchors.leftMargin: 8
+
+        MenuButton {
+            text: "File"
+            onClicked: fileMenu.open()
+            AppMenu {
+                id: fileMenu
+                y: parent.height + 2
+                AppMenuItem { text: "New Project"; onTriggered: newProjectDialog.open() }
+                AppMenuItem {
+                    text: "Open…"
+                    onTriggered: {
+                        config.refreshRecentProjects();
+                        openProject.loadRecentProjects();
+                        openProject.open();
+                    }
+                }
+                AppMenuItem { text: "Save"; onTriggered: save() }
             }
         }
 
-        Button {
-            anchors.verticalCenter: parent.verticalCenter
-            text: "Open"
-            width: 70
-            height: 40
-            background: Rectangle {
-                color: "#009ca6"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                color: "white"
-                font.bold: true
-                anchors.centerIn: parent
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-            onClicked: {
-                config.refreshRecentProjects();
-                openProject.loadRecentProjects();
-                openProject.open();
-            }
-        }
-
-        Button {
-            anchors.verticalCenter: parent.verticalCenter
-            text: "Save"
-            width: 70
-            height: 40
-            background: Rectangle {
-                color: "#009ca6"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                color: "white"
-                font.bold: true
-                anchors.centerIn: parent
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-            onClicked: {
-
-                save()
+        MenuButton {
+            text: "Project"
+            onClicked: projectMenu.open()
+            AppMenu {
+                id: projectMenu
+                y: parent.height + 2
+                AppMenuItem { text: "Analyze…"; onTriggered: analyzeConfirmDialog.open() }
+                AppMenuItem {
+                    text: "Test"
+                    onTriggered: {
+                        testDialog.currentProject = openProject.currentProject;
+                        testDialog.open();
+                    }
+                }
+                AppMenuItem {
+                    text: "Package"
+                    onTriggered: {
+                        packageDialog.currentProject = openProject.currentProject;
+                        packageDialog.open();
+                    }
+                }
+                AppMenuItem { text: "Games"; onTriggered: gamesDialog.open() }
             }
         }
 
-        Button {
-            anchors.verticalCenter: parent.verticalCenter
-            text: "Analyze"
-            width: 100
-            height: 40
-            background: Rectangle {
-                color: "#009ca6"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                color: "white"
-                font.bold: true
-                anchors.centerIn: parent
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-            onClicked: {
-                analyzeConfirmDialog.open();
+        MenuButton {
+            text: "Settings"
+            onClicked: settingsMenu.open()
+            AppMenu {
+                id: settingsMenu
+                y: parent.height + 2
+                implicitWidth: 240
+                AppMenuItem {
+                    text: "Module side on the left"
+                    checkable: true
+                    checked: (config && config.bookSets && config.bookSets.length > 0
+                              && config.bookSets[0].books && config.bookSets[0].books.length > 0)
+                             ? config.bookSets[0].books[0].isModuleSideLeft : false
+                    onTriggered: config.bookSets[0].books[0].isModuleSideLeft =
+                                 !config.bookSets[0].books[0].isModuleSideLeft
+                }
+                AppMenuItem {
+                    text: "Auto-save"
+                    checkable: true
+                    checked: mainwindow.autoSaveEnabled
+                    onTriggered: mainwindow.autoSaveEnabled = !mainwindow.autoSaveEnabled
+                }
             }
         }
 
@@ -216,94 +195,29 @@ Rectangle {
             }
         }
 
-        Button {
-            anchors.verticalCenter: parent.verticalCenter
-            text: "Test"
-            width: 70
-            height: 40
-            background: Rectangle {
-                color: "#009ca6"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                color: "white"
-                font.bold: true
-                anchors.centerIn: parent
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-            onClicked: {
-                testDialog.currentProject = openProject.currentProject;
-                testDialog.open();
-            }
-        }
+    }
 
-        Button {
-            anchors.verticalCenter: parent.verticalCenter
-            text: "Package"
-            width: 100
-            height: 40
-            background: Rectangle {
-                color: "#009ca6"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                color: "white"
-                font.bold: true
-                anchors.centerIn: parent
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-            onClicked: {
-                packageDialog.currentProject = openProject.currentProject;
-                packageDialog.open();
-            }
-        }
-
-        Button {
-            anchors.verticalCenter: parent.verticalCenter
-            text: "Games"
-            width: 80
-            height: 40
-            background: Rectangle {
-                color: "#009ca6"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                color: "white"
-                font.bold: true
-                anchors.centerIn: parent
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-            onClicked: {
-                gamesDialog.open();
-            }
-        }
-        // CheckBox {
-        //     id: checkOutline
-        //     checked: false
-        //     onCheckedChanged: root.outlineEnabled(checked)
-        //     text: "Outline"
-        //     anchors.verticalCenter: parent.verticalCenter
-        //     height: 40
-        // }
+    // separator: menu group | toolbar controls
+    Rectangle {
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.left: menuRow.right
+        anchors.leftMargin: 12
+        width: 1
+        height: 24
+        color: "#2a3a42"
     }
 
     Row {
         id: pagesRow
-        height: parent.height * .8
+        height: 38
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: 8
         anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: 0
+
         Button {
             anchors.verticalCenter: parent.verticalCenter
             text: "<"
-            width: 80
+            width: 112
             height: parent.height
             background: Rectangle {
                 color: "#232f34"
@@ -352,7 +266,7 @@ Rectangle {
         Button {
             anchors.verticalCenter: parent.verticalCenter
             text: ">"
-            width: 80
+            width: 112
             height: parent.height
             background: Rectangle {
                 color: "#232f34"
@@ -373,28 +287,94 @@ Rectangle {
         }
     }
 
-    Rectangle {
-        id: moduleBtn
+    // Book title (left of the nav) and module name (right). Anchored to
+    // pagesRow — NOT inside it — so the centered nav stays put no matter
+    // how long these labels get.
+    // Book title — a subtle clickable "switcher": hover shows a pill and
+    // a ▾ chevron; click opens the project switcher (Open).
+    MouseArea {
+        id: bookTitleArea
+        anchors.left: menuRow.right
+        anchors.leftMargin: 20
+        anchors.right: pagesRow.left
+        anchors.rightMargin: 14
         anchors.verticalCenter: parent.verticalCenter
-        anchors.left: pagesRow.right
-        anchors.leftMargin: 50
-        width: 100
-        height: 40
-        color: moduleBtnArea.containsMouse ? "#2A3337" : "#232f34"
-        border.color: "#009ca6"
-        border.width: 1
-        FlowText {
-            id: moduleTxt
-            color: "white"
-            width: parent.width * .7
-            height: parent.height
-            anchors.centerIn: parent
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+        height: 36
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: {
+            config.refreshRecentProjects();
+            openProject.loadRecentProjects();
+            openProject.open();
         }
 
+        Rectangle {
+            id: titlePill
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            height: 32
+            width: titleRow.width + 22
+            radius: 8
+            color: bookTitleArea.containsMouse ? "#1d2c33" : "transparent"
+            border.width: 1
+            border.color: bookTitleArea.containsMouse ? "#2a8e96" : "transparent"
+            Behavior on color { ColorAnimation { duration: 110 } }
+
+            Row {
+                id: titleRow
+                anchors.centerIn: parent
+                spacing: 8
+
+                Text {
+                    id: bookTitleText
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.min(implicitWidth, bookTitleArea.width - 44)
+                    text: (config && config.bookSets && config.bookSets.length > 0
+                           && config.bookSets[0].bookTitle) ? config.bookSets[0].bookTitle : ""
+                    color: bookTitleArea.containsMouse ? "#00e6e6" : "#eef7f8"
+                    font.pixelSize: 15
+                    font.bold: true
+                    font.letterSpacing: 0.3
+                    elide: Text.ElideRight
+                    Behavior on color { ColorAnimation { duration: 90 } }
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "▾"
+                    font.pixelSize: 11
+                    color: bookTitleArea.containsMouse ? "#00e6e6" : "#6f989d"
+                    visible: bookTitleText.text.length > 0
+                }
+            }
+        }
+    }
+
+    // Module chip — click opens the module editor.
+    Rectangle {
+        id: moduleChip
+        anchors.left: pagesRow.right
+        anchors.leftMargin: 14
+        anchors.verticalCenter: parent.verticalCenter
+        height: 28
+        width: Math.min(moduleLabel.implicitWidth + 26, 220)
+        radius: 14
+        visible: moduleLabel.text.length > 0
+        color: moduleChipArea.containsMouse ? "#1d2c33" : "transparent"
+        border.color: moduleChipArea.containsMouse ? "#2a8e96" : "#27535b"
+        border.width: 1
+        Behavior on color { ColorAnimation { duration: 90 } }
+        Text {
+            id: moduleLabel
+            anchors.centerIn: parent
+            width: parent.width - 18
+            horizontalAlignment: Text.AlignHCenter
+            text: ""
+            color: "#00e6e6"
+            font.pixelSize: 13
+            elide: Text.ElideRight
+        }
         MouseArea {
-            id: moduleBtnArea
+            id: moduleChipArea
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
@@ -402,100 +382,30 @@ Rectangle {
         }
     }
 
-    Connections {
-        target: (config && config.bookSets && config.bookSets.length > 0
-                 && config.bookSets[0].books && config.bookSets[0].books.length > 0)
-                ? config.bookSets[0].books[0] : null
-        function onModulesChanged() { root.setModuleText(); }
-    }
-
-    CheckBox {
-        id: moduleSideListCB
-        text: "isModuleSideLeft"
-        checked: (config && config.bookSets && config.bookSets.length > 0
-                  && config.bookSets[0].books && config.bookSets[0].books.length > 0)
-                 ? config.bookSets[0].books[0].isModuleSideLeft : false
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.left: moduleBtn.right
-        anchors.leftMargin: 30
-        height: parent.height
-        width: 150
-        indicator: Rectangle {
-            width: 18
-            height: 18
-            radius: 4
-            color: moduleSideListCB.checked ? "#00e6e6" : "#232f34"
-            border.color: "#009ca6"
-            border.width: 1
-            anchors.verticalCenter: parent.verticalCenter
-        }
-
-        contentItem: Text {
-            text: parent.text
-            color: "white"  // Turkuaz renk
-            font.pixelSize: 16
-            anchors.verticalCenter: parent.verticalCenter
-            horizontalAlignment: Text.AlignRight
-            verticalAlignment: Text.AlignVCenter
-        }
-        onCheckedChanged: {
-            config.bookSets[0].books[0].isModuleSideLeft = checked;
-            // config.bookSets[0].saveToJson();
-        }
-    }
+    // Refresh the module label when the page (and so the module) changes.
     function setModuleText() {
-        moduleTxt.text = content.getModuleName();
+        moduleLabel.text = content.getModuleName() || "";
     }
 
-    // Clears every section the analysis/user added, on all pages.
-    Button {
-        id: clearBtn
+    // Clear menu on the far right (opens Clear Page / Clear Book).
+    AppButton {
+        id: clearQuick
         anchors.verticalCenter: parent.verticalCenter
         anchors.right: parent.right
-        anchors.rightMargin: 10
-        text: "Clear Book"
-        width: 96
-        height: 36
-
-        background: Rectangle {
-            color: parent.hovered ? "#d9534f" : "#a94442"
-            radius: 6
+        anchors.rightMargin: 12
+        text: "Clear"
+        variant: "danger"
+        onClicked: clearMenu.open()
+        AppMenu {
+            id: clearMenu
+            implicitWidth: 180
+            y: parent.height + 4
+            x: parent.width - width            // right-aligned, opens leftward
+            AppMenuItem { text: "Clear Page"; danger: true; onTriggered: clearPageConfirmDialog.open() }
+            AppMenuItem { text: "Clear Book"; danger: true; onTriggered: clearConfirmDialog.open() }
         }
-        contentItem: Text {
-            text: parent.text
-            color: "white"
-            font.bold: true
-            anchors.centerIn: parent
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
-        onClicked: clearConfirmDialog.open()
     }
 
-    // Clears the sections on the currently shown page only.
-    Button {
-        id: clearPageBtn
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.right: clearBtn.left
-        anchors.rightMargin: 8
-        text: "Clear Page"
-        width: 96
-        height: 36
-
-        background: Rectangle {
-            color: parent.hovered ? "#d9534f" : "#a94442"
-            radius: 6
-        }
-        contentItem: Text {
-            text: parent.text
-            color: "white"
-            font.bold: true
-            anchors.centerIn: parent
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
-        onClicked: clearPageConfirmDialog.open()
-    }
 
     Dialog {
         id: clearConfirmDialog

@@ -74,6 +74,16 @@
         <file>qml/PackageDialog.qml</file>
         <file>qml/groupboxes/AudioGroupBox.qml</file>
         <file>qml/groupboxes/VideoGroupBox.qml</file>
+        <file>qml/newComponents/AppButton.qml</file>
+        <file>qml/newComponents/AppTextField.qml</file>
+        <file>qml/newComponents/AppCheckBox.qml</file>
+        <file>qml/newComponents/ActivityFields.qml</file>
+        <file>qml/newComponents/WordList.qml</file>
+        <file>qml/newComponents/PanelHeader.qml</file>
+        <file>qml/newComponents/ConfirmDelete.qml</file>
+        <file>qml/newComponents/MenuButton.qml</file>
+        <file>qml/newComponents/AppMenu.qml</file>
+        <file>qml/newComponents/AppMenuItem.qml</file>
         <file>qml/newComponents/NewAudioComponent.qml</file>
         <file>qml/newComponents/NewVideoComponent.qml</file>
         <file>qml/groupboxes/ActivityGroupBox.qml</file>
