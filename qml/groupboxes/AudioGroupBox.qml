@@ -29,6 +29,7 @@ GroupBox {
         radius: 8
     }
 
+    // Browse the filesystem for an arbitrary audio file ("…" button).
     FileDialog {
         id: fileDialog
         title: "Select a File"
@@ -42,6 +43,13 @@ GroupBox {
                     console.log("Books klasörü bulunamadı.");
             }
         }
+    }
+
+    // In-app list of the book's audio files ("Pick" button).
+    MediaPicker {
+        id: audioPicker
+        kind: "audio"
+        onPicked: function(rel) { root.audioModelData.audioPath = rel; }
     }
 
     MediaPlayer {
@@ -97,6 +105,17 @@ GroupBox {
                 onClicked: {
                     fileDialog.folder = "file:" + appPath + (root.audioModelData.audioPath || "");
                     fileDialog.open();
+                }
+            }
+
+            AppButton {
+                text: "Pick"
+                variant: "primary"
+                Layout.preferredWidth: 58
+                Layout.preferredHeight: 34
+                onClicked: {
+                    audioPicker.currentPath = root.audioModelData.audioPath || "";
+                    audioPicker.open();
                 }
             }
         }

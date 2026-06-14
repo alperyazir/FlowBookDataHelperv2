@@ -3062,6 +3062,35 @@ public:
     Q_INVOKABLE bool initialize(bool isFromFileSystem = false, const QString& path = "");
 
     Q_INVOKABLE void refreshRecentProjects();
+
+    // Lists the audio/video files in the current book's media folder and
+    // returns their absolute paths. Uses QDir so it works cross-platform and
+    // resolves any ".." in the app/project path (which trips up QML's
+    // FolderListModel). QML converts these to ./books/... relative paths via
+    // findBooksFolder() and auditions them with "file:" + appPath + rel.
+    Q_INVOKABLE QStringList listBookMedia(const QString &kind) const {
+        QStringList out;
+        if (_bookSets.isEmpty())
+            return out;
+        BookSet *bs = _bookSets.first();
+        if (!bs)
+            return out;
+        QDir dir(bs->bookDirectoryName() + "/" + kind);
+        if (!dir.exists())
+            return out;
+        const QStringList filters = (kind == QLatin1String("audio"))
+            ? QStringList{ "*.mp3", "*.wav", "*.m4a", "*.aac", "*.ogg" }
+            : QStringList{ "*.mp4", "*.mov", "*.m4v", "*.webm" };
+        dir.setNameFilters(filters);
+        dir.setFilter(QDir::Files);
+        dir.setSorting(QDir::Name | QDir::IgnoreCase);
+        const QString base = dir.absolutePath();
+        const QStringList files = dir.entryList();
+        for (const QString &f : files)
+            out << base + "/" + f;
+        return out;
+    }
+
     QVector<BookSet*> _bookSets;
 
     QVariantList bookSets() const {

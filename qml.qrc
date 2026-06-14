@@ -81,6 +81,7 @@
         <file>qml/newComponents/WordList.qml</file>
         <file>qml/newComponents/PanelHeader.qml</file>
         <file>qml/newComponents/ConfirmDelete.qml</file>
+        <file>qml/newComponents/MediaPicker.qml</file>
         <file>qml/newComponents/MenuButton.qml</file>
         <file>qml/newComponents/AppMenu.qml</file>
         <file>qml/newComponents/AppMenuItem.qml</file>

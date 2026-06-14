@@ -29,6 +29,7 @@ GroupBox {
         radius: 8
     }
 
+    // Browse the filesystem for an arbitrary video file ("…" button).
     FileDialog {
         id: fileDialog
         title: "Select a File"
@@ -36,11 +37,21 @@ GroupBox {
             var selectedFilePath = fileDialog.file + "";
             if (selectedFilePath) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
-                if (newPath)
+                if (newPath && root.videoModelData && root.videoModelData.video)
                     root.videoModelData.video.path = newPath;
-                else
+                else if (!newPath)
                     console.log("Books klasörü bulunamadı.");
             }
+        }
+    }
+
+    // In-app list of the book's video files ("Pick" button).
+    MediaPicker {
+        id: videoPicker
+        kind: "video"
+        onPicked: function(rel) {
+            if (root.videoModelData && root.videoModelData.video)
+                root.videoModelData.video.path = rel;
         }
     }
 
@@ -97,6 +108,18 @@ GroupBox {
                 onClicked: {
                     fileDialog.folder = "file:" + appPath;
                     fileDialog.open();
+                }
+            }
+
+            AppButton {
+                text: "Pick"
+                variant: "primary"
+                Layout.preferredWidth: 58
+                Layout.preferredHeight: 34
+                onClicked: {
+                    videoPicker.currentPath = (root.videoModelData && root.videoModelData.video)
+                                              ? root.videoModelData.video.path : "";
+                    videoPicker.open();
                 }
             }
         }
