@@ -524,12 +524,37 @@ bool PdfProcess::removeDir(const QString &dirPath) {
     return dir.rmdir(dirPath);
 }
 
-// Helper function to recursively copy a directory
-bool PdfProcess::copyDir(const QString &srcPath, const QString &dstPath) {
+// Entries that must never end up inside a packaged book: editor/AI work
+// artifacts, backups, and OS/app junk. Applied only to the book-data copy
+// (not the FlowBook runtime, which may legitimately ship .ini/settings.json).
+static bool isExcludedFromPackage(const QString &name, bool isDir) {
+    const QString lower = name.toLower();
+    if (isDir)
+        return name == "raw" || name == "review" || name == "temp";
+    // macOS / Windows junk
+    if (name == ".DS_Store" || name.startsWith("._")
+        || lower == "thumbs.db" || lower == "desktop.ini")
+        return true;
+    // book-processing artifacts
+    if (name == "ai_overrides.json" || name == "audit_log.jsonl")
+        return true;
+    // app / config junk
+    if (name == "settings.json" || lower.endsWith(".ini"))
+        return true;
+    if (name == "fbinf" || lower.endsWith(".fbinf"))
+        return true;
+    // any backup (config.json.bak, .bak.audit, .bak.safe, ...)
+    if (name.contains(".bak"))
+        return true;
+    return false;
+}
+
+// Helper function to recursively copy a directory. When filterBookData is
+// true, editor artifacts / backups / OS junk are skipped (see above).
+bool PdfProcess::copyDir(const QString &srcPath, const QString &dstPath, bool filterBookData) {
     QDir srcDir(srcPath);
     QDir dstDir(dstPath);
 
-    if (srcPath.endsWith("raw"))  return true;
     if (!dstDir.exists()) {
         if (!dstDir.mkpath(".")) {
             return false;
@@ -538,11 +563,14 @@ bool PdfProcess::copyDir(const QString &srcPath, const QString &dstPath) {
 
     bool success = true;
     for (const QFileInfo &info : srcDir.entryInfoList(QDir::NoDotAndDotDot | QDir::System | QDir::Hidden  | QDir::AllDirs | QDir::Files, QDir::DirsFirst)) {
+        if (filterBookData && isExcludedFromPackage(info.fileName(), info.isDir()))
+            continue;
+
         QString srcItemPath = srcPath + "/" + info.fileName();
         QString dstItemPath = dstPath + "/" + info.fileName();
-        
+
         if (info.isDir()) {
-            success = copyDir(srcItemPath, dstItemPath);
+            success = copyDir(srcItemPath, dstItemPath, filterBookData);
         } else {
             success = QFile::copy(srcItemPath, dstItemPath);
         }
@@ -642,10 +670,24 @@ QString PdfProcess::getLatestFlowBookVersion(const QString &platformPath) const 
     return entries.isEmpty() ? QString() : entries.first();
 }
 
-bool PdfProcess::package(const QStringList &platforms, const QString &currentBookName)
+bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNames)
 {
     setProgress(0);
-    setLogMessages("1/7 - Starting packaging process...");
+
+    // One package may bundle several books (e.g. a paired Student Book +
+    // Workbook); they all go under data/books/. The package is named after
+    // the joined book names.
+    const QString packageName = bookNames.join(" + ");
+    qDebug() << "package() bookNames:" << bookNames << "platforms:" << platforms;
+
+    if (bookNames.isEmpty()) {
+        setLogMessages("✖  No books selected.");
+        return false;
+    }
+    setLogMessages(QString("📦  Packaging  \"%1\"   (%2 book%3, %4 platform%5)")
+                       .arg(packageName)
+                       .arg(bookNames.size()).arg(bookNames.size() == 1 ? "" : "s")
+                       .arg(platforms.size()).arg(platforms.size() == 1 ? "" : "s"));
 
     // Get application directory
     QString appDir = QGuiApplication::applicationDirPath();
@@ -657,33 +699,32 @@ bool PdfProcess::package(const QStringList &platforms, const QString &currentBoo
 
     // Create/Clean release directory for the book
     setProgress(5);
-    QString releaseBookPath = appDir + "release/" + currentBookName;
+    QString releaseBookPath = appDir + "release/" + packageName;
     QDir releaseDir(releaseBookPath);
 
+    setLogMessages("🧹  Preparing output folder…");
     if (releaseDir.exists()) {
-        setLogMessages("2/7 - Cleaning existing release directory...");
         if (!removeDir(releaseBookPath)) {
-            setLogMessages("Error: Failed to clean existing release directory");
+            setLogMessages("✖  Could not clean the existing output folder.");
             qDebug() << "Failed to clean release directory:" << releaseBookPath;
             return false;
         }
     }
-
-    setLogMessages("2/7 - Creating fresh release directory...");
     if (!releaseDir.mkpath(".")) {
-        setLogMessages("Error: Failed to create release directory");
+        setLogMessages("✖  Could not create the output folder.");
         qDebug() << "Failed to create release directory:" << releaseBookPath;
         return false;
     }
 
     // Source book path
     setProgress(10);
-    setLogMessages("3/7 - Checking source book...");
-    QString sourceBookPath = appDir + "books/" + currentBookName;
-    if (!QDir(sourceBookPath).exists()) {
-        setLogMessages("Error: Source book not found");
-        qDebug() << "Source book not found:" << sourceBookPath;
-        return false;
+    setLogMessages("📚  Verifying books…");
+    for (const QString &book : bookNames) {
+        if (!QDir(appDir + "books/" + book).exists()) {
+            setLogMessages("✖  Book not found: " + book);
+            qDebug() << "Source book not found:" << (appDir + "books/" + book);
+            return false;
+        }
     }
 
     int totalPlatforms = platforms.length();
@@ -703,61 +744,70 @@ bool PdfProcess::package(const QStringList &platforms, const QString &currentBoo
         int baseProgress = 10 + (currentPlatform - 1) * progressPerPlatform;
         
         setProgress(baseProgress);
-        setLogMessages(QString("4/7 - Processing platform %1 of %2: %3").arg(currentPlatform).arg(totalPlatforms).arg(platformName));
-        
+        setLogMessages(QString("▸  %1   (%2/%3)").arg(platformName).arg(currentPlatform).arg(totalPlatforms));
+
         QString platformFolder = getPlatformFolderName(platform);
         if (platformFolder.isEmpty()) {
-            setLogMessages(QString("Warning: Skipping unknown platform %1").arg(platformName));
+            setLogMessages(QString("    ⚠  Skipping unknown platform %1").arg(platformName));
             continue;
         }
 
         // FlowBook version bulma
         setProgress(baseProgress + progressPerPlatform * 0.2); // %20
-        setLogMessages(QString("5/7 - Finding FlowBook version for %1...").arg(platformName));
         QString packagePath = appDir + "package/" + platformFolder;
         QString flowBookVersion = getLatestFlowBookVersion(packagePath);
-        
+
         if (flowBookVersion.isEmpty()) {
-            setLogMessages(QString("Error: No FlowBook version found for %1").arg(platformName));
-            qDebug() << "No FlowBook version found for platform:" << platformFolder;
+            setLogMessages(QString("    ✖  No FlowBook build in package/%1").arg(platformFolder));
+            qDebug() << "No FlowBook version found for platform:" << platformFolder << "in" << packagePath;
             continue;
         }
+        setLogMessages(QString("    FlowBook %1").arg(flowBookVersion));
 
         // Source FlowBook path
         QString sourceFlowBookPath = packagePath + "/" + flowBookVersion;
         
-        // Create the new folder name with book name
-        QString targetFolderName = flowBookVersion + " - " + currentBookName;
+        // Create the new folder name with the package name
+        QString targetFolderName = flowBookVersion + " - " + packageName;
         QString targetPath = releaseBookPath + "/" + targetFolderName;
 
         // FlowBook kopyalama
         setProgress(baseProgress + progressPerPlatform * 0.4); // %40
-        setLogMessages(QString("6/7 - Copying FlowBook for %1...").arg(platformName));
+        setLogMessages("    Copying app…");
         qDebug() << "sourceFlowBookPath" << sourceFlowBookPath;
         qDebug() << "targetPath" << targetPath;
 
         if (!copyDir(sourceFlowBookPath, targetPath)) {
-            setLogMessages(QString("Error: Failed to copy FlowBook for %1").arg(platformName));
+            setLogMessages(QString("    ✖  Failed to copy FlowBook for %1").arg(platformName));
             qDebug() << "Failed to copy FlowBook from" << sourceFlowBookPath << "to" << targetPath;
             continue;
         }
 
-        // Book data kopyalama
+        // Book data kopyalama (her seçili kitap data/books/ altına, filtreli)
         setProgress(baseProgress + progressPerPlatform * 0.6); // %60
-        setLogMessages(QString("6/7 - Copying book data for %1...").arg(platformName));
-        QString targetBookPath = targetPath + "/data/books/" + currentBookName;
-        if (!copyDir(sourceBookPath, targetBookPath)) {
-            setLogMessages(QString("Error: Failed to copy book data for %1").arg(platformName));
-            qDebug() << "Failed to copy book from" << sourceBookPath << "to" << targetBookPath;
-            continue;
+        setLogMessages("    Adding books…");
+        bool bookCopyOk = true;
+        for (const QString &book : bookNames) {
+            QString srcBook = appDir + "books/" + book;
+            QString dstBook = targetPath + "/data/books/" + book;
+            qDebug() << "copying book" << srcBook << "->" << dstBook;
+            if (!copyDir(srcBook, dstBook, true)) {
+                setLogMessages(QString("    ✖  Failed to add book %1").arg(book));
+                qDebug() << "Failed to copy book from" << srcBook << "to" << dstBook;
+                bookCopyOk = false;
+                break;
+            }
+            setLogMessages(QString("       ✓  %1").arg(book));
         }
+        if (!bookCopyOk)
+            continue;
 
-        // Zip işlemiq
+        // Zip işlemi
         setProgress(baseProgress + progressPerPlatform * 0.8); // %80
-        setLogMessages(QString("7/7 - Creating zip file for %1...").arg(platformName));
+        setLogMessages("    Zipping…");
         QString zipPath = releaseBookPath + "/" + targetFolderName + ".zip";
         if (!zipFolder(targetPath, zipPath)) {
-            setLogMessages(QString("Error: Failed to create zip file for %1").arg(platformName));
+            setLogMessages(QString("    ✖  Failed to zip %1").arg(platformName));
             qDebug() << "Failed to create zip file for:" << targetPath;
             continue;
         }
@@ -765,18 +815,17 @@ bool PdfProcess::package(const QStringList &platforms, const QString &currentBoo
         // Temizlik
         setProgress(baseProgress + progressPerPlatform * 0.9); // %90
         if (!removeDir(targetPath)) {
-            setLogMessages(QString("Warning: Failed to remove temporary folder for %1").arg(platformName));
             qDebug() << "Warning: Failed to remove temporary folder:" << targetPath;
         }
 
         // Platform tamamlandı
         setProgress(baseProgress + progressPerPlatform);
-        setLogMessages(QString("✅ Completed packaging for %1").arg(platformName));
+        setLogMessages(QString("    ✅  %1 ready").arg(platformName));
     }
 
     // Tüm işlem tamamlandı
     setProgress(100);
-    setLogMessages("✨ Packaging process completed!");
+    setLogMessages(QString("✨  Done — \"%1\" is ready in the release folder.").arg(packageName));
     return true;
 }
 
@@ -1039,11 +1088,16 @@ void PdfProcess::detectHeaderText(const QString &rawDir, int pageNumber,
     process->start(pythonExecutable(), arguments);
 }
 
-bool PdfProcess::packageForPlatforms(const QStringList &platforms, const QString &currentBookName) {
-    //QtConcurrent::run(this, &PdfProcess::package,platforms, currentBookName);
-
+bool PdfProcess::packageForPlatforms(const QStringList &platforms, const QStringList &bookNames) {
+    // Don't allow a second packaging run to start while one is in flight
+    // (overlapping threads would interleave their progress/log output).
+    if (!_isPackaging.testAndSetOrdered(0, 1)) {
+        setLogMessages("⏳  A package is already being built — please wait.");
+        return false;
+    }
     QThread* thread = QThread::create([=]() {
-        this->package(platforms, currentBookName);  // sınıf metodu
+        this->package(platforms, bookNames);  // sınıf metodu
+        _isPackaging.storeRelease(0);
     });
     qDebug() << "stack size " << thread->stackSize();
     connect(thread, &QThread::finished, thread, &QThread::deleteLater);

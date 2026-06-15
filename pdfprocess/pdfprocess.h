@@ -13,7 +13,7 @@ public:
     Q_INVOKABLE QStringList getTestVersions() const;
     Q_INVOKABLE void copyBookToTestVersion(const QString &testVersion, const QString &currentBookName);
     Q_INVOKABLE bool launchTestFlowBook(const QString &testVersion);
-    Q_INVOKABLE bool packageForPlatforms(const QStringList &platforms, const QString &currentBookName);
+    Q_INVOKABLE bool packageForPlatforms(const QStringList &platforms, const QStringList &bookNames);
     Q_INVOKABLE void copyAdditionalFiles(const QStringList &filePaths);
     Q_INVOKABLE void cropSectionFromPdf(const QString &pdfPath, int pageIndex,
                                          double x, double y, double w, double h,
@@ -38,7 +38,7 @@ public:
     QString logMessages() const;
     void setLogMessages(const QString &newLogMessages);
     bool removeDir(const QString &dirPath);
-    bool copyDir(const QString &srcPath, const QString &dstPath);
+    bool copyDir(const QString &srcPath, const QString &dstPath, bool filterBookData = false);
     bool zipFolder(const QString &sourceDir, const QString &zipFilePath);
 
 signals:
@@ -64,6 +64,8 @@ private:
     // extracted to a writable dir once per run; returns that dir.
     static QString scriptsDir();
 
-    bool package(const QStringList &platforms, const QString &currentBookName);
+    bool package(const QStringList &platforms, const QStringList &bookNames);
+
+    QAtomicInt _isPackaging = 0;   // guards against overlapping package runs
 
 };
