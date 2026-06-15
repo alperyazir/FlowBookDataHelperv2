@@ -10,6 +10,17 @@ class PdfProcess: public QObject {
 public:
     Q_INVOKABLE void startProcessing(const QString &pdfConfig);
     Q_INVOKABLE void startAIAnalysis(const QString &configPath, const QString &settingsPath);
+    // Locate audio/video icons by template-matching user-supplied crops
+    // (scripts/proto_icon_match.py) and write the sections into config.json.
+    // Either icon path may be empty. Reuses the aiAnalysisCompleted signal so
+    // the editor reloads config the same way it does after Analyze.
+    Q_INVOKABLE void matchIcons(const QString &configPath,
+                                const QString &audioIconPath,
+                                const QString &videoIconPath);
+    // Lowest page number among the book's audio/video files (page-encoded
+    // names like "...Pg-12-..." or "4.mp3"); -1 if none. Used to jump to a
+    // media page before cropping an icon template.
+    Q_INVOKABLE int firstMediaPage(const QString &bookDir, const QString &kind);
     Q_INVOKABLE QStringList getTestVersions() const;
     Q_INVOKABLE void copyBookToTestVersion(const QString &testVersion, const QString &currentBookName);
     Q_INVOKABLE bool launchTestFlowBook(const QString &testVersion);

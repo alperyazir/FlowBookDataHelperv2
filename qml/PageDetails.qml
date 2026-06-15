@@ -28,6 +28,7 @@ Item {
     property string cropNewSectionPath: ""
     property var cropPngRect: null         // crop rect in page-PNG px (for zone sync)
     property bool cropHeaderPick: false    // rect picks the headerText, no crop
+    property string cropIconKind: ""       // rect crops an icon template ("audio"/"video")
     property real cropStartX: 0
     property real cropStartY: 0
     property real cropEndX: 0
@@ -1950,10 +1951,30 @@ Item {
         print("Header pick mode started");
     }
 
+    // The drawn rect is cropped to a small template PNG used by the
+    // audio/video icon matcher (Find Audio/Video Icons). No activity,
+    // no section update — just an example icon for proto_icon_match.py.
+    function startIconCrop(kind) {
+        // Set crop state directly — startCropMode() dereferences its
+        // targetObj, but an icon crop has no target activity.
+        root.cropMode = true;
+        root.cropRedetect = false;
+        root.cropActivity = null;
+        root.cropActivityRef = null;
+        root.cropHeaderPick = false;
+        root.cropNewSectionPath = "";
+        root.cropPngRect = null;
+        root.cropIconKind = kind;          // "audio" or "video"
+        root.cropDrawing = false;
+        mainMouseArea.cursorShape = Qt.CrossCursor;
+        print("Icon template crop mode started: " + kind);
+    }
+
     function endCropMode() {
         root.cropMode = false;
         root.cropRedetect = false;
         root.cropHeaderPick = false;
+        root.cropIconKind = "";
         root.cropActivity = null;
         root.cropDrawing = false;
         mainMouseArea.cursorShape = Qt.ArrowCursor;
@@ -2011,6 +2032,22 @@ Item {
                 pdfPath, page.page_number,
                 originalX, originalY, originalW, originalH,
                 picture.sourceSize.width, picture.sourceSize.height
+            );
+            endCropMode();
+            return;
+        }
+
+        // Icon template pick: crop the rect to a template PNG for the
+        // audio/video icon matcher. No activity / section involved; the
+        // pdfProcess.cropCompleted signal carries the path to the toolbar.
+        if (root.cropIconKind !== "") {
+            var iconOut = appPath + bookDir.substring(2)
+                          + "/icon_template_" + root.cropIconKind + ".png";
+            pdfProcess.cropSectionFromPdf(
+                pdfPath, pageIndex,
+                originalX, originalY, originalW, originalH,
+                picture.sourceSize.width, picture.sourceSize.height,
+                iconOut
             );
             endCropMode();
             return;

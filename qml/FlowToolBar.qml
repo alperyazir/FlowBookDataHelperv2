@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import "newComponents"
 
 Rectangle {
@@ -106,12 +107,71 @@ Rectangle {
             }
         }
 
+        // Analyze regenerates all sections. Optionally crop one audio and/or
+        // video icon first; the OpenCV matcher (proto_icon_match.py) then
+        // positions the media buttons. Two actions: icons only, or analyze
+        // followed by the icon pass.
         Dialog {
             id: analyzeConfirmDialog
             modal: true
             anchors.centerIn: Overlay.overlay
-            width: 420
+            width: 520
             padding: 20
+
+            property string audioIconPath: ""
+            property string videoIconPath: ""
+            // when true, run the icon matcher right after Analyze finishes.
+            property bool runIconsAfterAnalyze: false
+
+            function bookConfigPath() {
+                return config.bookSets[0].bookDirectoryName + "/config.json";
+            }
+            // doSave: flush the in-memory model to config.json first. The
+            // post-Analyze chain MUST pass false — Analyze already wrote
+            // config.json on disk and the in-memory model is still stale
+            // (reloaded asynchronously), so saving would clobber it.
+            function runIconMatch(doSave) {
+                if (doSave)
+                    save();
+                pdfProcess.matchIcons(bookConfigPath(),
+                                      audioIconPath, videoIconPath);
+                flowProgress.reset();
+                flowProgress.statusText = "Finding audio/video icons...";
+                flowProgress.addLogMessage("Matching icon templates...");
+                flowProgress.open();
+            }
+
+            // Crop template flow reuses pdfProcess.cropSectionFromPdf; the
+            // chaining handler runs the matcher after Analyze completes.
+            Connections {
+                target: pdfProcess
+                // Identify an icon-template crop by its output path (icon
+                // crops write icon_template_<kind>.png), not by transient
+                // state — so an abandoned crop can't poison a later activity
+                // crop, and normal activity crops are ignored here.
+                function onCropCompleted(success, outputPath) {
+                    var isAudio = outputPath.indexOf("icon_template_audio") !== -1;
+                    var isVideo = outputPath.indexOf("icon_template_video") !== -1;
+                    if (!isAudio && !isVideo)
+                        return;
+                    if (success) {
+                        if (isAudio)
+                            analyzeConfirmDialog.audioIconPath = outputPath;
+                        else
+                            analyzeConfirmDialog.videoIconPath = outputPath;
+                    }
+                    analyzeConfirmDialog.open();
+                }
+                function onAiAnalysisCompleted(success) {
+                    if (!analyzeConfirmDialog.runIconsAfterAnalyze)
+                        return;
+                    analyzeConfirmDialog.runIconsAfterAnalyze = false;
+                    if (success
+                        && (analyzeConfirmDialog.audioIconPath !== ""
+                            || analyzeConfirmDialog.videoIconPath !== ""))
+                        analyzeConfirmDialog.runIconMatch(false);  // disk fresh
+                }
+            }
 
             background: Rectangle {
                 color: "#1A2327"
@@ -120,17 +180,126 @@ Rectangle {
                 radius: 8
             }
 
-            contentItem: Column {
-                spacing: 16
+            FileDialog {
+                id: audioIconFileDialog
+                title: "Select audio icon image"
+                nameFilters: ["Images (*.png *.jpg *.jpeg *.bmp)"]
+                onAccepted: analyzeConfirmDialog.audioIconPath =
+                            selectedFile.toString().replace("file://", "")
+            }
+            FileDialog {
+                id: videoIconFileDialog
+                title: "Select video icon image"
+                nameFilters: ["Images (*.png *.jpg *.jpeg *.bmp)"]
+                onAccepted: analyzeConfirmDialog.videoIconPath =
+                            selectedFile.toString().replace("file://", "")
+            }
 
-                Text {
-                    width: parent.width
-                    text: "Analyze deletes and regenerates the existing sections "
-                          + "(fill, circle...) on ALL pages of the book. Any manual "
-                          + "edits you made will be overwritten.\n\nContinue?"
-                    color: "white"
-                    font.pixelSize: 14
-                    wrapMode: Text.WordWrap
+            contentItem: Column {
+                spacing: 14
+
+                Row {
+                    spacing: 8
+                    Text {
+                        width: 90; text: "Audio icon:"; color: "#9fb3ba"
+                        font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Rectangle {
+                        width: 218; height: 32; radius: 6
+                        color: "#232f34"; border.color: "#2a3a42"
+                        anchors.verticalCenter: parent.verticalCenter
+                        Text {
+                            anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8
+                            verticalAlignment: Text.AlignVCenter; elide: Text.ElideLeft
+                            text: analyzeConfirmDialog.audioIconPath === "" ? "— none —"
+                                                                       : analyzeConfirmDialog.audioIconPath
+                            color: analyzeConfirmDialog.audioIconPath === "" ? "#667788" : "#00e6e6"
+                            font.pixelSize: 12
+                        }
+                    }
+                    Button {
+                        text: "Crop"; width: 76; height: 32
+                        anchors.verticalCenter: parent.verticalCenter
+                        background: Rectangle {
+                            color: parent.hovered ? "#00b3be" : "#009ca6"; radius: 6
+                        }
+                        contentItem: Text {
+                            text: parent.text; color: "white"; font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
+                            analyzeConfirmDialog.close();
+                            content.goToFirstMediaPage("audio");
+                            content.startIconCrop("audio");
+                        }
+                    }
+                    Button {
+                        text: "File…"; width: 70; height: 32
+                        anchors.verticalCenter: parent.verticalCenter
+                        background: Rectangle {
+                            color: parent.hovered ? "#2A3337" : "#1A2327"
+                            border.color: "#445055"; radius: 6
+                        }
+                        contentItem: Text {
+                            text: parent.text; color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: audioIconFileDialog.open()
+                    }
+                }
+
+                Row {
+                    spacing: 8
+                    Text {
+                        width: 90; text: "Video icon:"; color: "#9fb3ba"
+                        font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Rectangle {
+                        width: 218; height: 32; radius: 6
+                        color: "#232f34"; border.color: "#2a3a42"
+                        anchors.verticalCenter: parent.verticalCenter
+                        Text {
+                            anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8
+                            verticalAlignment: Text.AlignVCenter; elide: Text.ElideLeft
+                            text: analyzeConfirmDialog.videoIconPath === "" ? "— none —"
+                                                                       : analyzeConfirmDialog.videoIconPath
+                            color: analyzeConfirmDialog.videoIconPath === "" ? "#667788" : "#00e6e6"
+                            font.pixelSize: 12
+                        }
+                    }
+                    Button {
+                        text: "Crop"; width: 76; height: 32
+                        anchors.verticalCenter: parent.verticalCenter
+                        background: Rectangle {
+                            color: parent.hovered ? "#00b3be" : "#009ca6"; radius: 6
+                        }
+                        contentItem: Text {
+                            text: parent.text; color: "white"; font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
+                            analyzeConfirmDialog.close();
+                            content.goToFirstMediaPage("video");
+                            content.startIconCrop("video");
+                        }
+                    }
+                    Button {
+                        text: "File…"; width: 70; height: 32
+                        anchors.verticalCenter: parent.verticalCenter
+                        background: Rectangle {
+                            color: parent.hovered ? "#2A3337" : "#1A2327"
+                            border.color: "#445055"; radius: 6
+                        }
+                        contentItem: Text {
+                            text: parent.text; color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: videoIconFileDialog.open()
+                    }
                 }
 
                 Row {
@@ -139,30 +308,48 @@ Rectangle {
 
                     Button {
                         text: "Cancel"
-                        width: 90
-                        height: 36
+                        width: 90; height: 36
                         background: Rectangle {
                             color: parent.hovered ? "#2A3337" : "#1A2327"
-                            border.color: "#445055"
-                            border.width: 1
-                            radius: 6
+                            border.color: "#445055"; border.width: 1; radius: 6
                         }
                         contentItem: Text {
-                            text: parent.text
-                            color: "white"
+                            text: parent.text; color: "white"
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
                         onClicked: analyzeConfirmDialog.close()
                     }
 
+                    // Run only the icon matcher (no Analyze).
                     Button {
-                        text: "Analyze"
-                        width: 90
-                        height: 36
-                        // Block a second launch while one analysis is live:
-                        // concurrent runs corrupt the shared progress bar and
-                        // race on config.json.
+                        text: "Icons only"
+                        width: 110; height: 36
+                        enabled: !pdfProcess.aiAnalyzing
+                                 && (analyzeConfirmDialog.audioIconPath !== ""
+                                     || analyzeConfirmDialog.videoIconPath !== "")
+                        background: Rectangle {
+                            color: !parent.enabled ? "#34464d"
+                                                   : (parent.hovered ? "#2A3337" : "#1A2327")
+                            border.color: "#009ca6"; border.width: 1; radius: 6
+                        }
+                        contentItem: Text {
+                            text: parent.text; color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
+                            if (pdfProcess.aiAnalyzing)
+                                return;
+                            analyzeConfirmDialog.close();
+                            analyzeConfirmDialog.runIconMatch(true);  // flush edits first
+                        }
+                    }
+
+                    // Run Analyze, then the icon matcher (if icons were given).
+                    Button {
+                        text: "Analyze + Icons"
+                        width: 150; height: 36
                         enabled: !pdfProcess.aiAnalyzing
                         background: Rectangle {
                             color: !parent.enabled ? "#5a8d91"
@@ -170,9 +357,7 @@ Rectangle {
                             radius: 6
                         }
                         contentItem: Text {
-                            text: parent.text
-                            color: "white"
-                            font.bold: true
+                            text: parent.text; color: "white"; font.bold: true
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -181,21 +366,17 @@ Rectangle {
                                 return;
                             analyzeConfirmDialog.close();
 
-                            var bookDir = config.bookSets[0].bookDirectoryName;
-                            var configPath = bookDir + "/config.json";
+                            var configPath = analyzeConfirmDialog.bookConfigPath();
                             var settingsPath = appPath + "settings.json";
 
-                            console.log("AI Analyze - bookDir: " + bookDir);
-                            console.log("AI Analyze - configPath: " + configPath);
-                            console.log("AI Analyze - settingsPath: " + settingsPath);
+                            // chain the icon pass after Analyze if a template is set
+                            analyzeConfirmDialog.runIconsAfterAnalyze =
+                                (analyzeConfirmDialog.audioIconPath !== ""
+                                 || analyzeConfirmDialog.videoIconPath !== "");
 
-                            // Save current changes first
                             save();
-
-                            // Start AI analysis
                             pdfProcess.startAIAnalysis(configPath, settingsPath);
 
-                            // Show progress dialog
                             flowProgress.reset();
                             flowProgress.statusText = "AI Analysis in progress...";
                             flowProgress.addLogMessage("Starting AI analysis...");

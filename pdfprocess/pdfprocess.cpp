@@ -3,6 +3,7 @@
 #include <QProcess>
 #include <QTemporaryFile>
 #include <QDir>
+#include <QRegularExpression>
 #include <QTextStream>
 #include <QFile>
 #include <QGuiApplication>
@@ -362,6 +363,140 @@ void PdfProcess::startAIAnalysis(const QString &configPath, const QString &setti
     process->start(pythonExecutable(), arguments);
 
     qDebug() << "AI Analyzer process started";
+}
+
+void PdfProcess::matchIcons(const QString &configPath,
+                            const QString &audioIconPath,
+                            const QString &videoIconPath)
+{
+    if (audioIconPath.isEmpty() && videoIconPath.isEmpty()) {
+        qDebug() << "matchIcons: no icon template given — nothing to do";
+        emit aiAnalysisCompleted(false);
+        return;
+    }
+    // Share the AI re-entry guard: both write config.json and shouldn't race.
+    if (_aiAnalyzing) {
+        qDebug() << "matchIcons: a run is already live — ignoring";
+        return;
+    }
+    _aiAnalyzing = true;
+    emit aiAnalyzingChanged();
+
+    qDebug() << "matchIcons config:" << configPath
+             << "audio:" << audioIconPath << "video:" << videoIconPath;
+
+    QProcess *process = new QProcess(this);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    process->setProcessEnvironment(env);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+
+    connect(process, &QProcess::readyRead, [this, process]() {
+        while (process->canReadLine()) {
+            QString line = QString::fromUtf8(process->readLine()).trimmed();
+            if (line.isEmpty()) continue;
+            if (line.startsWith("PROGRESS:")) {
+                bool ok;
+                int v = line.mid(9, line.indexOf("%") - 9).toInt(&ok);
+                if (ok) setProgress(v);
+            } else {
+                setLogMessages(line);
+                qDebug() << line;
+            }
+        }
+    });
+
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+                QByteArray rest = process->readAllStandardOutput();
+                if (!rest.isEmpty()) {
+                    for (const QString &line :
+                         QString::fromUtf8(rest).split('\n', Qt::SkipEmptyParts)) {
+                        QString t = line.trimmed();
+                        if (t.startsWith("PROGRESS:")) {
+                            bool ok;
+                            int v = t.mid(9, t.indexOf("%") - 9).toInt(&ok);
+                            if (ok) setProgress(v);
+                        } else {
+                            setLogMessages(t);
+                            qDebug() << "Remaining output:" << line;
+                        }
+                    }
+                }
+                _aiAnalyzing = false;
+                emit aiAnalyzingChanged();
+                bool ok = (exitStatus == QProcess::NormalExit && exitCode == 0);
+                setLogMessages(ok ? "Icon match completed"
+                                  : "Icon match failed with exit code: "
+                                        + QString::number(exitCode));
+                emit aiAnalysisCompleted(ok);
+                process->deleteLater();
+            });
+
+    connect(process, &QProcess::errorOccurred, [this, process](QProcess::ProcessError error) {
+        qDebug() << "matchIcons process error:" << error << process->errorString();
+        setLogMessages("Icon match process error: " + process->errorString());
+        _aiAnalyzing = false;
+        emit aiAnalyzingChanged();
+        emit aiAnalysisCompleted(false);
+        process->deleteLater();
+    });
+
+    QString scriptPath = scriptsDir() + "/proto_icon_match.py";
+    QStringList arguments;
+    arguments << "-u" << scriptPath << configPath;
+    if (!audioIconPath.isEmpty())
+        arguments << "--audio-icon" << audioIconPath;
+    if (!videoIconPath.isEmpty())
+        arguments << "--video-icon" << videoIconPath;
+
+    qDebug() << "ICON MATCH SCRIPT PATH: " << arguments;
+    process->start(pythonExecutable(), arguments);
+    qDebug() << "Icon match process started";
+}
+
+int PdfProcess::firstMediaPage(const QString &bookDir, const QString &kind)
+{
+    const bool isVideo = (kind == "video");
+    const QString sub = isVideo ? "/video" : "/audio";
+    const QStringList exts = isVideo
+        ? QStringList{"mp4", "m4v", "mov", "webm"}
+        : QStringList{"mp3", "wav", "m4a", "ogg"};
+    QDir dir(bookDir + sub);
+    if (!dir.exists())
+        return -1;
+
+    // page-encoded names: "...Pg-12-...", "Page 10 ...", "Unit2_Pg-7", or
+    // bare "4.mp3". The lookbehind (not a letter) lets '_'/'-'/'.'/digit
+    // precede the token — \b fails on '_' since it is a word char — while
+    // still rejecting the 'p' inside ".mp3"/"mp4".
+    QRegularExpression labelled(R"((?<![a-z])p(?:age|g)?[\s_\-]*0*(\d+))",
+                                QRegularExpression::CaseInsensitiveOption);
+    QRegularExpression bare(R"(^0*(\d+)[a-z]?\.)",
+                            QRegularExpression::CaseInsensitiveOption);
+
+    int best = -1;
+    const QStringList files = dir.entryList(QDir::Files);
+    for (const QString &f : files) {
+        const QString lf = f.toLower();
+        bool isMedia = false;
+        for (const QString &e : exts)
+            if (lf.endsWith("." + e)) { isMedia = true; break; }
+        if (!isMedia)
+            continue;
+        int pn = -1;
+        QRegularExpressionMatch m = labelled.match(f);
+        if (m.hasMatch())
+            pn = m.captured(1).toInt();
+        else {
+            QRegularExpressionMatch mb = bare.match(f);
+            if (mb.hasMatch())
+                pn = mb.captured(1).toInt();
+        }
+        if (pn > 0 && (best < 0 || pn < best))
+            best = pn;
+    }
+    return best;
 }
 
 QString PdfProcess::logMessages() const

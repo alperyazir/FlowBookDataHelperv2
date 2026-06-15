@@ -69,6 +69,26 @@ Rectangle {
         }
     }
 
+    // Jump to the first page that already has an audio/video section, so the
+    // icon-template Crop lands on a media page. Best-effort: returns false if
+    // the book has no such section yet (e.g. before the first Analyze).
+    // Jump to the first page that has an audio/video FILE, read straight from
+    // the book's audio/ or video/ folder (page-encoded names). Robust: works
+    // before any Analyze and regardless of the loaded config's sections.
+    function goToFirstMediaPage(kind) {
+        if (!pages || pages.length === 0) return false;
+        var bookDir = config.bookSets[0].bookDirectoryName;
+        var pn = pdfProcess.firstMediaPage(bookDir, kind);
+        if (pn > 0) {
+            var idx = pn - pages[0].page_number;
+            if (idx >= 0 && idx < pages.length) {   // file may name an out-of-range page
+                goToPage(idx);
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Jump `delta` pages (e.g. ±10), clamped to the book bounds.
     function goBy(delta) {
         if (!pages || pages.length === 0) return;
@@ -94,5 +114,9 @@ Rectangle {
 
     function startHeaderPickMode(targetObj) {
         pageDetails.startHeaderPickMode(targetObj);
+    }
+
+    function startIconCrop(kind) {
+        pageDetails.startIconCrop(kind);
     }
 }

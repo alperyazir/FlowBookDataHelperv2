@@ -11,6 +11,7 @@
         <file>scripts/proto_dragdrop.py</file>
         <file>scripts/proto_emit.py</file>
         <file>scripts/proto_eval.py</file>
+        <file>scripts/proto_icon_match.py</file>
         <file>scripts/proto_inventory.py</file>
         <file>scripts/proto_match.py</file>
         <file>scripts/proto_puzzle.py</file>
