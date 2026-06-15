@@ -18,7 +18,6 @@ import fitz
 # Diff-based detection (answered vs original PDF) — falls back to the
 # legacy answer-color detection if the modules are missing.
 try:
-    from proto_audio import build_audio_sections, build_video_section
     from proto_circle import build_circle_sections, build_markwithx_sections
     from proto_match import build_match_sections
     from proto_puzzle import build_puzzle_sections
@@ -822,11 +821,10 @@ def run_analysis(config_path, settings_path):
         print(f"AI overrides loaded: {overrides}", flush=True)
     dd_group_pages = set(overrides.get("dragdrop_group_pages", []))
     skip_fill_pages = set(overrides.get("skip_fill_pages", []))
-    # AI vision layer writes the headphone/speaker (audio) and play
-    # (video) icon bboxes it sees, per page, in PDF points:
-    #   {"audio_icons": {"10": [[x0,y0,x1,y1], ...]}, "video_icons": {...}}
-    audio_icons = {int(k): v for k, v in overrides.get("audio_icons", {}).items()}
-    video_icons = {int(k): v for k, v in overrides.get("video_icons", {}).items()}
+    # Audio/video sections are NOT built here anymore: the editor's
+    # "Find Audio/Video Icons" pass (proto_icon_match.py) positions them
+    # from a cropped template, which is faster and more accurate than the
+    # old AI-vision icon_regions feed. Analyze no longer touches audio/video.
 
     print("PROGRESS:5%", flush=True)
     print("Config loaded successfully", flush=True)
@@ -868,7 +866,6 @@ def run_analysis(config_path, settings_path):
 
     # 6. Analyze each page
     analyzed_count = 0
-    next_video_no = 1
     skipped_count = 0
 
     for i, page_info in enumerate(all_pages):
@@ -986,20 +983,7 @@ def run_analysis(config_path, settings_path):
                     original_page, pdf_page, scale_x, scale_y), ([], {}))
                 if fill_stats:
                     print(f"  Fill snap: {fill_stats}", flush=True)
-            book_prefix = section_path_prefix.split("/images/")[0]
-            audio_cfg = safe("audio", lambda: build_audio_sections(
-                original_page, scale_x, scale_y, page_num=page_num,
-                audio_dir=os.path.join(config_dir, "audio"),
-                audio_prefix=f"{book_prefix}/audio/",
-                icon_regions=audio_icons.get(page_num)), [])
-            video = safe("video", lambda: build_video_section(
-                original_page, scale_x, scale_y, next_video_no,
-                videos_dir=os.path.join(config_dir, "videos"),
-                video_prefix=f"{book_prefix}/videos/",
-                icon_regions=video_icons.get(page_num)), None)
-            if video is not None:
-                audio_cfg = audio_cfg + [video]
-                next_video_no += 1
+            # audio/video sections are produced by the icon matcher, not here
             circle_cfg = safe("circle", lambda: build_circle_sections(
                 original_page, pdf_page, page_num, images_dir,
                 section_path_prefix, scale_x, scale_y,
@@ -1020,13 +1004,11 @@ def run_analysis(config_path, settings_path):
             # (it over-triggers); match activities are added manually instead.
             # proto_match.py is still used for manual add / --redetect.
             match_cfg = []
-            cfg_sections = (fill_cfg + audio_cfg + dd_cfg + circle_cfg
+            cfg_sections = (fill_cfg + dd_cfg + circle_cfg
                             + markx_cfg + puzzle_cfg + match_cfg)
             fill_count = len(fill_cfg)
             circle_count = len(circle_cfg)
             dd_count = len(dd_cfg)
-            if audio_cfg:
-                print(f"  Audio icons: {len(audio_cfg)}", flush=True)
         else:
             fill_sections = analyze_page_pdf(pdf_page, answer_rgb, scale_x, scale_y)
             circle_sections = detect_circle_activities(
