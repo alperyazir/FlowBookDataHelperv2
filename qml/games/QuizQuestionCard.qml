@@ -1,6 +1,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Dialogs
+import QtQuick.Window
 import Qt.labs.platform
 import ".."
 
@@ -20,6 +21,22 @@ Rectangle {
     signal optionAdded
     signal optionDeleted(int index)
     signal questionDeleted
+
+    // Everything scales with the window height (1080 baseline) instead of
+    // fixed pixels, so the card stays proportional on any screen — while the
+    // card's *total* height still follows its content (no cramping).
+    readonly property real ui: Window.height > 0 ? Window.height / 1080 : 1.0
+    readonly property int labelW: Math.round(70 * ui)
+    readonly property int rowH: Math.round(38 * ui)
+    readonly property int optRowH: Math.round(34 * ui)
+    readonly property int pad: Math.round(12 * ui)
+    readonly property int gap: Math.round(10 * ui)
+    readonly property int cbSize: Math.round(22 * ui)
+    readonly property int delSize: Math.round(24 * ui)
+    readonly property int browseW: Math.round(70 * ui)
+    readonly property int fsTitle: Math.round(16 * ui)
+    readonly property int fs: Math.round(14 * ui)
+    readonly property int fsSmall: Math.round(13 * ui)
 
     // Simple function to process file path
     function processImagePath(filePath) {
@@ -83,8 +100,10 @@ Rectangle {
         console.log("Number of answers:", quizQuestion.answers.length);
     }
 
-    width: parent.width
-    height: parent.height
+    width: parent ? parent.width : 600
+    // Height follows the content so a card never leaves a big empty gap.
+    implicitHeight: contentColumn.implicitHeight + 2 * pad
+    height: implicitHeight
     radius: 8
     color: "#1A2327" // Ana tema rengi
     border.color: "#009ca6" // Turquoise border
@@ -128,52 +147,49 @@ Rectangle {
     }
 
     Column {
-        id: totalColumn
-        width: parent.width
-        height: parent.height
-        spacing: 10
+        id: contentColumn
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: root.pad
+        spacing: Math.round(8 * root.ui)
 
-        // Header Row
-        Row {
-            id: headerRow
+        // Header: title + delete button (anchored, never overflows the card)
+        Item {
             width: parent.width
-            height: parent.height * 0.12
+            height: Math.round(28 * root.ui)
 
             Text {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
                 text: "Question #" + questionId
-                width: parent.width / 4
-                height: parent.height
-                color: "#009ca6" // Turquoise text
-                font.pixelSize: root.height * 0.08
+                color: "#009ca6"
+                font.pixelSize: root.fsTitle
                 font.bold: true
-                verticalAlignment: Text.AlignVCenter
-                horizontalAlignment: Text.AlignLeft
-            }
-
-            Item {
-                width: parent.width / 4 * 3
-                height: parent.height
             }
 
             Rectangle {
                 id: deleteQuestionBtn
-                width: 28
-                height: 28
-                radius: 14
-                color: "#d2232b" // Red color for delete
+                anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                // Note: We could add opacity/color changes here but would need access to total question count
+                width: Math.round(26 * root.ui)
+                height: Math.round(26 * root.ui)
+                radius: width / 2
+                color: delQArea.containsMouse ? "#e23b42" : "#d2232b"
 
                 Text {
-                    text: "×"
                     anchors.centerIn: parent
+                    text: "×"
                     color: "white"
-                    font.pixelSize: 18
+                    font.pixelSize: root.fsTitle
                     font.bold: true
                 }
 
                 MouseArea {
+                    id: delQArea
                     anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         print("deleting Question");
                         questionDeleted();
@@ -182,36 +198,36 @@ Rectangle {
             }
         }
 
-        // Question Text Row
+        // Question text
         Row {
-            id: questionTextRow
             width: parent.width
-            height: parent.height * 0.12
+            height: root.rowH
+            spacing: root.gap
 
             Text {
-                text: "Text:"
-                width: parent.width / 7
+                width: root.labelW
                 height: parent.height
-                color: "#FFFFFF" // White text
-                font.pixelSize: root.height * 0.06
+                text: "Text:"
+                color: "#FFFFFF"
+                font.pixelSize: root.fs
                 verticalAlignment: Text.AlignVCenter
             }
 
             TextField {
                 id: questionTextField
-                width: parent.width / 7 * 6
+                width: parent.width - root.labelW - root.gap
                 height: parent.height
                 text: quizQuestion && quizQuestion.question ? quizQuestion.question : ""
-                color: "#FFFFFF" // White text
-                font.pixelSize: root.height * 0.06
+                color: "#FFFFFF"
+                font.pixelSize: root.fs
                 placeholderText: "Enter your question here..."
                 placeholderTextColor: "#666666"
 
                 background: Rectangle {
-                    color: "#232f34" // Darker background
+                    color: "#232f34"
                     border.color: questionTextField.focus ? "#009ca6" : "#445055"
                     border.width: 1
-                    radius: 4
+                    radius: 6
                 }
 
                 onTextChanged: {
@@ -222,36 +238,36 @@ Rectangle {
             }
         }
 
-        // Image Row
+        // Image path + browse
         Row {
-            id: imageRow
             width: parent.width
-            height: parent.height * 0.12
+            height: root.rowH
+            spacing: root.gap
 
             Text {
-                text: "Image:"
-                width: parent.width / 7
+                width: root.labelW
                 height: parent.height
-                color: "#FFFFFF" // White text
-                font.pixelSize: root.height * 0.06
+                text: "Image:"
+                color: "#FFFFFF"
+                font.pixelSize: root.fs
                 verticalAlignment: Text.AlignVCenter
             }
 
             TextField {
                 id: imageTextField
-                width: parent.width / 7 * 5
+                width: parent.width - root.labelW - root.browseW - 2 * root.gap
                 height: parent.height
                 text: quizQuestion && quizQuestion.image ? quizQuestion.image : ""
-                color: "#FFFFFF" // White text
-                font.pixelSize: root.height * 0.06
+                color: "#FFFFFF"
+                font.pixelSize: root.fs
                 placeholderText: "Select image file or enter path..."
                 placeholderTextColor: "#666666"
 
                 background: Rectangle {
-                    color: "#232f34" // Darker background
+                    color: "#232f34"
                     border.color: imageTextField.focus ? "#009ca6" : "#445055"
                     border.width: 1
-                    radius: 4
+                    radius: 6
                 }
 
                 onTextChanged: {
@@ -262,171 +278,165 @@ Rectangle {
             }
 
             Rectangle {
-                width: parent.width / 7
+                width: root.browseW
                 height: parent.height
-                color: "#009ca6"
-                radius: 4
+                radius: 6
+                color: browseArea.containsMouse ? "#00b3be" : "#009ca6"
 
                 Text {
                     anchors.centerIn: parent
                     text: "..."
                     color: "white"
-                    font.pixelSize: root.height * 0.08
+                    font.pixelSize: root.fsTitle
                     font.bold: true
                 }
 
                 MouseArea {
+                    id: browseArea
                     anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         console.log("File dialog button clicked");
                         imageFileDialog.open();
-                        console.log("File dialog opened");
                     }
                 }
             }
         }
 
-        // Scrollable Options Area
-        ScrollView {
-            id: optionsScrollView
-            width: parent.width
-            height: parent.height * 0.53  // Reduced from 0.65 to account for image row
-            clip: true
+        // Options
+        Repeater {
+            id: optionRepeater
+            model: quizQuestion && quizQuestion.answers ? quizQuestion.answers : []
 
-            Column {
-                id: optionsColumn
-                width: parent.width
-                spacing: 6
+            Row {
+                width: contentColumn.width
+                height: root.optRowH
+                spacing: root.gap
 
-                // Options Repeater
-                Repeater {
-                    id: optionRepeater
-                    model: quizQuestion && quizQuestion.answers ? quizQuestion.answers : []
-
-                    Row {
-                        id: optionRow
-                        width: optionsColumn.width
-                        height: root.height * 0.08
-                        spacing: 10
-
-                        Text {
-                            text: "Option " + (index + 1)
-                            width: parent.width / 7
-                            height: parent.height
-                            color: "#FFFFFF" // White text
-                            font.pixelSize: root.height * 0.05
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        // Correct Answer Checkbox
-                        Rectangle {
-                            width: 22
-                            height: 22
-                            radius: 4
-                            color: "white"
-                            border.color: "#009ca6"
-                            border.width: 2
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: {
-                                    if (modelData) {
-                                        modelData.isCorrect = !modelData.isCorrect;
-                                    }
-                                }
-                            }
-
-                            // Checkmark
-                            Text {
-                                anchors.centerIn: parent
-                                text: modelData && modelData.isCorrect ? "✓" : ""
-                                color: "#009ca6"
-                                font.pixelSize: 14
-                                font.bold: true
-                            }
-                        }
-
-                        TextField {
-                            id: answerTextField
-                            width: parent.width / 7 * 4
-                            height: parent.height
-                            text: modelData && modelData.text ? modelData.text : ""
-                            color: "#FFFFFF" // White text
-                            font.pixelSize: root.height * 0.05
-                            placeholderText: "Enter option " + (index + 1)
-                            placeholderTextColor: "#666666"
-
-                            background: Rectangle {
-                                color: "#232f34" // Darker background
-                                border.color: answerTextField.focus ? "#009ca6" : "#445055"
-                                border.width: 1
-                                radius: 4
-                            }
-
-                            onTextChanged: {
-                                if (modelData) {
-                                    modelData.text = text;
-                                }
-                            }
-                        }
-
-                        // Delete Option Button
-                        Rectangle {
-                            id: deleteOptionBtn
-                            color: (quizQuestion && quizQuestion.answers && quizQuestion.answers.length <= 3) ? "#999999" : "#d2232b" // Gray if disabled
-                            width: 22
-                            height: 22
-                            radius: 11
-                            anchors.verticalCenter: parent.verticalCenter
-                            opacity: (quizQuestion && quizQuestion.answers && quizQuestion.answers.length <= 3) ? 0.5 : 1.0
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "×"
-                                color: "white"
-                                font.pixelSize: 14
-                                font.bold: true
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                enabled: !(quizQuestion && quizQuestion.answers && quizQuestion.answers.length <= 3)
-                                onClicked: {
-                                    print("deleting Option");
-                                    optionDeleted(index);
-                                }
-                            }
-                        }
-                    }
+                Text {
+                    width: root.labelW
+                    height: parent.height
+                    text: "Option " + (index + 1)
+                    color: "#FFFFFF"
+                    font.pixelSize: root.fsSmall
+                    verticalAlignment: Text.AlignVCenter
                 }
 
-                // Add New Option Button - Now inside the ScrollView
+                // Correct-answer checkbox
                 Rectangle {
-                    id: addNewOptionBtn
-                    width: parent.width / 3
-                    height: root.height * 0.08
-                    radius: 6
-                    color: (quizQuestion && quizQuestion.answers && quizQuestion.answers.length >= 5) ? "#666666" : "#009ca6" // Gray if disabled
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    opacity: (quizQuestion && quizQuestion.answers && quizQuestion.answers.length >= 5) ? 0.5 : 1.0
+                    width: root.cbSize
+                    height: root.cbSize
+                    radius: 4
+                    color: "white"
+                    border.color: "#009ca6"
+                    border.width: 2
+                    anchors.verticalCenter: parent.verticalCenter
 
                     Text {
-                        text: "Add New Option"
                         anchors.centerIn: parent
-                        color: "white"
-                        font.pixelSize: root.height * 0.05
+                        text: modelData && modelData.isCorrect ? "✓" : ""
+                        color: "#009ca6"
+                        font.pixelSize: root.fs
                         font.bold: true
                     }
 
                     MouseArea {
                         anchors.fill: parent
-                        enabled: !(quizQuestion && quizQuestion.answers && quizQuestion.answers.length >= 5)
                         onClicked: {
-                            print("Add New Option");
-                            optionAdded();
+                            if (modelData) {
+                                modelData.isCorrect = !modelData.isCorrect;
+                            }
                         }
                     }
+                }
+
+                TextField {
+                    id: answerTextField
+                    width: parent.width - root.labelW - root.cbSize - root.delSize - 3 * root.gap
+                    height: parent.height
+                    text: modelData && modelData.text ? modelData.text : ""
+                    color: "#FFFFFF"
+                    font.pixelSize: root.fsSmall
+                    placeholderText: "Enter option " + (index + 1)
+                    placeholderTextColor: "#666666"
+
+                    background: Rectangle {
+                        color: "#232f34"
+                        border.color: answerTextField.focus ? "#009ca6" : "#445055"
+                        border.width: 1
+                        radius: 6
+                    }
+
+                    onTextChanged: {
+                        if (modelData) {
+                            modelData.text = text;
+                        }
+                    }
+                }
+
+                // Delete option
+                Rectangle {
+                    id: deleteOptionBtn
+                    width: root.delSize
+                    height: root.delSize
+                    radius: width / 2
+                    anchors.verticalCenter: parent.verticalCenter
+                    property bool canDelete: !(quizQuestion && quizQuestion.answers && quizQuestion.answers.length <= 3)
+                    color: !canDelete ? "#555f64" : (delOptArea.containsMouse ? "#e23b42" : "#d2232b")
+                    opacity: canDelete ? 1.0 : 0.5
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "×"
+                        color: "white"
+                        font.pixelSize: root.fsSmall
+                        font.bold: true
+                    }
+
+                    MouseArea {
+                        id: delOptArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: deleteOptionBtn.canDelete ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        enabled: deleteOptionBtn.canDelete
+                        onClicked: {
+                            print("deleting Option");
+                            optionDeleted(index);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add new option
+        Rectangle {
+            id: addNewOptionBtn
+            width: parent.width * 0.4
+            height: root.optRowH
+            radius: 6
+            anchors.horizontalCenter: parent.horizontalCenter
+            property bool canAdd: !(quizQuestion && quizQuestion.answers && quizQuestion.answers.length >= 5)
+            color: !canAdd ? "#555f64" : (addOptArea.containsMouse ? "#00b3be" : "#009ca6")
+            opacity: canAdd ? 1.0 : 0.5
+
+            Text {
+                text: "Add New Option"
+                anchors.centerIn: parent
+                color: "white"
+                font.pixelSize: root.fsSmall
+                font.bold: true
+            }
+
+            MouseArea {
+                id: addOptArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: addNewOptionBtn.canAdd ? Qt.PointingHandCursor : Qt.ArrowCursor
+                enabled: addNewOptionBtn.canAdd
+                onClicked: {
+                    print("Add New Option");
+                    optionAdded();
                 }
             }
         }

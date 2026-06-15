@@ -2,6 +2,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import QtQuick.Dialogs
+import QtQuick.Window
 import Qt.labs.platform
 import ".."
 
@@ -22,6 +23,22 @@ Rectangle {
     signal questionDeleted
     signal optionAdded
     signal optionDeleted(int index)
+
+    // Everything scales with the window height (1080 baseline) instead of
+    // fixed pixels, so the card stays proportional on any screen — while the
+    // card's *total* height still follows its content (no cramping).
+    readonly property real ui: Window.height > 0 ? Window.height / 1080 : 1.0
+    readonly property int labelW: Math.round(70 * ui)
+    readonly property int rowH: Math.round(38 * ui)
+    readonly property int optRowH: Math.round(34 * ui)
+    readonly property int pad: Math.round(12 * ui)
+    readonly property int gap: Math.round(10 * ui)
+    readonly property int cbSize: Math.round(22 * ui)
+    readonly property int delSize: Math.round(24 * ui)
+    readonly property int browseW: Math.round(70 * ui)
+    readonly property int fsTitle: Math.round(16 * ui)
+    readonly property int fs: Math.round(14 * ui)
+    readonly property int fsSmall: Math.round(13 * ui)
 
     function findBooksFolder(filePath, targetFolder) {
         var pathParts = filePath.split("/");
@@ -45,16 +62,14 @@ Rectangle {
         return null;
     }
 
-    width: parent.width
-    height: parent.height
+    width: parent ? parent.width : 600
+    // Height follows the content so a card never leaves a big empty gap.
+    implicitHeight: contentColumn.implicitHeight + 2 * pad
+    height: implicitHeight
     radius: 8
     color: "#1A2327"
     border.color: "#009ca6"
     border.width: 1
-
-    // Row height calculated based on available space
-    property real rowHeight: Math.max(24, root.height * 0.055)
-    property real fontSize: Math.max(10, root.height * 0.028)
 
     // FileDialogs
     FileDialog {
@@ -130,42 +145,52 @@ Rectangle {
     }
 
     Column {
-        anchors.fill: parent
-        anchors.margins: 8
-        spacing: 6
+        id: contentColumn
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: root.pad
+        spacing: Math.round(8 * root.ui)
 
-        // Header Row - 8%
-        Row {
+        // Header: title + delete button (anchored, never overflows the card)
+        Item {
             width: parent.width
-            height: root.height * 0.07
+            height: Math.round(28 * root.ui)
 
             Text {
+                anchors.left: parent.left
+                anchors.right: deleteQuestionBtn.left
+                anchors.rightMargin: root.gap
+                anchors.verticalCenter: parent.verticalCenter
                 text: "Selector Question #" + questionId
-                width: parent.width - 35
-                height: parent.height
                 color: "#009ca6"
-                font.pixelSize: Math.max(14, root.height * 0.04)
+                font.pixelSize: root.fsTitle
                 font.bold: true
-                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
             }
 
             Rectangle {
-                width: 28
-                height: 28
-                radius: 14
-                color: "#d2232b"
+                id: deleteQuestionBtn
+                anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
+                width: Math.round(26 * root.ui)
+                height: Math.round(26 * root.ui)
+                radius: width / 2
+                color: delQArea.containsMouse ? "#e23b42" : "#d2232b"
 
                 Text {
                     text: "×"
                     anchors.centerIn: parent
                     color: "white"
-                    font.pixelSize: 16
+                    font.pixelSize: root.fsTitle
                     font.bold: true
                 }
 
                 MouseArea {
+                    id: delQArea
                     anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onClicked: questionDeleted()
                 }
             }
@@ -174,7 +199,8 @@ Rectangle {
         // Question Media Section
         Rectangle {
             width: parent.width
-            height: root.height * 0.30
+            implicitHeight: questionMediaLayout.implicitHeight + 2 * Math.round(6 * root.ui)
+            height: implicitHeight
             color: "#232f34"
             border.color: "#009ca6"
             border.width: 1
@@ -182,36 +208,37 @@ Rectangle {
             clip: true
 
             ColumnLayout {
+                id: questionMediaLayout
                 anchors.fill: parent
-                anchors.margins: 6
-                spacing: 2
+                anchors.margins: Math.round(6 * root.ui)
+                spacing: Math.round(6 * root.ui)
 
                 // Header
                 Text {
                     text: "Question Media"
                     color: "#009ca6"
-                    font.pixelSize: fontSize
+                    font.pixelSize: root.fs
                     font.bold: true
-                    Layout.preferredHeight: 16
+                    Layout.preferredHeight: Math.round(18 * root.ui)
                 }
 
                 // Header and Text field row
                 RowLayout {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    spacing: 8
+                    Layout.preferredHeight: root.rowH
+                    spacing: root.gap
 
                     // Header field group
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        spacing: 4
+                        spacing: Math.round(4 * root.ui)
 
                         Text {
                             text: "Header:"
-                            Layout.preferredWidth: 45
+                            Layout.preferredWidth: Math.round(50 * root.ui)
                             color: "#FFFFFF"
-                            font.pixelSize: fontSize
+                            font.pixelSize: root.fs
                             verticalAlignment: Text.AlignVCenter
                         }
 
@@ -221,14 +248,14 @@ Rectangle {
                             Layout.fillHeight: true
                             text: selectorQuestion && selectorQuestion.header ? selectorQuestion.header : ""
                             color: "#FFFFFF"
-                            font.pixelSize: fontSize
+                            font.pixelSize: root.fs
                             placeholderText: "Header text..."
                             placeholderTextColor: "#666666"
                             background: Rectangle {
                                 color: "#1A2327"
                                 border.color: questionHeaderField.focus ? "#009ca6" : "#445055"
                                 border.width: 1
-                                radius: 3
+                                radius: 6
                             }
                             onTextChanged: {
                                 if (selectorQuestion) selectorQuestion.header = text;
@@ -240,13 +267,13 @@ Rectangle {
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        spacing: 4
+                        spacing: Math.round(4 * root.ui)
 
                         Text {
                             text: "Text:"
-                            Layout.preferredWidth: 30
+                            Layout.preferredWidth: Math.round(35 * root.ui)
                             color: "#FFFFFF"
-                            font.pixelSize: fontSize
+                            font.pixelSize: root.fs
                             verticalAlignment: Text.AlignVCenter
                         }
 
@@ -256,14 +283,14 @@ Rectangle {
                             Layout.fillHeight: true
                             text: selectorQuestion && selectorQuestion.question ? selectorQuestion.question : ""
                             color: "#FFFFFF"
-                            font.pixelSize: fontSize
+                            font.pixelSize: root.fs
                             placeholderText: "Question text..."
                             placeholderTextColor: "#666666"
                             background: Rectangle {
                                 color: "#1A2327"
                                 border.color: questionTextField.focus ? "#009ca6" : "#445055"
                                 border.width: 1
-                                radius: 3
+                                radius: 6
                             }
                             onTextChanged: {
                                 if (selectorQuestion) selectorQuestion.question = text;
@@ -275,20 +302,20 @@ Rectangle {
                 // Image and Audio in same row (2 columns)
                 RowLayout {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    spacing: 8
+                    Layout.preferredHeight: root.rowH
+                    spacing: root.gap
 
                     // Image field group
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        spacing: 4
+                        spacing: Math.round(4 * root.ui)
 
                         Text {
                             text: "Image:"
-                            Layout.preferredWidth: 40
+                            Layout.preferredWidth: Math.round(45 * root.ui)
                             color: "#FFFFFF"
-                            font.pixelSize: fontSize
+                            font.pixelSize: root.fs
                             verticalAlignment: Text.AlignVCenter
                         }
 
@@ -298,14 +325,14 @@ Rectangle {
                             Layout.fillHeight: true
                             text: selectorQuestion && selectorQuestion.image ? selectorQuestion.image : ""
                             color: "#FFFFFF"
-                            font.pixelSize: fontSize
+                            font.pixelSize: root.fs
                             placeholderText: "Select..."
                             placeholderTextColor: "#666666"
                             background: Rectangle {
                                 color: "#1A2327"
                                 border.color: questionImageField.focus ? "#009ca6" : "#445055"
                                 border.width: 1
-                                radius: 3
+                                radius: 6
                             }
                             onTextChanged: {
                                 if (selectorQuestion) selectorQuestion.image = text;
@@ -313,19 +340,23 @@ Rectangle {
                         }
 
                         Rectangle {
-                            Layout.preferredWidth: 28
+                            Layout.preferredWidth: root.delSize
                             Layout.fillHeight: true
-                            Layout.maximumHeight: 28
-                            color: "#009ca6"
-                            radius: 3
+                            Layout.maximumHeight: root.rowH
+                            color: qImgBrowseArea.containsMouse ? "#00b3be" : "#009ca6"
+                            radius: 6
                             Text {
                                 anchors.centerIn: parent
                                 text: "..."
                                 color: "white"
                                 font.bold: true
+                                font.pixelSize: root.fsTitle
                             }
                             MouseArea {
+                                id: qImgBrowseArea
                                 anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
                                 onClicked: questionImageDialog.open()
                             }
                         }
@@ -335,13 +366,13 @@ Rectangle {
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        spacing: 4
+                        spacing: Math.round(4 * root.ui)
 
                         Text {
                             text: "Audio:"
-                            Layout.preferredWidth: 40
+                            Layout.preferredWidth: Math.round(45 * root.ui)
                             color: "#FFFFFF"
-                            font.pixelSize: fontSize
+                            font.pixelSize: root.fs
                             verticalAlignment: Text.AlignVCenter
                         }
 
@@ -351,14 +382,14 @@ Rectangle {
                             Layout.fillHeight: true
                             text: selectorQuestion && selectorQuestion.audio ? selectorQuestion.audio : ""
                             color: "#FFFFFF"
-                            font.pixelSize: fontSize
+                            font.pixelSize: root.fs
                             placeholderText: "Select..."
                             placeholderTextColor: "#666666"
                             background: Rectangle {
                                 color: "#1A2327"
                                 border.color: questionAudioField.focus ? "#009ca6" : "#445055"
                                 border.width: 1
-                                radius: 3
+                                radius: 6
                             }
                             onTextChanged: {
                                 if (selectorQuestion) selectorQuestion.audio = text;
@@ -366,19 +397,23 @@ Rectangle {
                         }
 
                         Rectangle {
-                            Layout.preferredWidth: 28
+                            Layout.preferredWidth: root.delSize
                             Layout.fillHeight: true
-                            Layout.maximumHeight: 28
-                            color: "#009ca6"
-                            radius: 3
+                            Layout.maximumHeight: root.rowH
+                            color: qAudioBrowseArea.containsMouse ? "#00b3be" : "#009ca6"
+                            radius: 6
                             Text {
                                 anchors.centerIn: parent
                                 text: "..."
                                 color: "white"
                                 font.bold: true
+                                font.pixelSize: root.fsTitle
                             }
                             MouseArea {
+                                id: qAudioBrowseArea
                                 anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
                                 onClicked: questionAudioDialog.open()
                             }
                         }
@@ -388,14 +423,14 @@ Rectangle {
                 // Video field row
                 RowLayout {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    spacing: 4
+                    Layout.preferredHeight: root.rowH
+                    spacing: Math.round(4 * root.ui)
 
                     Text {
                         text: "Video:"
-                        Layout.preferredWidth: 40
+                        Layout.preferredWidth: Math.round(45 * root.ui)
                         color: "#FFFFFF"
-                        font.pixelSize: fontSize
+                        font.pixelSize: root.fs
                         verticalAlignment: Text.AlignVCenter
                     }
 
@@ -405,14 +440,14 @@ Rectangle {
                         Layout.fillHeight: true
                         text: selectorQuestion && selectorQuestion.video ? selectorQuestion.video : ""
                         color: "#FFFFFF"
-                        font.pixelSize: fontSize
+                        font.pixelSize: root.fs
                         placeholderText: "Select..."
                         placeholderTextColor: "#666666"
                         background: Rectangle {
                             color: "#1A2327"
                             border.color: questionVideoField.focus ? "#009ca6" : "#445055"
                             border.width: 1
-                            radius: 3
+                            radius: 6
                         }
                         onTextChanged: {
                             if (selectorQuestion) selectorQuestion.video = text;
@@ -420,19 +455,23 @@ Rectangle {
                     }
 
                     Rectangle {
-                        Layout.preferredWidth: 28
+                        Layout.preferredWidth: root.delSize
                         Layout.fillHeight: true
-                        Layout.maximumHeight: 28
-                        color: "#009ca6"
-                        radius: 3
+                        Layout.maximumHeight: root.rowH
+                        color: qVideoBrowseArea.containsMouse ? "#00b3be" : "#009ca6"
+                        radius: 6
                         Text {
                             anchors.centerIn: parent
                             text: "..."
                             color: "white"
                             font.bold: true
+                            font.pixelSize: root.fsTitle
                         }
                         MouseArea {
+                            id: qVideoBrowseArea
                             anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
                             onClicked: questionVideoDialog.open()
                         }
                     }
@@ -440,11 +479,12 @@ Rectangle {
             }
         }
 
-        // Options Section - 56%
+        // Options Section
         Rectangle {
             id: optionsSection
             width: parent.width
-            height: root.height * 0.56
+            implicitHeight: optionsLayout.implicitHeight + 2 * Math.round(6 * root.ui)
+            height: implicitHeight
             color: "#232f34"
             border.color: "#009ca6"
             border.width: 1
@@ -452,45 +492,48 @@ Rectangle {
             clip: true
 
             ColumnLayout {
+                id: optionsLayout
                 anchors.fill: parent
-                anchors.margins: 6
-                spacing: 4
+                anchors.margins: Math.round(6 * root.ui)
+                spacing: root.gap
 
                 // Header row
                 RowLayout {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 22
+                    Layout.preferredHeight: Math.round(24 * root.ui)
 
                     Text {
                         text: "Answer Options (" + (selectorQuestion.answers ? selectorQuestion.answers.length : 0) + ")"
                         color: "#009ca6"
-                        font.pixelSize: fontSize
+                        font.pixelSize: root.fs
                         font.bold: true
                         Layout.fillWidth: true
                         verticalAlignment: Text.AlignVCenter
                     }
 
                     Rectangle {
-                        Layout.preferredWidth: 80
-                        Layout.preferredHeight: 20
-                        color: {
+                        id: addOptionBtn
+                        property bool canAdd: {
                             let count = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 0;
-                            return count >= 5 ? "#666666" : "#009ca6";
+                            return count < 5;
                         }
-                        opacity: {
-                            let count = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 0;
-                            return count >= 5 ? 0.5 : 1.0;
-                        }
+                        Layout.preferredWidth: Math.round(90 * root.ui)
+                        Layout.preferredHeight: Math.round(24 * root.ui)
+                        color: !canAdd ? "#555f64" : (addOptArea.containsMouse ? "#00b3be" : "#009ca6")
+                        opacity: canAdd ? 1.0 : 0.5
                         radius: 4
                         Text {
                             anchors.centerIn: parent
                             text: "Add Option"
                             color: "white"
-                            font.pixelSize: fontSize * 0.9
+                            font.pixelSize: root.fsSmall
                             font.bold: true
                         }
                         MouseArea {
+                            id: addOptArea
                             anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: addOptionBtn.canAdd ? Qt.PointingHandCursor : Qt.ArrowCursor
                             onClicked: {
                                 let count = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 0;
                                 if (count < 5) optionAdded();
@@ -505,16 +548,16 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     columns: 2
-                    rowSpacing: 3
-                    columnSpacing: 4
+                    rowSpacing: root.gap
+                    columnSpacing: root.gap
 
                     Repeater {
                         model: selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers : []
 
                         Rectangle {
                             Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            Layout.minimumHeight: 26
+                            Layout.preferredHeight: root.optRowH
+                            Layout.minimumHeight: root.optRowH
                             color: "#1A2327"
                             border.color: "#445055"
                             border.width: 1
@@ -522,32 +565,34 @@ Rectangle {
 
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.margins: 3
-                                spacing: 3
+                                anchors.margins: Math.round(4 * root.ui)
+                                spacing: Math.round(4 * root.ui)
 
                                 // Option number
                                 Text {
                                     text: index + 1
-                                    Layout.preferredWidth: 14
+                                    Layout.preferredWidth: Math.round(16 * root.ui)
                                     color: "#009ca6"
                                     font.bold: true
-                                    font.pixelSize: fontSize * 0.9
+                                    font.pixelSize: root.fsSmall
                                     verticalAlignment: Text.AlignVCenter
                                     horizontalAlignment: Text.AlignHCenter
                                 }
 
                                 // Correct checkbox
                                 Rectangle {
-                                    Layout.preferredWidth: 18
-                                    Layout.preferredHeight: 18
+                                    Layout.preferredWidth: root.cbSize
+                                    Layout.preferredHeight: root.cbSize
                                     Layout.alignment: Qt.AlignVCenter
-                                    radius: 3
+                                    radius: 4
                                     color: "white"
                                     border.color: "#009ca6"
                                     border.width: 2
 
                                     MouseArea {
                                         anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
                                         onClicked: {
                                             if (modelData) modelData.isCorrect = !modelData.isCorrect;
                                         }
@@ -557,26 +602,27 @@ Rectangle {
                                         anchors.centerIn: parent
                                         text: modelData && modelData.isCorrect ? "✓" : ""
                                         color: "#009ca6"
-                                        font.pixelSize: parent.height * 0.7
+                                        font.pixelSize: root.fs
                                         font.bold: true
                                     }
                                 }
 
                                 // Text field
                                 TextField {
+                                    id: optionTextField
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
-                                    Layout.preferredWidth: 100
+                                    Layout.preferredWidth: Math.round(100 * root.ui)
                                     text: modelData && modelData.text ? modelData.text : ""
                                     color: "#FFFFFF"
-                                    font.pixelSize: fontSize * 0.85
+                                    font.pixelSize: root.fsSmall
                                     placeholderText: "Text..."
                                     placeholderTextColor: "#666666"
                                     background: Rectangle {
                                         color: "#232f34"
-                                        border.color: parent.focus ? "#009ca6" : "#445055"
+                                        border.color: optionTextField.focus ? "#009ca6" : "#445055"
                                         border.width: 1
-                                        radius: 3
+                                        radius: 6
                                     }
                                     onTextChanged: {
                                         if (modelData) modelData.text = text;
@@ -585,39 +631,43 @@ Rectangle {
 
                                 // Image field
                                 TextField {
+                                    id: optionImageField
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
-                                    Layout.preferredWidth: 100
+                                    Layout.preferredWidth: Math.round(100 * root.ui)
                                     text: modelData && modelData.image ? modelData.image : ""
                                     color: "#FFFFFF"
-                                    font.pixelSize: fontSize * 0.85
+                                    font.pixelSize: root.fsSmall
                                     placeholderText: "Image..."
                                     placeholderTextColor: "#666666"
                                     readOnly: true
                                     background: Rectangle {
                                         color: "#232f34"
-                                        border.color: parent.focus ? "#009ca6" : "#445055"
+                                        border.color: optionImageField.focus ? "#009ca6" : "#445055"
                                         border.width: 1
-                                        radius: 3
+                                        radius: 6
                                     }
                                 }
 
                                 // Image select button
                                 Rectangle {
-                                    Layout.preferredWidth: 22
-                                    Layout.preferredHeight: 22
+                                    Layout.preferredWidth: root.cbSize
+                                    Layout.preferredHeight: root.cbSize
                                     Layout.alignment: Qt.AlignVCenter
-                                    color: "#009ca6"
-                                    radius: 3
+                                    color: optImgBrowseArea.containsMouse ? "#00b3be" : "#009ca6"
+                                    radius: 4
                                     Text {
                                         anchors.centerIn: parent
                                         text: "..."
                                         color: "white"
                                         font.bold: true
-                                        font.pixelSize: 10
+                                        font.pixelSize: root.fsSmall
                                     }
                                     MouseArea {
+                                        id: optImgBrowseArea
                                         anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
                                         onClicked: {
                                             optionImageDialog.currentOptionIndex = index;
                                             optionImageDialog.open();
@@ -627,29 +677,31 @@ Rectangle {
 
                                 // Delete button
                                 Rectangle {
-                                    Layout.preferredWidth: 22
-                                    Layout.preferredHeight: 22
+                                    id: deleteOptionBtn
+                                    property bool canDelete: {
+                                        let count = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 0;
+                                        return count > 2;
+                                    }
+                                    Layout.preferredWidth: root.cbSize
+                                    Layout.preferredHeight: root.cbSize
                                     Layout.alignment: Qt.AlignVCenter
-                                    radius: 11
-                                    color: {
-                                        let count = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 0;
-                                        return count <= 2 ? "#666666" : "#d2232b";
-                                    }
-                                    opacity: {
-                                        let count = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 0;
-                                        return count <= 2 ? 0.5 : 1.0;
-                                    }
+                                    radius: width / 2
+                                    color: !canDelete ? "#555f64" : (delOptArea.containsMouse ? "#e23b42" : "#d2232b")
+                                    opacity: canDelete ? 1.0 : 0.5
 
                                     Text {
                                         text: "×"
                                         anchors.centerIn: parent
                                         color: "white"
-                                        font.pixelSize: parent.height * 0.6
+                                        font.pixelSize: root.fsSmall
                                         font.bold: true
                                     }
 
                                     MouseArea {
+                                        id: delOptArea
                                         anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: deleteOptionBtn.canDelete ? Qt.PointingHandCursor : Qt.ArrowCursor
                                         onClicked: {
                                             let count = selectorQuestion && selectorQuestion.answers ? selectorQuestion.answers.length : 0;
                                             if (count > 2) optionDeleted(index);

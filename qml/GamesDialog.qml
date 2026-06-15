@@ -645,13 +645,13 @@ Dialog {
 
             Button {
                 text: "Cancel"
-                width: 120
-                height: 40
+                width: 110
+                height: 36
                 background: Rectangle {
-                    color: "#1A2327"
-                    border.color: "#009ca6"
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#445055"
                     border.width: 1
-                    radius: 4
+                    radius: 6
                 }
                 contentItem: Text {
                     text: parent.text
@@ -667,17 +667,16 @@ Dialog {
 
             Button {
                 text: "Save"
-                width: 120
-                height: 40
+                width: 130
+                height: 36
                 background: Rectangle {
-                    color: "#1A2327"
-                    border.color: "#009ca6"
-                    border.width: 1
-                    radius: 4
+                    color: parent.hovered ? "#00b3be" : "#009ca6"
+                    radius: 6
                 }
                 contentItem: Text {
                     text: parent.text
                     color: "#FFFFFF"
+                    font.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -702,14 +701,14 @@ Dialog {
     }
 
     contentItem: ColumnLayout {
-        spacing: 10
+        spacing: 6
         anchors.fill: parent
         anchors.margins: 0
 
         // Title bar
         Rectangle {
             Layout.fillWidth: true
-            height: 40
+            Layout.preferredHeight: 44
             color: "#1A2327"
             border.color: "#009ca6"
             border.width: 1
@@ -830,7 +829,7 @@ Dialog {
         Rectangle {
             id: levelTabsContainer
             Layout.fillWidth: true
-            height: 50
+            Layout.preferredHeight: 42
             color: "#1A2327"
             border.color: "#009ca6"
             border.width: 0
@@ -868,21 +867,24 @@ Dialog {
 
                         // Close button
                         Rectangle {
-                            width: 20
-                            height: 20
-                            radius: 10
-                            color: "red"
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#d2232b"
 
                             anchors {
                                 right: parent.right
                                 top: parent.top
+                                rightMargin: 4
+                                topMargin: 4
                             }
 
                             Text {
                                 anchors.centerIn: parent
                                 text: "×"
                                 color: "white"
-                                font.pixelSize: 16
+                                font.pixelSize: 13
+                                font.bold: true
                             }
 
                             MouseArea {
@@ -944,7 +946,7 @@ Dialog {
         // Module name
         Rectangle {
             Layout.fillWidth: true
-            height: 50
+            Layout.preferredHeight: 42
             color: "#1A2327"
             Layout.leftMargin: 10
             Layout.rightMargin: 10
@@ -989,15 +991,15 @@ Dialog {
             color: "#232f34"
             border.color: "#009ca6"
             border.width: 1
-            radius: 0
+            radius: 8
             Layout.leftMargin: 10
             Layout.rightMargin: 10
-            Layout.bottomMargin: 55 // - Removed to extend to footer
+            Layout.bottomMargin: 10
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 10
-                spacing: 10
+                anchors.margins: 8
+                spacing: 6
 
                 // Games header
                 Text {
@@ -1011,8 +1013,8 @@ Dialog {
                 Flow {
                     id: gameTypeTabs
                     Layout.fillWidth: true
+                    Layout.preferredHeight: 40
                     spacing: 10
-                    height: 50
 
                     property int selectedGameType: 0
 
@@ -1102,7 +1104,7 @@ Dialog {
 
                         Rectangle {
                             width: 120  // Increased width to accommodate count
-                            height: 40
+                            height: 34
                             color: gameTypeTabs.selectedGameType === index ? "#009ca6" : "#1A2327"
                             border.color: "#009ca6"
                             border.width: 1
@@ -1164,20 +1166,23 @@ Dialog {
 
                             // Close button
                             Rectangle {
-                                width: 20
-                                height: 20
-                                radius: 10
-                                color: "red"
+                                width: 18
+                                height: 18
+                                radius: 9
+                                color: "#d2232b"
                                 anchors {
                                     right: parent.right
                                     top: parent.top
+                                    rightMargin: 4
+                                    topMargin: 4
                                 }
 
                                 Text {
                                     anchors.centerIn: parent
                                     text: "×"
                                     color: "white"
-                                    font.pixelSize: 16
+                                    font.pixelSize: 13
+                                    font.bold: true
                                 }
 
                                 MouseArea {
@@ -1222,7 +1227,7 @@ Dialog {
                     // Add new game type button
                     Rectangle {
                         width: 50
-                        height: 40
+                        height: 34
                         color: "#1A2327"
                         border.color: "#009ca6"
                         border.width: 1
@@ -1560,27 +1565,22 @@ Dialog {
                         flickableDirection: Flickable.VerticalFlick
                         boundsBehavior: Flickable.StopAtBounds
 
-                        // Mouse wheel support
+                        // Smooth momentum wheel scrolling (was abrupt 120px jumps).
                         MouseArea {
                             anchors.fill: parent
                             acceptedButtons: Qt.NoButton
                             onWheel: function (wheel) {
-                                if (wheel.angleDelta.y > 0) {
-                                    quizQuestionsListView.contentY = Math.max(0, quizQuestionsListView.contentY - 120);
-                                } else {
-                                    let maxContentY = Math.max(0, quizQuestionsListView.contentHeight - quizQuestionsListView.height);
-                                    quizQuestionsListView.contentY = Math.min(maxContentY, quizQuestionsListView.contentY + 120);
-                                }
+                                quizQuestionsListView.flick(0, wheel.angleDelta.y * 18);
                             }
                         }
 
                         delegate: Item {
                             width: quizQuestionsListView.width
-                            height: quizQuestionsListView.height * 0.4
+                            height: quizCard.height
 
                             QuizQuestionCard {
-                                width: parent ? parent.width * 0.75 : 600  // Safe fallback
-                                height: parent ? parent.height : 300      // Safe fallback
+                                id: quizCard
+                                width: parent ? parent.width * 0.92 : 600  // Safe fallback
                                 anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
 
                                 // Set question ID (index + 1 for 1-based numbering)
@@ -1647,10 +1647,10 @@ Dialog {
 
                             Rectangle {
                                 id: addNewQuestionBtn
-                                width: parent.width * 0.75
+                                width: parent.width * 0.92
                                 height: 50
                                 radius: 6
-                                color: "#009ca6" // Turquoise background
+                                color: addQuestionArea.containsMouse ? "#00b3be" : "#009ca6"
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.verticalCenter: parent.verticalCenter
 
@@ -1663,7 +1663,10 @@ Dialog {
                                 }
 
                                 MouseArea {
+                                    id: addQuestionArea
                                     anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         print("Add New Question");
                                         if (currentQuizGame) {
@@ -1721,27 +1724,22 @@ Dialog {
                         flickableDirection: Flickable.VerticalFlick
                         boundsBehavior: Flickable.StopAtBounds
 
-                        // Mouse wheel support
+                        // Smooth momentum wheel scrolling (was abrupt 120px jumps).
                         MouseArea {
                             anchors.fill: parent
                             acceptedButtons: Qt.NoButton
                             onWheel: function (wheel) {
-                                if (wheel.angleDelta.y > 0) {
-                                    memoryQuestionsListView.contentY = Math.max(0, memoryQuestionsListView.contentY - 120);
-                                } else {
-                                    let maxContentY = Math.max(0, memoryQuestionsListView.contentHeight - memoryQuestionsListView.height);
-                                    memoryQuestionsListView.contentY = Math.min(maxContentY, memoryQuestionsListView.contentY + 120);
-                                }
+                                memoryQuestionsListView.flick(0, wheel.angleDelta.y * 18);
                             }
                         }
 
                         delegate: Item {
                             width: memoryQuestionsListView.width
-                            height: memoryQuestionsListView.height * 0.4
+                            height: memoryCard.height
 
                             MemoryQuestionCard {
-                                width: parent ? parent.width * 0.75 : 600  // Safe fallback
-                                height: parent ? parent.height : 300      // Safe fallback
+                                id: memoryCard
+                                width: parent ? parent.width * 0.92 : 600  // Safe fallback
                                 anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
 
                                 // Set question ID (index + 1 for 1-based numbering)
@@ -1773,10 +1771,10 @@ Dialog {
 
                             Rectangle {
                                 id: addNewMemoryQuestionBtn
-                                width: parent.width * 0.75
+                                width: parent.width * 0.92
                                 height: 50
                                 radius: 6
-                                color: "#009ca6" // Turquoise background
+                                color: addMemoryArea.containsMouse ? "#00b3be" : "#009ca6"
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.verticalCenter: parent.verticalCenter
 
@@ -1789,7 +1787,10 @@ Dialog {
                                 }
 
                                 MouseArea {
+                                    id: addMemoryArea
                                     anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         print("Add New Memory Question");
                                         if (currentMemoryGame) {
@@ -1847,27 +1848,22 @@ Dialog {
                         flickableDirection: Flickable.VerticalFlick
                         boundsBehavior: Flickable.StopAtBounds
 
-                        // Mouse wheel support
+                        // Smooth momentum wheel scrolling (was abrupt 120px jumps).
                         MouseArea {
                             anchors.fill: parent
                             acceptedButtons: Qt.NoButton
                             onWheel: function (wheel) {
-                                if (wheel.angleDelta.y > 0) {
-                                    orderQuestionsListView.contentY = Math.max(0, orderQuestionsListView.contentY - 120);
-                                } else {
-                                    let maxContentY = Math.max(0, orderQuestionsListView.contentHeight - orderQuestionsListView.height);
-                                    orderQuestionsListView.contentY = Math.min(maxContentY, orderQuestionsListView.contentY + 120);
-                                }
+                                orderQuestionsListView.flick(0, wheel.angleDelta.y * 18);
                             }
                         }
 
                         delegate: Item {
                             width: orderQuestionsListView.width
-                            height: orderQuestionsListView.height * 0.4
+                            height: orderCard.height
 
                             OrderQuestionCard {
-                                width: parent ? parent.width * 0.75 : 600  // Safe fallback
-                                height: parent ? parent.height : 300      // Safe fallback
+                                id: orderCard
+                                width: parent ? parent.width * 0.92 : 600  // Safe fallback
                                 anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
 
                                 // Set question ID (index + 1 for 1-based numbering)
@@ -1899,10 +1895,10 @@ Dialog {
 
                             Rectangle {
                                 id: addNewOrderQuestionBtn
-                                width: parent.width * 0.75
+                                width: parent.width * 0.92
                                 height: 50
                                 radius: 6
-                                color: "#009ca6" // Turquoise background
+                                color: addOrderArea.containsMouse ? "#00b3be" : "#009ca6"
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.verticalCenter: parent.verticalCenter
 
@@ -1915,7 +1911,10 @@ Dialog {
                                 }
 
                                 MouseArea {
+                                    id: addOrderArea
                                     anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         print("Add New Order Question");
                                         if (currentOrderGame) {
@@ -1973,27 +1972,22 @@ Dialog {
                         flickableDirection: Flickable.VerticalFlick
                         boundsBehavior: Flickable.StopAtBounds
 
-                        // Mouse wheel support
+                        // Smooth momentum wheel scrolling (was abrupt 120px jumps).
                         MouseArea {
                             anchors.fill: parent
                             acceptedButtons: Qt.NoButton
                             onWheel: function (wheel) {
-                                if (wheel.angleDelta.y > 0) {
-                                    selectorQuestionsListView.contentY = Math.max(0, selectorQuestionsListView.contentY - 120);
-                                } else {
-                                    let maxContentY = Math.max(0, selectorQuestionsListView.contentHeight - selectorQuestionsListView.height);
-                                    selectorQuestionsListView.contentY = Math.min(maxContentY, selectorQuestionsListView.contentY + 120);
-                                }
+                                selectorQuestionsListView.flick(0, wheel.angleDelta.y * 18);
                             }
                         }
 
                         delegate: Item {
                             width: selectorQuestionsListView.width
-                            height: selectorQuestionsListView.height * 0.65  // Reduced from 0.8 to 0.65
+                            height: selectorCard.height
 
                             SelectorQuestionCard {
-                                width: parent ? parent.width * 0.75 : 600  // Safe fallback
-                                height: parent ? parent.height : 400      // Safe fallback
+                                id: selectorCard
+                                width: parent ? parent.width * 0.92 : 600  // Safe fallback
                                 anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
 
                                 // Set question ID (index + 1 for 1-based numbering)
@@ -2047,10 +2041,10 @@ Dialog {
 
                             Rectangle {
                                 id: addNewSelectorQuestionBtn
-                                width: parent.width * 0.75
+                                width: parent.width * 0.92
                                 height: 50
                                 radius: 6
-                                color: "#009ca6" // Turquoise background
+                                color: addSelectorArea.containsMouse ? "#00b3be" : "#009ca6"
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.verticalCenter: parent.verticalCenter
 
@@ -2063,7 +2057,10 @@ Dialog {
                                 }
 
                                 MouseArea {
+                                    id: addSelectorArea
                                     anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         print("Add New Selector Question");
                                         if (currentSelectorGame) {
@@ -2121,27 +2118,22 @@ Dialog {
                         flickableDirection: Flickable.VerticalFlick
                         boundsBehavior: Flickable.StopAtBounds
 
-                        // Mouse wheel support
+                        // Smooth momentum wheel scrolling (was abrupt 120px jumps).
                         MouseArea {
                             anchors.fill: parent
                             acceptedButtons: Qt.NoButton
                             onWheel: function (wheel) {
-                                if (wheel.angleDelta.y > 0) {
-                                    builderQuestionsListView.contentY = Math.max(0, builderQuestionsListView.contentY - 120);
-                                } else {
-                                    let maxContentY = Math.max(0, builderQuestionsListView.contentHeight - builderQuestionsListView.height);
-                                    builderQuestionsListView.contentY = Math.min(maxContentY, builderQuestionsListView.contentY + 120);
-                                }
+                                builderQuestionsListView.flick(0, wheel.angleDelta.y * 18);
                             }
                         }
 
                         delegate: Item {
                             width: builderQuestionsListView.width
-                            height: builderQuestionsListView.height * 0.65
+                            height: builderCard.height
 
                             BuilderQuestionCard {
-                                width: parent ? parent.width * 0.75 : 600  // Safe fallback
-                                height: parent ? parent.height : 400      // Safe fallback
+                                id: builderCard
+                                width: parent ? parent.width * 0.92 : 600  // Safe fallback
                                 anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
 
                                 // Set question ID (index + 1 for 1-based numbering)
@@ -2173,10 +2165,10 @@ Dialog {
 
                             Rectangle {
                                 id: addNewBuilderQuestionBtn
-                                width: parent.width * 0.75
+                                width: parent.width * 0.92
                                 height: 50
                                 radius: 6
-                                color: "#009ca6" // Turquoise background
+                                color: addBuilderArea.containsMouse ? "#00b3be" : "#009ca6"
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.verticalCenter: parent.verticalCenter
 
@@ -2189,7 +2181,10 @@ Dialog {
                                 }
 
                                 MouseArea {
+                                    id: addBuilderArea
                                     anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         print("Add New Builder Question");
                                         if (currentBuilderGame) {
@@ -2247,27 +2242,22 @@ Dialog {
                         flickableDirection: Flickable.VerticalFlick
                         boundsBehavior: Flickable.StopAtBounds
 
-                        // Mouse wheel support
+                        // Smooth momentum wheel scrolling (was abrupt 120px jumps).
                         MouseArea {
                             anchors.fill: parent
                             acceptedButtons: Qt.NoButton
                             onWheel: function (wheel) {
-                                if (wheel.angleDelta.y > 0) {
-                                    crosspuzzleQuestionsListView.contentY = Math.max(0, crosspuzzleQuestionsListView.contentY - 120);
-                                } else {
-                                    let maxContentY = Math.max(0, crosspuzzleQuestionsListView.contentHeight - crosspuzzleQuestionsListView.height);
-                                    crosspuzzleQuestionsListView.contentY = Math.min(maxContentY, crosspuzzleQuestionsListView.contentY + 120);
-                                }
+                                crosspuzzleQuestionsListView.flick(0, wheel.angleDelta.y * 18);
                             }
                         }
 
                         delegate: Item {
                             width: crosspuzzleQuestionsListView.width
-                            height: crosspuzzleQuestionsListView.height * 0.4  // Reduced from 0.6 to 0.4
+                            height: crosspuzzleCard.height
 
                             CrosspuzzleQuestionCard {
-                                width: parent ? parent.width * 0.75 : 600  // Safe fallback
-                                height: parent ? parent.height : 250      // Reduced from 300 to 250
+                                id: crosspuzzleCard
+                                width: parent ? parent.width * 0.92 : 600  // Safe fallback
                                 anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
 
                                 // Set question ID (index + 1 for 1-based numbering)
@@ -2299,10 +2289,10 @@ Dialog {
 
                             Rectangle {
                                 id: addNewCrosspuzzleQuestionBtn
-                                width: parent.width * 0.75
+                                width: parent.width * 0.92
                                 height: 50
                                 radius: 6
-                                color: "#009ca6" // Turquoise background
+                                color: addCrosspuzzleArea.containsMouse ? "#00b3be" : "#009ca6"
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.verticalCenter: parent.verticalCenter
 
@@ -2315,7 +2305,10 @@ Dialog {
                                 }
 
                                 MouseArea {
+                                    id: addCrosspuzzleArea
                                     anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         print("Add New Crosspuzzle Question");
                                         if (currentCrosspuzzleGame) {
@@ -2377,27 +2370,22 @@ Dialog {
                         flickableDirection: Flickable.VerticalFlick
                         boundsBehavior: Flickable.StopAtBounds
 
-                        // Mouse wheel support
+                        // Smooth momentum wheel scrolling (was abrupt 120px jumps).
                         MouseArea {
                             anchors.fill: parent
                             acceptedButtons: Qt.NoButton
                             onWheel: function (wheel) {
-                                if (wheel.angleDelta.y > 0) {
-                                    raceQuestionsListView.contentY = Math.max(0, raceQuestionsListView.contentY - 120);
-                                } else {
-                                    let maxContentY = Math.max(0, raceQuestionsListView.contentHeight - raceQuestionsListView.height);
-                                    raceQuestionsListView.contentY = Math.min(maxContentY, raceQuestionsListView.contentY + 120);
-                                }
+                                raceQuestionsListView.flick(0, wheel.angleDelta.y * 18);
                             }
                         }
 
                         delegate: Item {
                             width: raceQuestionsListView.width
-                            height: raceQuestionsListView.height * 0.65
+                            height: raceCard.height
 
                             RaceQuestionCard {
-                                width: parent ? parent.width * 0.75 : 600  // Safe fallback
-                                height: parent ? parent.height : 400      // Safe fallback
+                                id: raceCard
+                                width: parent ? parent.width * 0.92 : 600  // Safe fallback
                                 anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
 
                                 // Set question ID (index + 1 for 1-based numbering)
@@ -2429,10 +2417,10 @@ Dialog {
 
                             Rectangle {
                                 id: addNewRaceQuestionBtn
-                                width: parent.width * 0.75
+                                width: parent.width * 0.92
                                 height: 50
                                 radius: 6
-                                color: "#009ca6" // Turquoise background
+                                color: addRaceArea.containsMouse ? "#00b3be" : "#009ca6"
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.verticalCenter: parent.verticalCenter
 
@@ -2445,7 +2433,10 @@ Dialog {
                                 }
 
                                 MouseArea {
+                                    id: addRaceArea
                                     anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         print("Add New Race Question");
                                         if (currentRaceGame) {

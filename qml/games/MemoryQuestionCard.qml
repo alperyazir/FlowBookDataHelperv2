@@ -1,6 +1,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Dialogs
+import QtQuick.Window
 import Qt.labs.platform
 import ".."
 
@@ -17,6 +18,20 @@ Rectangle {
 
     // Signals for external communication
     signal questionDeleted
+
+    // Everything scales with the window height (1080 baseline) instead of
+    // fixed pixels, so the card stays proportional on any screen — while the
+    // card's *total* height still follows its content (no cramping).
+    readonly property real ui: Window.height > 0 ? Window.height / 1080 : 1.0
+    readonly property int labelW: Math.round(70 * ui)
+    readonly property int rowH: Math.round(38 * ui)
+    readonly property int pad: Math.round(12 * ui)
+    readonly property int gap: Math.round(10 * ui)
+    readonly property int browseW: Math.round(70 * ui)
+    readonly property int previewW: Math.round(220 * ui)
+    readonly property int fsTitle: Math.round(16 * ui)
+    readonly property int fs: Math.round(14 * ui)
+    readonly property int fsSmall: Math.round(13 * ui)
 
     // Function to find books folder - copied from QuizQuestionCard
     function findBooksFolder(filePath, targetFolder) {
@@ -56,8 +71,10 @@ Rectangle {
         console.log("Memory question loaded:", memoryQuestion.image);
     }
 
-    width: parent.width
-    height: parent.height
+    width: parent ? parent.width : 600
+    // Height follows the content so a card never leaves a big empty gap.
+    implicitHeight: contentColumn.implicitHeight + 2 * pad
+    height: implicitHeight
     radius: 8
     color: "#1A2327" // Ana tema rengi
     border.color: "#009ca6" // Turquoise border
@@ -138,51 +155,49 @@ Rectangle {
     }
 
     Column {
-        id: totalColumn
-        width: parent.width
-        height: parent.height
-        spacing: 10
+        id: contentColumn
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: root.pad
+        spacing: Math.round(8 * root.ui)
 
-        // Header Row
-        Row {
-            id: headerRow
+        // Header: title + delete button (anchored, never overflows the card)
+        Item {
             width: parent.width
-            height: parent.height * 0.15
+            height: Math.round(28 * root.ui)
 
             Text {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
                 text: "Memory Card #" + questionId
-                width: parent.width / 4
-                height: parent.height
                 color: "#009ca6" // Turquoise text
-                font.pixelSize: root.height * 0.08
+                font.pixelSize: root.fsTitle
                 font.bold: true
-                verticalAlignment: Text.AlignVCenter
-                horizontalAlignment: Text.AlignLeft
-            }
-
-            Item {
-                width: parent.width / 4 * 3
-                height: parent.height
             }
 
             Rectangle {
                 id: deleteQuestionBtn
-                width: 28
-                height: 28
-                radius: 14
-                color: "#d2232b" // Red color for delete
+                anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
+                width: Math.round(26 * root.ui)
+                height: Math.round(26 * root.ui)
+                radius: width / 2
+                color: delQArea.containsMouse ? "#e23b42" : "#d2232b" // Red color for delete
 
                 Text {
                     text: "×"
                     anchors.centerIn: parent
                     color: "white"
-                    font.pixelSize: 18
+                    font.pixelSize: root.fsTitle
                     font.bold: true
                 }
 
                 MouseArea {
+                    id: delQArea
                     anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         print("deleting Memory Question");
                         questionDeleted();
@@ -191,42 +206,41 @@ Rectangle {
             }
         }
 
-        // Main content area with image field and preview
+        // Main content area with image/audio fields and preview
         Row {
             id: mainContentRow
             width: parent.width
-            height: parent.height * 0.75
-            spacing: 10
+            spacing: root.gap
 
-            // Left side - Image path input
+            // Left side - Image/Audio path inputs + info
             Column {
                 id: leftColumn
-                width: parent.width * 0.6
-                height: parent.height
-                spacing: 10
+                width: parent.width - root.previewW - root.gap
+                spacing: Math.round(8 * root.ui)
 
                 // Image Row
                 Row {
                     id: imageRow
                     width: parent.width
-                    height: parent.height * 0.2
+                    height: root.rowH
+                    spacing: root.gap
 
                     Text {
                         text: "Image:"
-                        width: parent.width / 5
+                        width: root.labelW
                         height: parent.height
                         color: "#FFFFFF" // White text
-                        font.pixelSize: root.height * 0.06
+                        font.pixelSize: root.fs
                         verticalAlignment: Text.AlignVCenter
                     }
 
                     TextField {
                         id: imageTextField
-                        width: parent.width / 5 * 3
+                        width: parent.width - root.labelW - root.browseW - 2 * root.gap
                         height: parent.height
                         text: memoryQuestion && memoryQuestion.image ? memoryQuestion.image : ""
                         color: "#FFFFFF" // White text
-                        font.pixelSize: root.height * 0.05
+                        font.pixelSize: root.fs
                         placeholderText: "Select image file or enter path..."
                         placeholderTextColor: "#666666"
 
@@ -234,7 +248,7 @@ Rectangle {
                             color: "#232f34" // Darker background
                             border.color: imageTextField.focus ? "#009ca6" : "#445055"
                             border.width: 1
-                            radius: 4
+                            radius: 6
                         }
 
                         onTextChanged: {
@@ -245,21 +259,24 @@ Rectangle {
                     }
 
                     Rectangle {
-                        width: parent.width / 5
+                        width: root.browseW
                         height: parent.height
-                        color: "#009ca6"
-                        radius: 4
+                        radius: 6
+                        color: imageBrowseArea.containsMouse ? "#00b3be" : "#009ca6"
 
                         Text {
                             anchors.centerIn: parent
                             text: "..."
                             color: "white"
-                            font.pixelSize: root.height * 0.06
+                            font.pixelSize: root.fsTitle
                             font.bold: true
                         }
 
                         MouseArea {
+                            id: imageBrowseArea
                             anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 console.log("Memory image dialog button clicked");
                                 imageFileDialog.open();
@@ -272,24 +289,25 @@ Rectangle {
                 Row {
                     id: audioRow
                     width: parent.width
-                    height: parent.height * 0.2
+                    height: root.rowH
+                    spacing: root.gap
 
                     Text {
                         text: "Audio:"
-                        width: parent.width / 5
+                        width: root.labelW
                         height: parent.height
                         color: "#FFFFFF" // White text
-                        font.pixelSize: root.height * 0.06
+                        font.pixelSize: root.fs
                         verticalAlignment: Text.AlignVCenter
                     }
 
                     TextField {
                         id: audioTextField
-                        width: parent.width / 5 * 3
+                        width: parent.width - root.labelW - root.browseW - 2 * root.gap
                         height: parent.height
                         text: memoryQuestion && memoryQuestion.audio ? memoryQuestion.audio : ""
                         color: "#FFFFFF" // White text
-                        font.pixelSize: root.height * 0.05
+                        font.pixelSize: root.fs
                         placeholderText: "Select audio file or enter path..."
                         placeholderTextColor: "#666666"
 
@@ -297,7 +315,7 @@ Rectangle {
                             color: "#232f34" // Darker background
                             border.color: audioTextField.focus ? "#009ca6" : "#445055"
                             border.width: 1
-                            radius: 4
+                            radius: 6
                         }
 
                         onTextChanged: {
@@ -308,21 +326,24 @@ Rectangle {
                     }
 
                     Rectangle {
-                        width: parent.width / 5
+                        width: root.browseW
                         height: parent.height
-                        color: "#009ca6"
-                        radius: 4
+                        radius: 6
+                        color: audioBrowseArea.containsMouse ? "#00b3be" : "#009ca6"
 
                         Text {
                             anchors.centerIn: parent
                             text: "..."
                             color: "white"
-                            font.pixelSize: root.height * 0.06
+                            font.pixelSize: root.fsTitle
                             font.bold: true
                         }
 
                         MouseArea {
+                            id: audioBrowseArea
                             anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 console.log("Memory audio dialog button clicked");
                                 audioFileDialog.open();
@@ -335,9 +356,8 @@ Rectangle {
                 Text {
                     text: "Select an image and optionally an audio file for this memory card. Both will be available during the memory game."
                     width: parent.width
-                    height: parent.height * 0.15
                     color: "#CCCCCC"
-                    font.pixelSize: root.height * 0.04
+                    font.pixelSize: root.fsSmall
                     wrapMode: Text.WordWrap
                     verticalAlignment: Text.AlignTop
                 }
@@ -346,8 +366,8 @@ Rectangle {
             // Right side - Preview area
             Rectangle {
                 id: previewArea
-                width: parent.width * 0.35
-                height: parent.height
+                width: root.previewW
+                height: Math.round(200 * root.ui)
                 color: "#232f34"
                 border.color: "#009ca6"
                 border.width: 1
@@ -355,13 +375,13 @@ Rectangle {
 
                 Column {
                     anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 10
+                    anchors.margins: root.gap
+                    spacing: root.gap
 
                     Text {
                         text: "Preview"
                         color: "#009ca6"
-                        font.pixelSize: root.height * 0.05
+                        font.pixelSize: root.fs
                         font.bold: true
                         anchors.horizontalCenter: parent.horizontalCenter
                     }
@@ -370,7 +390,7 @@ Rectangle {
                     Rectangle {
                         id: imagePreview
                         width: parent.width
-                        height: (parent.height - 30) * 0.6
+                        height: (parent.height - Math.round(30 * root.ui)) * 0.6
                         color: "#1A2327"
                         border.color: "#445055"
                         border.width: 1
@@ -397,7 +417,7 @@ Rectangle {
                             anchors.centerIn: parent
                             text: "No Image\nSelected"
                             color: "#666666"
-                            font.pixelSize: root.height * 0.04
+                            font.pixelSize: root.fsSmall
                             horizontalAlignment: Text.AlignHCenter
                             visible: !previewImage.visible
                         }
@@ -407,7 +427,7 @@ Rectangle {
                     Rectangle {
                         id: audioPreview
                         width: parent.width
-                        height: (parent.height - 30) * 0.35
+                        height: (parent.height - Math.round(30 * root.ui)) * 0.35
                         color: "#1A2327"
                         border.color: "#445055"
                         border.width: 1
@@ -416,7 +436,7 @@ Rectangle {
                         Row {
                             anchors.fill: parent
                             anchors.margins: 5
-                            spacing: 10
+                            spacing: root.gap
 
                             Image {
                                 id: audioIcon
@@ -428,14 +448,14 @@ Rectangle {
                             }
 
                             Column {
-                                width: parent.width - parent.height - 10
+                                width: parent.width - parent.height - root.gap
                                 height: parent.height
                                 anchors.verticalCenter: parent.verticalCenter
 
                                 Text {
                                     text: "Audio File"
                                     color: "#009ca6"
-                                    font.pixelSize: root.height * 0.04
+                                    font.pixelSize: root.fsSmall
                                     font.bold: true
                                     visible: memoryQuestion && memoryQuestion.audio && memoryQuestion.audio !== ""
                                 }
@@ -443,7 +463,7 @@ Rectangle {
                                 Text {
                                     text: memoryQuestion && memoryQuestion.audio ? memoryQuestion.audio.split('/').pop() : ""
                                     color: "#CCCCCC"
-                                    font.pixelSize: root.height * 0.035
+                                    font.pixelSize: root.fsSmall
                                     elide: Text.ElideMiddle
                                     visible: memoryQuestion && memoryQuestion.audio && memoryQuestion.audio !== ""
                                 }
@@ -453,7 +473,7 @@ Rectangle {
                                 anchors.centerIn: parent
                                 text: "No Audio\nSelected"
                                 color: "#666666"
-                                font.pixelSize: root.height * 0.035
+                                font.pixelSize: root.fsSmall
                                 horizontalAlignment: Text.AlignHCenter
                                 visible: !(memoryQuestion && memoryQuestion.audio && memoryQuestion.audio !== "")
                             }

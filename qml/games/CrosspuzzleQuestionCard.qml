@@ -1,5 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Window
 import ".."
 
 Rectangle {
@@ -16,63 +17,74 @@ Rectangle {
     // Signals for external communication
     signal questionDeleted
 
+    // Everything scales with the window height (1080 baseline) instead of
+    // fixed pixels, so the card stays proportional on any screen — while the
+    // card's *total* height still follows its content (no cramping).
+    readonly property real ui: Window.height > 0 ? Window.height / 1080 : 1.0
+    readonly property int labelW: Math.round(80 * ui)
+    readonly property int rowH: Math.round(38 * ui)
+    readonly property int pad: Math.round(12 * ui)
+    readonly property int gap: Math.round(10 * ui)
+    readonly property int fsTitle: Math.round(16 * ui)
+    readonly property int fs: Math.round(14 * ui)
+
     Component.onCompleted: {
         console.log("Crosspuzzle question loaded. Single answer structure.");
     }
 
-    width: parent.width
-    height: parent.height
+    width: parent ? parent.width : 600
+    // Height follows the content so a card never leaves a big empty gap.
+    implicitHeight: contentColumn.implicitHeight + 2 * pad
+    height: implicitHeight
     radius: 8
     color: "#1A2327"
     border.color: "#009ca6"
     border.width: 1
 
     Column {
-        id: totalColumn
-        width: parent.width
-        height: parent.height
-        spacing: 8
+        id: contentColumn
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: root.pad
+        spacing: Math.round(8 * root.ui)
 
-        // Header Row
-        Row {
-            id: headerRow
+        // Header: title + delete button (anchored, never overflows the card)
+        Item {
             width: parent.width
-            height: parent.height * 0.15  // Increased from 0.1 to 0.15
+            height: Math.round(28 * root.ui)
 
             Text {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
                 text: "Crosspuzzle Question #" + questionId
-                width: parent.width / 4
-                height: parent.height
                 color: "#009ca6"
-                font.pixelSize: root.height * 0.08  // Increased from 0.06 to 0.08
+                font.pixelSize: root.fsTitle
                 font.bold: true
-                verticalAlignment: Text.AlignVCenter
-                horizontalAlignment: Text.AlignLeft
-            }
-
-            Item {
-                width: parent.width / 4 * 3
-                height: parent.height
             }
 
             Rectangle {
                 id: deleteQuestionBtn
-                width: 28
-                height: 28
-                radius: 14
-                color: "#d2232b"
+                anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
+                width: Math.round(26 * root.ui)
+                height: Math.round(26 * root.ui)
+                radius: width / 2
+                color: delQArea.containsMouse ? "#e23b42" : "#d2232b"
 
                 Text {
-                    text: "×"
                     anchors.centerIn: parent
+                    text: "×"
                     color: "white"
-                    font.pixelSize: 18
+                    font.pixelSize: root.fsTitle
                     font.bold: true
                 }
 
                 MouseArea {
+                    id: delQArea
                     anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         print("deleting Crosspuzzle Question");
                         questionDeleted();
@@ -82,103 +94,81 @@ Rectangle {
         }
 
         // Question Text Section
-        Rectangle {
-            id: questionTextSection
+        Row {
             width: parent.width
-            height: parent.height * 0.35  // Increased from 0.2 to 0.35
-            color: "#232f34"
-            border.color: "#009ca6"
-            border.width: 1
-            radius: 6
+            height: root.rowH
+            spacing: root.gap
 
-            Row {
-                anchors.fill: parent
-                anchors.margins: 10
-                spacing: 10
+            Text {
+                width: root.labelW
+                height: parent.height
+                text: "Question:"
+                color: "#FFFFFF"
+                font.pixelSize: root.fs
+                verticalAlignment: Text.AlignVCenter
+            }
 
-                Text {
-                    text: "Question:"
-                    width: 80
-                    height: parent.height
-                    color: "#009ca6"
-                    font.pixelSize: root.height * 0.07  // Increased from 0.04 to 0.05
-                    font.bold: true
-                    verticalAlignment: Text.AlignVCenter
+            TextField {
+                id: questionTextField
+                width: parent.width - root.labelW - root.gap
+                height: parent.height
+                text: crosspuzzleQuestion && crosspuzzleQuestion.question ? crosspuzzleQuestion.question : ""
+                color: "#FFFFFF"
+                font.pixelSize: root.fs
+                placeholderText: "Enter crosspuzzle question text..."
+                placeholderTextColor: "#666666"
+                background: Rectangle {
+                    color: "#232f34"
+                    border.color: questionTextField.focus ? "#009ca6" : "#445055"
+                    border.width: 1
+                    radius: 6
                 }
-
-                TextField {
-                    id: questionTextField
-                    width: parent.width - 80 - 10
-                    height: parent.height
-                    text: crosspuzzleQuestion && crosspuzzleQuestion.question ? crosspuzzleQuestion.question : ""
-                    color: "#FFFFFF"
-                    font.pixelSize: parent.height * 0.3  // Increased from 0.03 to 0.04
-                    placeholderText: "Enter crosspuzzle question text..."
-                    placeholderTextColor: "#666666"
-                    background: Rectangle {
-                        color: "#1A2327"
-                        border.color: questionTextField.focus ? "#009ca6" : "#445055"
-                        border.width: 1
-                        radius: 3
-                    }
-                    onTextChanged: {
-                        if (crosspuzzleQuestion) {
-                            crosspuzzleQuestion.question = text;
-                        }
+                onTextChanged: {
+                    if (crosspuzzleQuestion) {
+                        crosspuzzleQuestion.question = text;
                     }
                 }
             }
         }
 
         // Single Answer Section
-        Rectangle {
-            id: answerSection
+        Row {
             width: parent.width
-            height: parent.height * 0.4  // Reduced from 0.6 to 0.4
-            color: "#232f34"
-            border.color: "#009ca6"
-            border.width: 1
-            radius: 6
+            height: root.rowH
+            spacing: root.gap
 
-            Row {
-                anchors.fill: parent
-                anchors.margins: 10
-                spacing: 10
+            Text {
+                width: root.labelW
+                height: parent.height
+                text: "Answer:"
+                color: "#FFFFFF"
+                font.pixelSize: root.fs
+                verticalAlignment: Text.AlignVCenter
+            }
 
-                Text {
-                    text: "Answer:"
-                    width: 80
-                    height: parent.height
-                    color: "#009ca6"
-                    font.pixelSize: root.height * 0.07  // Increased from 0.04 to 0.05
-                    font.bold: true
-                    verticalAlignment: Text.AlignVCenter
+            TextField {
+                id: answerTextField
+                width: parent.width - root.labelW - root.gap
+                height: parent.height
+                text: {
+                    if (crosspuzzleQuestion && crosspuzzleQuestion.answers && crosspuzzleQuestion.answers.length > 0) {
+                        return crosspuzzleQuestion.answers[0].text || "";
+                    }
+                    return "";
                 }
-
-                TextField {
-                    id: answerTextField
-                    width: parent.width - 80 - 10
-                    height: parent.height
-                    text: {
-                        if (crosspuzzleQuestion && crosspuzzleQuestion.answers && crosspuzzleQuestion.answers.length > 0) {
-                            return crosspuzzleQuestion.answers[0].text || "";
-                        }
-                        return "";
-                    }
-                    color: "#FFFFFF"
-                    font.pixelSize: parent.height * 0.3  // Increased from 0.03 to 0.04
-                    placeholderText: "Enter the answer..."
-                    placeholderTextColor: "#666666"
-                    background: Rectangle {
-                        color: "#1A2327"
-                        border.color: answerTextField.focus ? "#009ca6" : "#445055"
-                        border.width: 1
-                        radius: 3
-                    }
-                    onTextChanged: {
-                        if (crosspuzzleQuestion && crosspuzzleQuestion.answers && crosspuzzleQuestion.answers.length > 0) {
-                            crosspuzzleQuestion.answers[0].text = text;
-                        }
+                color: "#FFFFFF"
+                font.pixelSize: root.fs
+                placeholderText: "Enter the answer..."
+                placeholderTextColor: "#666666"
+                background: Rectangle {
+                    color: "#232f34"
+                    border.color: answerTextField.focus ? "#009ca6" : "#445055"
+                    border.width: 1
+                    radius: 6
+                }
+                onTextChanged: {
+                    if (crosspuzzleQuestion && crosspuzzleQuestion.answers && crosspuzzleQuestion.answers.length > 0) {
+                        crosspuzzleQuestion.answers[0].text = text;
                     }
                 }
             }

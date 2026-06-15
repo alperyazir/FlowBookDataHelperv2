@@ -1,5 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Window
 import ".."
 
 Rectangle {
@@ -14,6 +15,22 @@ Rectangle {
 
     // Signals for external communication
     signal questionDeleted
+
+    // Everything scales with the window height (1080 baseline) instead of
+    // fixed pixels, so the card stays proportional on any screen — while the
+    // card's *total* height still follows its content (no cramping).
+    readonly property real ui: Window.height > 0 ? Window.height / 1080 : 1.0
+    readonly property int labelW: Math.round(70 * ui)
+    readonly property int rowH: Math.round(38 * ui)
+    readonly property int optRowH: Math.round(34 * ui)
+    readonly property int pad: Math.round(12 * ui)
+    readonly property int gap: Math.round(10 * ui)
+    readonly property int cbSize: Math.round(22 * ui)
+    readonly property int delSize: Math.round(24 * ui)
+    readonly property int browseW: Math.round(70 * ui)
+    readonly property int fsTitle: Math.round(16 * ui)
+    readonly property int fs: Math.round(14 * ui)
+    readonly property int fsSmall: Math.round(13 * ui)
 
     // Function to split sentence into words
     function splitSentenceIntoWords(sentence) {
@@ -31,59 +48,59 @@ Rectangle {
         console.log("Order question loaded. Words count:", orderQuestion.words ? orderQuestion.words.length : 0);
     }
 
-    width: parent.width
-    height: parent.height
+    width: parent ? parent.width : 600
+    // Height follows the content so a card never leaves a big empty gap.
+    implicitHeight: contentColumn.implicitHeight + 2 * pad
+    height: implicitHeight
     radius: 8
     color: "#1A2327" // Ana tema rengi
     border.color: "#009ca6" // Turquoise border
     border.width: 1
 
     Column {
-        id: totalColumn
-        width: parent.width
-        height: parent.height
-        spacing: 10
+        id: contentColumn
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: root.pad
+        spacing: Math.round(8 * root.ui)
 
-        // Header Row
-        Row {
-            id: headerRow
+        // Header: title + delete button (anchored, never overflows the card)
+        Item {
             width: parent.width
-            height: parent.height * 0.15
+            height: Math.round(28 * root.ui)
 
             Text {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
                 text: "Order Question #" + questionId
-                width: parent.width / 4
-                height: parent.height
                 color: "#009ca6" // Turquoise text
-                font.pixelSize: root.height * 0.08
+                font.pixelSize: root.fsTitle
                 font.bold: true
-                verticalAlignment: Text.AlignVCenter
-                horizontalAlignment: Text.AlignLeft
-            }
-
-            Item {
-                width: parent.width / 4 * 3
-                height: parent.height
             }
 
             Rectangle {
                 id: deleteQuestionBtn
-                width: 28
-                height: 28
-                radius: 14
-                color: "#d2232b" // Red color for delete
+                anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
+                width: Math.round(26 * root.ui)
+                height: Math.round(26 * root.ui)
+                radius: width / 2
+                color: delQArea.containsMouse ? "#e23b42" : "#d2232b" // Red color for delete
 
                 Text {
                     text: "×"
                     anchors.centerIn: parent
                     color: "white"
-                    font.pixelSize: 18
+                    font.pixelSize: root.fsTitle
                     font.bold: true
                 }
 
                 MouseArea {
+                    id: delQArea
                     anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         print("deleting Order Question");
                         questionDeleted();
@@ -92,129 +109,120 @@ Rectangle {
             }
         }
 
-        // Main content area
-        Column {
-            id: mainContentColumn
+        // Sentence Input Row
+        Row {
+            id: sentenceInputRow
             width: parent.width
-            height: parent.height * 0.75
-            spacing: 15
+            height: root.rowH
+            spacing: root.gap
 
-            // Sentence Input Row
-            Row {
-                id: sentenceInputRow
-                width: parent.width
-                height: parent.height * 0.25
+            Text {
+                text: "Sentence:"
+                width: root.labelW
+                height: parent.height
+                color: "#FFFFFF" // White text
+                font.pixelSize: root.fs
+                verticalAlignment: Text.AlignVCenter
+            }
 
-                Text {
-                    text: "Sentence:"
-                    width: parent.width / 7
-                    height: parent.height
-                    color: "#FFFFFF" // White text
-                    font.pixelSize: root.height * 0.06
-                    verticalAlignment: Text.AlignVCenter
+            TextField {
+                id: sentenceTextField
+                width: parent.width - root.labelW - root.gap
+                height: parent.height
+                color: "#FFFFFF" // White text
+                font.pixelSize: root.fs
+                placeholderText: "Enter a sentence to be split into words for ordering..."
+                placeholderTextColor: "#666666"
+
+                background: Rectangle {
+                    color: "#232f34" // Darker background
+                    border.color: sentenceTextField.focus ? "#009ca6" : "#445055"
+                    border.width: 1
+                    radius: 6
                 }
 
-                TextField {
-                    id: sentenceTextField
-                    width: parent.width / 7 * 6
-                    height: parent.height
-                    color: "#FFFFFF" // White text
-                    font.pixelSize: root.height * 0.06
-                    placeholderText: "Enter a sentence to be split into words for ordering..."
-                    placeholderTextColor: "#666666"
-
-                    background: Rectangle {
-                        color: "#232f34" // Darker background
-                        border.color: sentenceTextField.focus ? "#009ca6" : "#445055"
-                        border.width: 1
-                        radius: 4
+                // Only update on focus lost or Enter key
+                onEditingFinished: {
+                    if (orderQuestion) {
+                        let words = splitSentenceIntoWords(text);
+                        orderQuestion.words = words;
+                        console.log("Sentence finalized. Words:", words);
                     }
+                }
 
-                    // Only update on focus lost or Enter key
-                    onEditingFinished: {
-                        if (orderQuestion) {
-                            let words = splitSentenceIntoWords(text);
-                            orderQuestion.words = words;
-                            console.log("Sentence finalized. Words:", words);
-                        }
-                    }
-
-                    // Initialize text from orderQuestion
-                    Component.onCompleted: {
-                        if (orderQuestion && orderQuestion.words) {
-                            text = orderQuestion.words.join(" ");
-                        }
+                // Initialize text from orderQuestion
+                Component.onCompleted: {
+                    if (orderQuestion && orderQuestion.words) {
+                        text = orderQuestion.words.join(" ");
                     }
                 }
             }
+        }
 
-            // Words Preview Section
-            Rectangle {
-                id: wordsPreviewArea
-                width: parent.width
-                height: parent.height * 0.7  // Increased from 0.6 to 0.7 since we removed info text
-                color: "#232f34"
-                border.color: "#009ca6"
-                border.width: 1
-                radius: 8
-                anchors.leftMargin: 10
-                anchors.rightMargin: 10
+        // Words Preview Section
+        Rectangle {
+            id: wordsPreviewArea
+            width: parent.width
+            height: Math.round(180 * root.ui)
+            color: "#232f34"
+            border.color: "#009ca6"
+            border.width: 1
+            radius: 8
 
-                Column {
-                    anchors.fill: parent
-                    anchors.margins: 15
-                    spacing: 10
+            Column {
+                anchors.fill: parent
+                anchors.margins: root.pad
+                spacing: root.gap
 
-                    Text {
-                        text: "Words Preview (" + (orderQuestion.words ? orderQuestion.words.length : 0) + " words)"
-                        color: "#009ca6"
-                        font.pixelSize: root.height * 0.05
-                        font.bold: true
+                Text {
+                    text: "Words Preview (" + (orderQuestion.words ? orderQuestion.words.length : 0) + " words)"
+                    color: "#009ca6"
+                    font.pixelSize: root.fs
+                    font.bold: true
+                    width: parent.width
+                }
+
+                ScrollView {
+                    width: parent.width
+                    height: parent.height - Math.round(40 * root.ui)
+                    clip: true
+
+                    Flow {
+                        id: wordsFlow
                         width: parent.width
-                    }
+                        spacing: Math.round(8 * root.ui)
 
-                    ScrollView {
-                        width: parent.width
-                        height: parent.height - 40
-                        clip: true
+                        Repeater {
+                            model: orderQuestion && orderQuestion.words ? orderQuestion.words : []
 
-                        Flow {
-                            id: wordsFlow
-                            width: parent.width
-                            spacing: 8
+                            Rectangle {
+                                width: wordText.contentWidth + Math.round(16 * root.ui)
+                                height: root.optRowH
+                                radius: height / 2
+                                color: "#009ca6"
+                                border.color: "#FFFFFF"
+                                border.width: 1
 
-                            Repeater {
-                                model: orderQuestion && orderQuestion.words ? orderQuestion.words : []
-
-                                Rectangle {
-                                    width: wordText.contentWidth + 16
-                                    height: 30
-                                    radius: 15
-                                    color: "#009ca6"
-                                    border.color: "#FFFFFF"
-                                    border.width: 1
-
-                                    Text {
-                                        id: wordText
-                                        text: (index + 1) + ". " + modelData
-                                        anchors.centerIn: parent
-                                        color: "#FFFFFF"
-                                        font.pixelSize: root.height * 0.04
-                                        font.bold: true
-                                    }
+                                Text {
+                                    id: wordText
+                                    text: (index + 1) + ". " + modelData
+                                    anchors.centerIn: parent
+                                    color: "#FFFFFF"
+                                    font.pixelSize: root.fsSmall
+                                    font.bold: true
                                 }
                             }
                         }
+                    }
 
-                        // Empty state
-                        Text {
-                            anchors.centerIn: parent
-                            text: "No words yet.\nEnter a sentence above to see words."
-                            color: "#666666"
-                            font.pixelSize: root.height * 0.04
-                            horizontalAlignment: Text.AlignHCenter
-                            visible: !orderQuestion.words || orderQuestion.words.length === 0
-                        }
+                    // Empty state
+                    Text {
+                        anchors.centerIn: parent
+                        text: "No words yet.\nEnter a sentence above to see words."
+                        color: "#666666"
+                        font.pixelSize: root.fsSmall
+                        horizontalAlignment: Text.AlignHCenter
+                        visible: !orderQuestion.words || orderQuestion.words.length === 0
                     }
                 }
             }

@@ -1,6 +1,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Dialogs
+import QtQuick.Window
 import Qt.labs.platform
 import ".."
 
@@ -21,6 +22,22 @@ Rectangle {
     signal questionDeleted
     signal optionAdded
     signal optionDeleted(int index)
+
+    // Everything scales with the window height (1080 baseline) instead of
+    // fixed pixels, so the card stays proportional on any screen — while the
+    // card's *total* height still follows its content (no cramping).
+    readonly property real ui: Window.height > 0 ? Window.height / 1080 : 1.0
+    readonly property int labelW: Math.round(70 * ui)
+    readonly property int rowH: Math.round(38 * ui)
+    readonly property int optRowH: Math.round(34 * ui)
+    readonly property int pad: Math.round(12 * ui)
+    readonly property int gap: Math.round(10 * ui)
+    readonly property int cbSize: Math.round(22 * ui)
+    readonly property int delSize: Math.round(24 * ui)
+    readonly property int browseW: Math.round(70 * ui)
+    readonly property int fsTitle: Math.round(16 * ui)
+    readonly property int fs: Math.round(14 * ui)
+    readonly property int fsSmall: Math.round(13 * ui)
 
     // Function to find books folder
     function findBooksFolder(filePath, targetFolder) {
@@ -50,8 +67,10 @@ Rectangle {
         console.log("Number of answers:", raceQuestion.answers ? raceQuestion.answers.length : 0);
     }
 
-    width: parent.width
-    height: parent.height
+    width: parent ? parent.width : 600
+    // Height follows the content so a card never leaves a big empty gap.
+    implicitHeight: contentColumn.implicitHeight + 2 * pad
+    height: implicitHeight
     radius: 8
     color: "#1A2327"
     border.color: "#009ca6"
@@ -106,51 +125,49 @@ Rectangle {
     }
 
     Column {
-        id: totalColumn
-        width: parent.width
-        height: parent.height
-        spacing: 6
+        id: contentColumn
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: root.pad
+        spacing: Math.round(8 * root.ui)
 
-        // Header Row
-        Row {
-            id: headerRow
+        // Header: title + delete button (anchored, never overflows the card)
+        Item {
             width: parent.width
-            height: parent.height * 0.1
+            height: Math.round(28 * root.ui)
 
             Text {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
                 text: "Race Question #" + questionId
-                width: parent.width / 4
-                height: parent.height
                 color: "#009ca6"
-                font.pixelSize: root.height * 0.08
+                font.pixelSize: root.fsTitle
                 font.bold: true
-                verticalAlignment: Text.AlignVCenter
-                horizontalAlignment: Text.AlignLeft
-            }
-
-            Item {
-                width: parent.width / 4 * 3
-                height: parent.height
             }
 
             Rectangle {
                 id: deleteQuestionBtn
-                width: 28
-                height: 28
-                radius: 14
-                color: "#d2232b"
+                anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
+                width: Math.round(26 * root.ui)
+                height: Math.round(26 * root.ui)
+                radius: width / 2
+                color: delQArea.containsMouse ? "#e23b42" : "#d2232b"
 
                 Text {
                     text: "×"
                     anchors.centerIn: parent
                     color: "white"
-                    font.pixelSize: 18
+                    font.pixelSize: root.fsTitle
                     font.bold: true
                 }
 
                 MouseArea {
+                    id: delQArea
                     anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         print("deleting Race Question");
                         questionDeleted();
@@ -159,50 +176,39 @@ Rectangle {
             }
         }
 
-        // Question Input Section
-        Rectangle {
-            id: questionInputSection
+        // Question text
+        Row {
             width: parent.width
-            height: parent.height * 0.15
-            color: "#232f34"
-            border.color: "#009ca6"
-            border.width: 1
-            radius: 6
+            height: root.rowH
+            spacing: root.gap
 
-            Row {
-                anchors.fill: parent
-                anchors.margins: 10
-                spacing: 10
+            Text {
+                text: "Question:"
+                width: root.labelW
+                height: parent.height
+                color: "#FFFFFF"
+                font.pixelSize: root.fs
+                verticalAlignment: Text.AlignVCenter
+            }
 
-                Text {
-                    text: "Question:"
-                    width: 80
-                    height: parent.height
-                    color: "#009ca6"
-                    font.pixelSize: root.height * 0.05
-                    font.bold: true
-                    verticalAlignment: Text.AlignVCenter
+            TextField {
+                id: questionTextField
+                width: parent.width - root.labelW - root.gap
+                height: parent.height
+                text: raceQuestion && raceQuestion.question ? raceQuestion.question : ""
+                color: "#FFFFFF"
+                font.pixelSize: root.fs
+                placeholderText: "Enter race question text..."
+                placeholderTextColor: "#666666"
+                background: Rectangle {
+                    color: "#232f34"
+                    border.color: questionTextField.focus ? "#009ca6" : "#445055"
+                    border.width: 1
+                    radius: 6
                 }
-
-                TextField {
-                    id: questionTextField
-                    width: parent.width - 80 - 10
-                    height: parent.height
-                    text: raceQuestion && raceQuestion.question ? raceQuestion.question : ""
-                    color: "#FFFFFF"
-                    font.pixelSize: root.height * 0.04
-                    placeholderText: "Enter race question text..."
-                    placeholderTextColor: "#666666"
-                    background: Rectangle {
-                        color: "#1A2327"
-                        border.color: questionTextField.focus ? "#009ca6" : "#445055"
-                        border.width: 1
-                        radius: 3
-                    }
-                    onTextChanged: {
-                        if (raceQuestion) {
-                            raceQuestion.question = text;
-                        }
+                onTextChanged: {
+                    if (raceQuestion) {
+                        raceQuestion.question = text;
                     }
                 }
             }
@@ -211,32 +217,32 @@ Rectangle {
         // Image Row
         Row {
             width: parent.width
-            height: parent.height * 0.08
-            spacing: 5
+            height: root.rowH
+            spacing: root.gap
 
             Text {
                 text: "Image:"
-                width: 60
+                width: root.labelW
                 height: parent.height
                 color: "#FFFFFF"
-                font.pixelSize: root.height * 0.04
+                font.pixelSize: root.fs
                 verticalAlignment: Text.AlignVCenter
             }
 
             TextField {
                 id: imageTextField
-                width: parent.width - 60 - 30 - 10
+                width: parent.width - root.labelW - root.browseW - 2 * root.gap
                 height: parent.height
                 text: raceQuestion && raceQuestion.image ? raceQuestion.image : ""
                 color: "#FFFFFF"
-                font.pixelSize: root.height * 0.03
+                font.pixelSize: root.fs
                 placeholderText: "Select image..."
                 placeholderTextColor: "#666666"
                 background: Rectangle {
-                    color: "#1A2327"
+                    color: "#232f34"
                     border.color: imageTextField.focus ? "#009ca6" : "#445055"
                     border.width: 1
-                    radius: 3
+                    radius: 6
                 }
                 onTextChanged: {
                     if (raceQuestion) {
@@ -246,18 +252,22 @@ Rectangle {
             }
 
             Rectangle {
-                width: 30
+                width: root.browseW
                 height: parent.height
-                color: "#009ca6"
-                radius: 3
+                radius: 6
+                color: imageBrowseArea.containsMouse ? "#00b3be" : "#009ca6"
                 Text {
                     anchors.centerIn: parent
                     text: "..."
                     color: "white"
+                    font.pixelSize: root.fsTitle
                     font.bold: true
                 }
                 MouseArea {
+                    id: imageBrowseArea
                     anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onClicked: imageFileDialog.open()
                 }
             }
@@ -266,32 +276,32 @@ Rectangle {
         // Audio Row
         Row {
             width: parent.width
-            height: parent.height * 0.08
-            spacing: 5
+            height: root.rowH
+            spacing: root.gap
 
             Text {
                 text: "Audio:"
-                width: 60
+                width: root.labelW
                 height: parent.height
                 color: "#FFFFFF"
-                font.pixelSize: root.height * 0.04
+                font.pixelSize: root.fs
                 verticalAlignment: Text.AlignVCenter
             }
 
             TextField {
                 id: audioTextField
-                width: parent.width - 60 - 30 - 10
+                width: parent.width - root.labelW - root.browseW - 2 * root.gap
                 height: parent.height
                 text: raceQuestion && raceQuestion.audio ? raceQuestion.audio : ""
                 color: "#FFFFFF"
-                font.pixelSize: root.height * 0.03
+                font.pixelSize: root.fs
                 placeholderText: "Select audio..."
                 placeholderTextColor: "#666666"
                 background: Rectangle {
-                    color: "#1A2327"
+                    color: "#232f34"
                     border.color: audioTextField.focus ? "#009ca6" : "#445055"
                     border.width: 1
-                    radius: 3
+                    radius: 6
                 }
                 onTextChanged: {
                     if (raceQuestion) {
@@ -301,18 +311,22 @@ Rectangle {
             }
 
             Rectangle {
-                width: 30
+                width: root.browseW
                 height: parent.height
-                color: "#009ca6"
-                radius: 3
+                radius: 6
+                color: audioBrowseArea.containsMouse ? "#00b3be" : "#009ca6"
                 Text {
                     anchors.centerIn: parent
                     text: "..."
                     color: "white"
+                    font.pixelSize: root.fsTitle
                     font.bold: true
                 }
                 MouseArea {
+                    id: audioBrowseArea
                     anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onClicked: audioFileDialog.open()
                 }
             }
@@ -322,21 +336,15 @@ Rectangle {
         Column {
             id: optionsColumn
             width: parent.width
-            height: parent.height * 0.53
-            spacing: 6
+            spacing: Math.round(8 * root.ui)
 
             // Options Header
-            Row {
+            Text {
+                text: "Answer Options (4)"
+                color: "#009ca6"
+                font.pixelSize: root.fs
+                font.bold: true
                 width: parent.width
-                height: 30
-
-                Text {
-                    text: "Answer Options (4)"
-                    color: "#009ca6"
-                    font.pixelSize: root.height * 0.04
-                    font.bold: true
-                    width: parent.width
-                }
             }
 
             // Fixed 4 Options
@@ -347,22 +355,22 @@ Rectangle {
                 Row {
                     id: optionRow
                     width: optionsColumn.width
-                    height: root.height * 0.08
-                    spacing: 10
+                    height: root.optRowH
+                    spacing: root.gap
 
                     Text {
                         text: "Option " + (index + 1)
-                        width: parent.width / 7
+                        width: root.labelW
                         height: parent.height
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.04
+                        font.pixelSize: root.fsSmall
                         verticalAlignment: Text.AlignVCenter
                     }
 
                     // Correct checkbox
                     Rectangle {
-                        width: 22
-                        height: 22
+                        width: root.cbSize
+                        height: root.cbSize
                         radius: 4
                         color: "white"
                         border.color: "#009ca6"
@@ -386,13 +394,13 @@ Rectangle {
                                 return raceQuestion.answers[index].isCorrect ? "✓" : "";
                             }
                             color: "#009ca6"
-                            font.pixelSize: 14
+                            font.pixelSize: root.fs
                             font.bold: true
                         }
                     }
 
                     TextField {
-                        width: parent.width / 7 * 3
+                        width: (parent.width - root.labelW - root.cbSize - root.browseW - 4 * root.gap) * 0.55
                         height: parent.height
                         text: {
                             if (!raceQuestion.answers || !raceQuestion.answers[index])
@@ -400,14 +408,14 @@ Rectangle {
                             return raceQuestion.answers[index].text || "";
                         }
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.04
+                        font.pixelSize: root.fsSmall
                         placeholderText: "Option " + (index + 1) + " text"
                         placeholderTextColor: "#666666"
                         background: Rectangle {
                             color: "#232f34"
                             border.color: parent.focus ? "#009ca6" : "#445055"
                             border.width: 1
-                            radius: 3
+                            radius: 6
                         }
                         onTextChanged: {
                             if (raceQuestion.answers && raceQuestion.answers[index]) {
@@ -418,7 +426,7 @@ Rectangle {
 
                     // Image field for option
                     TextField {
-                        width: parent.width / 7 * 2
+                        width: (parent.width - root.labelW - root.cbSize - root.browseW - 4 * root.gap) * 0.45
                         height: parent.height
                         text: {
                             if (!raceQuestion.answers || !raceQuestion.answers[index])
@@ -426,14 +434,14 @@ Rectangle {
                             return raceQuestion.answers[index].image || "";
                         }
                         color: "#FFFFFF"
-                        font.pixelSize: root.height * 0.04
+                        font.pixelSize: root.fsSmall
                         placeholderText: "Option image"
                         placeholderTextColor: "#666666"
                         background: Rectangle {
                             color: "#232f34"
                             border.color: parent.focus ? "#009ca6" : "#445055"
                             border.width: 1
-                            radius: 3
+                            radius: 6
                         }
                         onTextChanged: {
                             if (raceQuestion.answers && raceQuestion.answers[index]) {
@@ -444,21 +452,25 @@ Rectangle {
 
                     // File dialog button for option image
                     Rectangle {
-                        width: 30
+                        width: root.browseW
                         height: parent.height
-                        color: "#009ca6"
-                        radius: 3
+                        radius: 6
                         anchors.verticalCenter: parent.verticalCenter
+                        color: optImageBrowseArea.containsMouse ? "#00b3be" : "#009ca6"
 
                         Text {
                             anchors.centerIn: parent
                             text: "..."
                             color: "white"
+                            font.pixelSize: root.fsTitle
                             font.bold: true
                         }
 
                         MouseArea {
+                            id: optImageBrowseArea
                             anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 // Create dynamic FileDialog for this option
                                 var optionImageDialog = Qt.createQmlObject('import QtQuick.Dialogs; import Qt.labs.platform; FileDialog { title: "Select Option ' + (index + 1) + ' Image"; nameFilters: ["Image files (*.png *.jpg *.jpeg *.gif *.bmp)"] }', parent);
