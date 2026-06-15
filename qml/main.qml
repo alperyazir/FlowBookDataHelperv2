@@ -172,21 +172,40 @@ ApplicationWindow {
         onActivated: content.pageDetails.fillSelectMode = !content.pageDetails.fillSelectMode
     }
 
-    // `l`: align the selected fills to the leftmost one.
+    // Left arrow: align the selected fills to the leftmost one.
     Shortcut {
-        sequence: "l"
+        sequence: "Left"
         enabled: sideBar.fillSelection.length > 1 && !typingInField
                  && !awaitingActivityKey && !activityDialog.visible
         onActivated: content.pageDetails.alignSelectedLeft()
     }
 
-    // `b`: align the selected fills to the bottom-most one.
-    // (Bold is still available from the Fill panel's Bold toggle.)
+    // Down arrow: align the selected fills to the bottom-most one.
     Shortcut {
-        sequence: "b"
+        sequence: "Down"
         enabled: sideBar.fillSelection.length > 1 && !typingInField
                  && !awaitingActivityKey && !activityDialog.visible
         onActivated: content.pageDetails.alignSelectedBottom()
+    }
+
+    // `b`: bold / unbold the selected fills (same as the Fill panel's Bold
+    // toggle). If every selected fill is already bold it unbolds them all.
+    Shortcut {
+        sequence: "b"
+        enabled: sideBar.fillSelection.length > 0 && !typingInField
+                 && !awaitingActivityKey && !activityDialog.visible
+        onActivated: {
+            var sel = sideBar.fillSelection;
+            var allBold = sel.length > 0;
+            for (var i = 0; i < sel.length; i++) {
+                if (!sel[i].isTextBold) {
+                    allBold = false;
+                    break;
+                }
+            }
+            for (var j = 0; j < sel.length; j++)
+                sel[j].isTextBold = !allBold;
+        }
     }
 
     // Space: open the selected activity, or play/pause the selected audio/video.

@@ -29,20 +29,26 @@ Dialog {
         onActivated: root.selectMode = !root.selectMode
     }
 
-    // 'l' aligns the selected answer zones to the leftmost one.
+    // Left arrow aligns the selected answer zones to the leftmost one.
+    // Gated on a 2+ selection so the arrows still move the text cursor in
+    // the answer/header fields the rest of the time.
     Shortcut {
-        sequence: "l"
-        enabled: root.visible
+        sequence: "Left"
+        enabled: root.visible && root.currentActivity
+                 && root.currentActivity.selectedAnswers
+                 && root.currentActivity.selectedAnswers.length > 1
         onActivated: {
             if (root.currentActivity && root.currentActivity.alignSelectedLeft)
                 root.currentActivity.alignSelectedLeft();
         }
     }
 
-    // 'b' aligns the selected answer zones to the bottom-most one.
+    // Down arrow aligns the selected answer zones to the bottom-most one.
     Shortcut {
-        sequence: "b"
-        enabled: root.visible
+        sequence: "Down"
+        enabled: root.visible && root.currentActivity
+                 && root.currentActivity.selectedAnswers
+                 && root.currentActivity.selectedAnswers.length > 1
         onActivated: {
             if (root.currentActivity && root.currentActivity.alignSelectedBottom)
                 root.currentActivity.alignSelectedBottom();
