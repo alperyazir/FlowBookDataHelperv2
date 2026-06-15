@@ -1016,11 +1016,10 @@ def run_analysis(config_path, settings_path):
                 print(f"  PuzzleFindWords: {len(puzzle_cfg)} "
                       f"({len(puzzle_cfg[0]['activity']['words'])} words)",
                       flush=True)
-            match_cfg = safe("match", lambda: build_match_sections(
-                original_page, pdf_page, page_num, images_dir,
-                section_path_prefix, scale_x, scale_y), [])
-            if match_cfg:
-                print(f"  MatchTheWords: {len(match_cfg)}", flush=True)
+            # matchTheWords auto-detection is intentionally disabled in Analyze
+            # (it over-triggers); match activities are added manually instead.
+            # proto_match.py is still used for manual add / --redetect.
+            match_cfg = []
             cfg_sections = (fill_cfg + audio_cfg + dd_cfg + circle_cfg
                             + markx_cfg + puzzle_cfg + match_cfg)
             fill_count = len(fill_cfg)
