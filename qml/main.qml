@@ -43,6 +43,19 @@ ApplicationWindow {
         }
     }
 
+    // Opens the chosen book. Mirrors OpenProject's "open from recents" flow
+    // (config.initialize + gamesParser.loadFromFile on the book directory).
+    function openBook(name) {
+        if (!name || name === openProject.currentProject)
+            return;
+        var projectDir = appPath + "books/" + name;
+        openProject.currentProject = name;
+        openProject.selectedProjectPath = projectDir;
+        config.initialize(true, projectDir);
+        gamesParser.loadFromFile(projectDir);
+        console.log("Switched book ->", projectDir);
+    }
+
     // --- Quick-add shortcuts at current mouse position ---
     // `a` acts both as "audio" and as the prefix for activity shortcuts (a+d, a+g, ...).
     // We wait a short window after `a` to see if the next key completes an activity combo.
@@ -225,6 +238,121 @@ ApplicationWindow {
         anchors.leftMargin: parent.width / 9
         anchors.top: toolBar.bottom
         width: parent.width / 1.95
+    }
+
+    // Book switcher in the empty left gutter: an arrow tab that opens a list
+    // of every book under books/, in order. Selecting one opens it.
+    Rectangle {
+        id: bookSwitcherTab
+        width: 34
+        height: 64
+        radius: 8
+        anchors.left: parent.left
+        anchors.leftMargin: 10
+        anchors.verticalCenter: content.verticalCenter
+        z: 50
+        color: (bookSwitcherTabArea.containsMouse || bookSwitcherPopup.opened) ? "#1d2c33" : "#19242a"
+        border.color: "#2a8e96"
+        border.width: 1
+        Behavior on color { ColorAnimation { duration: 120 } }
+
+        Text {
+            anchors.centerIn: parent
+            text: bookSwitcherPopup.opened ? "‹" : "›"
+            color: "#00e6e6"
+            font.pixelSize: 22
+            font.bold: true
+        }
+
+        MouseArea {
+            id: bookSwitcherTabArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+                if (bookSwitcherPopup.opened) {
+                    bookSwitcherPopup.close();
+                } else {
+                    config.refreshRecentProjects();
+                    bookSwitcherPopup.open();
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: bookSwitcherPopup
+        property int count: (config && config.recentProject) ? config.recentProject.length : 0
+        x: bookSwitcherTab.x + bookSwitcherTab.width + 6
+        // Vertically centered on the tab (which sits at the content center).
+        y: Math.max(toolBar.height + 8,
+                    Math.min(bookSwitcherTab.y + bookSwitcherTab.height / 2 - height / 2,
+                             mainwindow.height - height - 12))
+        width: 260
+        height: Math.max(140, Math.min(mainwindow.height - toolBar.height - 60,
+                                       bookSwitcherPopup.count * 38 + 56))
+        padding: 8
+        modal: false
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            color: "#202c33"
+            border.color: "#33505b"
+            border.width: 1
+            radius: 10
+        }
+
+        contentItem: ListView {
+            id: bookListView
+            clip: true
+            model: config ? config.recentProject : []
+            spacing: 2
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+            header: Text {
+                width: bookListView.width
+                leftPadding: 4
+                bottomPadding: 6
+                text: "Books"
+                color: "#9fc4c8"
+                font.pixelSize: 13
+                font.bold: true
+            }
+
+            delegate: Rectangle {
+                required property var modelData
+                width: ListView.view ? ListView.view.width : 0
+                height: 36
+                radius: 6
+                readonly property bool isCurrent: modelData === openProject.currentProject
+                color: isCurrent ? "#009ca6"
+                                 : (rowArea.containsMouse ? "#26343b" : "transparent")
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - 20
+                    text: parent.modelData
+                    elide: Text.ElideRight
+                    color: parent.isCurrent ? "#10343a" : "#e6f2f3"
+                    font.pixelSize: 13
+                    font.bold: parent.isCurrent
+                }
+
+                MouseArea {
+                    id: rowArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        mainwindow.openBook(parent.modelData);
+                        bookSwitcherPopup.close();
+                    }
+                }
+            }
+        }
     }
 
     FlowSideBar {

@@ -287,12 +287,11 @@ Rectangle {
         }
     }
 
-    // Book title (left of the nav) and module name (right). Anchored to
-    // pagesRow — NOT inside it — so the centered nav stays put no matter
-    // how long these labels get.
-    // Book title — a subtle clickable "switcher": hover shows a pill and
-    // a ▾ chevron; click opens the project switcher (Open).
-    MouseArea {
+    // Book title — a static label left of the nav. Anchored to pagesRow —
+    // NOT inside it — so the centered nav stays put no matter how long the
+    // title gets. Switching books is done from the left-gutter switcher, so
+    // this is no longer clickable.
+    Item {
         id: bookTitleArea
         anchors.left: menuRow.right
         anchors.leftMargin: 20
@@ -300,52 +299,19 @@ Rectangle {
         anchors.rightMargin: 14
         anchors.verticalCenter: parent.verticalCenter
         height: 36
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        onClicked: {
-            config.refreshRecentProjects();
-            openProject.loadRecentProjects();
-            openProject.open();
-        }
 
-        Rectangle {
-            id: titlePill
+        Text {
+            id: bookTitleText
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            height: 32
-            width: titleRow.width + 22
-            radius: 8
-            color: bookTitleArea.containsMouse ? "#1d2c33" : "transparent"
-            border.width: 1
-            border.color: bookTitleArea.containsMouse ? "#2a8e96" : "transparent"
-            Behavior on color { ColorAnimation { duration: 110 } }
-
-            Row {
-                id: titleRow
-                anchors.centerIn: parent
-                spacing: 8
-
-                Text {
-                    id: bookTitleText
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Math.min(implicitWidth, bookTitleArea.width - 44)
-                    text: (config && config.bookSets && config.bookSets.length > 0
-                           && config.bookSets[0].bookTitle) ? config.bookSets[0].bookTitle : ""
-                    color: bookTitleArea.containsMouse ? "#00e6e6" : "#eef7f8"
-                    font.pixelSize: 15
-                    font.bold: true
-                    font.letterSpacing: 0.3
-                    elide: Text.ElideRight
-                    Behavior on color { ColorAnimation { duration: 90 } }
-                }
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    font.pixelSize: 11
-                    color: bookTitleArea.containsMouse ? "#00e6e6" : "#6f989d"
-                    visible: bookTitleText.text.length > 0
-                }
-            }
+            width: Math.min(implicitWidth, bookTitleArea.width)
+            text: (config && config.bookSets && config.bookSets.length > 0
+                   && config.bookSets[0].bookTitle) ? config.bookSets[0].bookTitle : ""
+            color: "#eef7f8"
+            font.pixelSize: 15
+            font.bold: true
+            font.letterSpacing: 0.3
+            elide: Text.ElideRight
         }
     }
 
