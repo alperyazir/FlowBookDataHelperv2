@@ -18,6 +18,7 @@ import fitz
 # Diff-based detection (answered vs original PDF) — falls back to the
 # legacy answer-color detection if the modules are missing.
 try:
+    from proto_audio import build_audio_sections, build_video_section
     from proto_circle import build_circle_sections, build_markwithx_sections
     from proto_match import build_match_sections
     from proto_puzzle import build_puzzle_sections
@@ -866,6 +867,7 @@ def run_analysis(config_path, settings_path):
 
     # 6. Analyze each page
     analyzed_count = 0
+    next_video_no = 1
     skipped_count = 0
 
     for i, page_info in enumerate(all_pages):
@@ -983,7 +985,27 @@ def run_analysis(config_path, settings_path):
                     original_page, pdf_page, scale_x, scale_y), ([], {}))
                 if fill_stats:
                     print(f"  Fill snap: {fill_stats}", flush=True)
-            # audio/video sections are produced by the icon matcher, not here
+            # File-anchored audio/video FALLBACK: with no cropped icon we
+            # still place a (needs_review) button per media file so Analyze
+            # never loses media — even "blind", every audio/video page gets a
+            # parked button. The icon matcher (proto_icon_match.py) repositions
+            # them precisely later (it clears + rebuilds these section types).
+            # No icon_regions are passed — the old AI-vision feed is gone.
+            book_prefix = section_path_prefix.split("/images/")[0]
+            audio_cfg = safe("audio", lambda: build_audio_sections(
+                original_page, scale_x, scale_y, page_num=page_num,
+                audio_dir=os.path.join(config_dir, "audio"),
+                audio_prefix=f"{book_prefix}/audio/"), [])
+            video_dirname = next((d for d in ("video", "videos")
+                                  if os.path.isdir(os.path.join(config_dir, d))),
+                                 "videos")
+            video = safe("video", lambda: build_video_section(
+                original_page, scale_x, scale_y, next_video_no,
+                videos_dir=os.path.join(config_dir, video_dirname),
+                video_prefix=f"{book_prefix}/{video_dirname}/"), None)
+            if video is not None:
+                audio_cfg = audio_cfg + [video]
+                next_video_no += 1
             circle_cfg = safe("circle", lambda: build_circle_sections(
                 original_page, pdf_page, page_num, images_dir,
                 section_path_prefix, scale_x, scale_y,
@@ -1004,8 +1026,10 @@ def run_analysis(config_path, settings_path):
             # (it over-triggers); match activities are added manually instead.
             # proto_match.py is still used for manual add / --redetect.
             match_cfg = []
-            cfg_sections = (fill_cfg + dd_cfg + circle_cfg
+            cfg_sections = (fill_cfg + audio_cfg + dd_cfg + circle_cfg
                             + markx_cfg + puzzle_cfg + match_cfg)
+            if audio_cfg:
+                print(f"  Audio/video (parked): {len(audio_cfg)}", flush=True)
             fill_count = len(fill_cfg)
             circle_count = len(circle_cfg)
             dd_count = len(dd_cfg)

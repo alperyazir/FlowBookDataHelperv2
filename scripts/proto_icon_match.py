@@ -159,7 +159,12 @@ def main():
         sys.exit(2)
 
     audio_dir = os.path.join(book_dir, "audio")
-    video_dir = os.path.join(book_dir, "video")
+    # publishers use either "video" or "videos"; match whichever exists so the
+    # matcher and Analyze's fallback agree on where the files live.
+    video_dir = next((os.path.join(book_dir, d)
+                      for d in ("video", "videos")
+                      if os.path.isdir(os.path.join(book_dir, d))),
+                     os.path.join(book_dir, "video"))
     a_prefix = f"./books/{name}/audio/"
     v_prefix = f"./books/{name}/video/"
 
