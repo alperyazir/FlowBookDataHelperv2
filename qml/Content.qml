@@ -69,6 +69,17 @@ Rectangle {
         }
     }
 
+    // Jump `delta` pages (e.g. ±10), clamped to the book bounds.
+    function goBy(delta) {
+        if (!pages || pages.length === 0) return;
+        var ni = root.currentPageIndex + delta;
+        if (ni < 0) ni = 0;
+        if (ni > pages.length - 1) ni = pages.length - 1;
+        if (ni === root.currentPageIndex) return;
+        sideBar.hideAllComponent();
+        root.currentPageIndex = ni;
+    }
+
     function enableRightClick(enabled) {
         currentPageDetails.enableRightClick(enabled);
     }

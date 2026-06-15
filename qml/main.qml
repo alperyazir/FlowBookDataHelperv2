@@ -69,6 +69,15 @@ ApplicationWindow {
         return !!(fi && fi.cursorPosition !== undefined && fi.selectedText !== undefined);
     }
 
+    // True when the page has no active selection / open panel / live mode, so
+    // the arrow keys can page through the book instead of aligning fills.
+    readonly property bool nothingSelected:
+        !activityDialog.visible && !awaitingActivityKey && !typingInField
+        && !sideBar.audioVisible && !sideBar.videoVisible && !sideBar.activityVisible
+        && !sideBar.fillVisible && !sideBar.circleVisible && !sideBar.fillwColorVisible
+        && !sideBar.drawMatchedVisible && sideBar.fillSelection.length === 0
+        && !content.pageDetails.fillSelectMode
+
     Timer {
         id: activityPrefixTimer
         interval: 450
@@ -206,6 +215,31 @@ ApplicationWindow {
             for (var j = 0; j < sel.length; j++)
                 sel[j].isTextBold = !allBold;
         }
+    }
+
+    // Left / Right arrows page through the book when nothing is selected.
+    // (With a 2+ fill selection the arrows align fills instead — see above.)
+    Shortcut {
+        sequence: "Right"
+        enabled: mainwindow.nothingSelected
+        onActivated: content.goNext()
+    }
+    Shortcut {
+        sequence: "Left"
+        enabled: mainwindow.nothingSelected
+        onActivated: content.goPrev()
+    }
+
+    // Up / Down arrows jump 10 pages forward / back when nothing is selected.
+    Shortcut {
+        sequence: "Down"
+        enabled: mainwindow.nothingSelected
+        onActivated: content.goBy(-10)
+    }
+    Shortcut {
+        sequence: "Up"
+        enabled: mainwindow.nothingSelected
+        onActivated: content.goBy(10)
     }
 
     // Space: open the selected activity, or play/pause the selected audio/video.

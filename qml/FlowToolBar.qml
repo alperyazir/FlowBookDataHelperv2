@@ -567,6 +567,8 @@ Rectangle {
                     { k: "B", d: "Bold / unbold the selected fills" },
                     { k: "←", d: "Align the selected fills to the leftmost one" },
                     { k: "↓", d: "Align the selected fills to the bottom-most one" },
+                    { k: "← →", d: "Previous / next page (when nothing is selected)" },
+                    { k: "↑ ↓", d: "Jump 10 pages forward / back (when nothing is selected)" },
                     { k: "Space", d: "Open the selected activity, or play / pause audio-video" },
                     { k: "Del", d: "Delete the selected section (also Backspace)" },
                     { k: "Esc", d: "Clear the current selection" },
