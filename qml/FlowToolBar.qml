@@ -95,6 +95,17 @@ Rectangle {
             }
         }
 
+        MenuButton {
+            text: "Help"
+            onClicked: helpMenu.open()
+            AppMenu {
+                id: helpMenu
+                y: parent.height + 2
+                implicitWidth: 200
+                AppMenuItem { text: "Keyboard Shortcuts"; onTriggered: shortcutsDialog.open() }
+            }
+        }
+
         Dialog {
             id: analyzeConfirmDialog
             modal: true
@@ -525,6 +536,170 @@ Rectangle {
                         if (content.pageDetails && content.pageDetails.page) {
                             content.pageDetails.page.sections = [];
                             console.log("Clear page: page " + root.currentPageNumber);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Keyboard-shortcuts cheat sheet (Help ▸ Keyboard Shortcuts).
+    Dialog {
+        id: shortcutsDialog
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: 580
+        height: Math.min(mainwindow.height * 0.82, 760)
+        padding: 0
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        // Grouped list of every shortcut we wired up.
+        property var helpSections: [
+            {
+                title: "Page editor",
+                items: [
+                    { k: "A", d: "Add an audio section at the cursor" },
+                    { k: "V", d: "Add a video section at the cursor" },
+                    { k: "F", d: "Add a fill at the cursor" },
+                    { k: "H", d: "Pick the open activity's header text (like its Pick button)" },
+                    { k: "C", d: "Crop the open activity (like its Crop button)" },
+                    { k: "R", d: "Toggle the fill-select (rubber-band) tool" },
+                    { k: "B", d: "Bold / unbold the selected fills" },
+                    { k: "←", d: "Align the selected fills to the leftmost one" },
+                    { k: "↓", d: "Align the selected fills to the bottom-most one" },
+                    { k: "Space", d: "Open the selected activity, or play / pause audio-video" },
+                    { k: "Del", d: "Delete the selected section (also Backspace)" },
+                    { k: "Esc", d: "Clear the current selection" },
+                    { k: "Ctrl+S", d: "Save" }
+                ]
+            },
+            {
+                title: "Add an activity — press A, then:",
+                items: [
+                    { k: "A F", d: "Fill-picture activity" },
+                    { k: "A D", d: "Drag & drop picture" },
+                    { k: "A G", d: "Drag & drop picture group" },
+                    { k: "A C", d: "Circle activity" },
+                    { k: "A M", d: "Match the words" },
+                    { k: "A P", d: "Puzzle / find words" },
+                    { k: "A X", d: "Mark with X" }
+                ]
+            },
+            {
+                title: "Activity editor (while an activity is open)",
+                items: [
+                    { k: "R", d: "Toggle the select (rubber-band) mode" },
+                    { k: "F", d: "Add an answer zone at the cursor" },
+                    { k: "←", d: "Align the selected zones to the leftmost one" },
+                    { k: "↓", d: "Align the selected zones to the bottom-most one" },
+                    { k: "Esc", d: "Exit select mode / clear selection / close" }
+                ]
+            }
+        ]
+
+        header: Rectangle {
+            color: "#1A2327"
+            height: 44
+            border.color: "#009ca6"
+            border.width: 1
+            Label {
+                text: "Keyboard Shortcuts"
+                color: "white"
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: 12
+                font.pixelSize: 16
+                font.bold: true
+            }
+        }
+
+        footer: Rectangle {
+            color: "#1A2327"
+            height: 56
+            border.color: "#009ca6"
+            border.width: 1
+            AppButton {
+                text: "Close"
+                anchors.right: parent.right
+                anchors.rightMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+                width: 100
+                height: 34
+                onClicked: shortcutsDialog.close()
+            }
+        }
+
+        background: Rectangle {
+            color: "#232f34"
+            border.color: "#009ca6"
+            border.width: 1
+            radius: 4
+        }
+
+        contentItem: Flickable {
+            id: helpFlick
+            clip: true
+            contentHeight: helpColumn.implicitHeight + 24
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+            Column {
+                id: helpColumn
+                x: 16
+                y: 12
+                width: helpFlick.width - 32
+                spacing: 18
+
+                Repeater {
+                    model: shortcutsDialog.helpSections
+
+                    Column {
+                        required property var modelData
+                        width: helpColumn.width
+                        spacing: 6
+
+                        Text {
+                            text: parent.modelData.title
+                            color: "#4fd2dc"
+                            font.pixelSize: 13
+                            font.bold: true
+                            bottomPadding: 2
+                        }
+
+                        Repeater {
+                            model: parent.modelData.items
+
+                            Row {
+                                required property var modelData
+                                width: parent.width
+                                spacing: 12
+
+                                Rectangle {
+                                    width: 78
+                                    height: 26
+                                    radius: 6
+                                    color: "#11343a"
+                                    border.color: "#1c5a63"
+                                    border.width: 1
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: parent.parent.modelData.k
+                                        color: "#4fd2dc"
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                    }
+                                }
+
+                                Text {
+                                    width: parent.width - 78 - 12
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: parent.modelData.d
+                                    color: "#cfe8ea"
+                                    font.pixelSize: 13
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
                         }
                     }
                 }
