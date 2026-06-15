@@ -19,8 +19,8 @@ Rectangle {
     property string standColor: myColors.standColor
     property string headerText
     property var activityModelData
-    property real lastHeight: 100
-    property real lastWidth: 100
+    property real lastHeight: 60
+    property real lastWidth: 60
 
     width: parent.width
     height: parent.height
@@ -98,23 +98,41 @@ Rectangle {
             sel[j].coords = Qt.rect(c.x, maxB - c.height, c.width, c.height);
         }
     }
+    property real hoverX: 0
+    property real hoverY: 0
+    // Add an answer zone at the cursor ('f' shortcut), like the long-press.
+    function addAnswerAtCursor() {
+        if (!root.activityModelData || !root.activityModelData.createNewAnswer)
+            return;
+        var adjustedX = root.hoverX - (flick.contentWidth / 2 - activityImage.paintedWidth / 2);
+        var adjustedY = root.hoverY - (flick.contentHeight / 2 - activityImage.paintedHeight / 2);
+        var originalX = adjustedX * (activityImage.sourceSize.width / activityImage.paintedWidth);
+        var originalY = adjustedY * (activityImage.sourceSize.height / activityImage.paintedHeight);
+        root.activityModelData.createNewAnswer(originalX, originalY, root.lastWidth, root.lastHeight);
+    }
     Rectangle {
         id: header
         width: parent.width
-        height: 40
+        height: 54
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        color: "#232f34"
+        color: "#1A2327"
         border.color: "#009ca6"
         border.width: 1
 
-        FlowText {
-            width: parent.width
-            height: parent.height
+        Text {
+            anchors.fill: parent
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
             text: root.headerText
-            font.pixelSize: 25
+            font.pixelSize: 16
             font.bold: true
-            color: "#009ca6"
+            color: "#cfe8ea"
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            wrapMode: Text.WordWrap
+            elide: Text.ElideRight
+            maximumLineCount: 2
         }
     }
 
@@ -133,29 +151,57 @@ Rectangle {
 
         Rectangle {
             id: draggableWords
-            color: "transparent"
             anchors.horizontalCenter: parent.horizontalCenter
             width: parent.width
-            height: 20//actColumn.biggestHeight*2 + 10
+            // A single horizontal strip of word chips, centered; scrolls
+            // sideways when there are too many to fit. Collapses when empty.
+            height: (root.shuffledWords && root.shuffledWords.length > 0) ? 44 : 0
+            color: "#16242b"
+            radius: 6
+            border.color: (root.shuffledWords && root.shuffledWords.length > 0) ? "#2a3f48" : "transparent"
+            border.width: 1
             z: 2
 
-            Flow {
-                id: flowWords
-                anchors.topMargin: 10
-                anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 5
-                Repeater {
-                    model: root.shuffledWords
-                    Rectangle {
-                        width: 100
-                        height: 30
-                        color: "transparent"
-                        border.color: "blue"
-                        border.width: 1
-                        FlowText {
-                            width: parent.width
-                            height: parent.height
-                            text: modelData
+            Flickable {
+                id: wordsFlick
+                anchors.fill: parent
+                anchors.margins: 6
+                contentWidth: wordsRow.width
+                contentHeight: height
+                flickableDirection: Flickable.HorizontalFlick
+                clip: true
+                ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+
+                Row {
+                    id: wordsRow
+                    spacing: 6
+                    // Centered horizontally & vertically; chips stay in one row.
+                    x: Math.max(0, (wordsFlick.width - width) / 2)
+                    y: Math.max(0, (wordsFlick.height - height) / 2)
+
+                    Repeater {
+                        model: root.shuffledWords
+                        Rectangle {
+                            width: chipText.implicitWidth + 20
+                            height: 28
+                            radius: 14
+                            color: chipMouse.containsMouse ? "#22323a" : "#2A3337"
+                            border.color: "#009ca6"
+                            border.width: 1
+                            Text {
+                                id: chipText
+                                anchors.centerIn: parent
+                                text: modelData
+                                color: "#cfe8ea"
+                                font.pixelSize: 13
+                            }
+                            MouseArea {
+                                id: chipMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: clipboardHelper.copyText(modelData)
+                            }
                         }
                     }
                 }
@@ -295,6 +341,8 @@ Rectangle {
                         MouseArea {
                             anchors.fill: parent
                             propagateComposedEvents: true
+                            hoverEnabled: true
+                            onPositionChanged: { root.hoverX = mouseX; root.hoverY = mouseY; }
                             onPressAndHold: {
                                 var adjustedX = mouseX - (flick.contentWidth / 2 - activityImage.paintedWidth / 2);
                                 var adjustedY = mouseY - (flick.contentHeight / 2 - activityImage.paintedHeight / 2);
@@ -309,7 +357,7 @@ Rectangle {
 
                             onWheel: function (wheel) {
                                 if (wheel.angleDelta.y / 120 * flick.contentWidth * 0.1 + flick.contentWidth > flick.width && wheel.angleDelta.y / 120 * flick.contentHeight * 0.1 + flick.contentHeight > flick.height) {
-                                    flick.resizeContent(wheel.angleDelta.y / 120 * flick.contentWidth * 0.1 + flick.contentWidth, wheel.angleDelta.y / 120 * flick.contentHeight * 0.1 + flick.contentHeight, Qt.point(flick.contentX + flick.width / 2, flick.contentY + flick.height / 2));
+                                    flick.resizeContent(wheel.angleDelta.y / 120 * flick.contentWidth * 0.1 + flick.contentWidth, wheel.angleDelta.y / 120 * flick.contentHeight * 0.1 + flick.contentHeight, Qt.point(wheel.x, wheel.y));
                                     flick.returnToBounds();
                                 } else {
                                     flick.resizeContent(flick.width, flick.height, Qt.point(flick.width / 2, flick.height / 2));
@@ -492,10 +540,10 @@ Rectangle {
                                                 answerRect.height += mouseY / (activityImage.paintedHeight / activityImage.sourceSize.height);
 
                                                 // Minimum boyutları kontrol et
-                                                if (answerRect.width < 30 / (activityImage.paintedWidth / activityImage.sourceSize.width))
-                                                    answerRect.width = 30 / (activityImage.paintedWidth / activityImage.sourceSize.width);
-                                                if (answerRect.height < 30 / (activityImage.paintedHeight / activityImage.sourceSize.height))
-                                                    answerRect.height = 30 / (activityImage.paintedHeight / activityImage.sourceSize.height);
+                                                if (answerRect.width < 18 / (activityImage.paintedWidth / activityImage.sourceSize.width))
+                                                    answerRect.width = 18 / (activityImage.paintedWidth / activityImage.sourceSize.width);
+                                                if (answerRect.height < 18 / (activityImage.paintedHeight / activityImage.sourceSize.height))
+                                                    answerRect.height = 18 / (activityImage.paintedHeight / activityImage.sourceSize.height);
 
                                                 root.syncSizeLive(modelData,
                                                                   answerRect.width / answerRect.xScale,

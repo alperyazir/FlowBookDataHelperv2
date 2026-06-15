@@ -96,6 +96,7 @@ ApplicationWindow {
 
     Shortcut {
         sequence: "f"
+        enabled: !activityDialog.visible
         onActivated: {
             if (awaitingActivityKey) triggerActivityCombo("fillpicture");
             else content.pageDetails.addFillAtMouse();

@@ -9,7 +9,7 @@ Item {
     property real imageHeights: (mainwindow.height * 30 / 1080) * (flick.contentWidth / flick.width)
     property var page
     property string currentSelectionType: ""
-    property size lastSize: Qt.size(100, 50)
+    property size lastSize: Qt.size(60, 30)
 
     property bool fillingModeEnabled: false
     property var activeFillRectangle
@@ -1215,10 +1215,10 @@ Item {
                                             answerRect.originalHeight += mouseY / (picture.paintedHeight / picture.sourceSize.height);
 
                                             // Minimum boyutları kontrol et
-                                            if (answerRect.originalWidth < 30 / (picture.paintedWidth / picture.sourceSize.width))
-                                                answerRect.originalWidth = 30 / (picture.paintedWidth / picture.sourceSize.width);
-                                            if (answerRect.originalHeight < 30 / (picture.paintedHeight / picture.sourceSize.height))
-                                                answerRect.originalHeight = 30 / (picture.paintedHeight / picture.sourceSize.height);
+                                            if (answerRect.originalWidth < 18 / (picture.paintedWidth / picture.sourceSize.width))
+                                                answerRect.originalWidth = 18 / (picture.paintedWidth / picture.sourceSize.width);
+                                            if (answerRect.originalHeight < 18 / (picture.paintedHeight / picture.sourceSize.height))
+                                                answerRect.originalHeight = 18 / (picture.paintedHeight / picture.sourceSize.height);
 
                                             // Group resize, live: match every other
                                             // selected fill on each drag step.
@@ -1314,10 +1314,10 @@ Item {
                                             answerCircleRect.originalHeight += mouseY / (picture.paintedHeight / picture.sourceSize.height);
 
                                             // Minimum boyutları kontrol et
-                                            if (answerCircleRect.originalWidth < 30 / (picture.paintedWidth / picture.sourceSize.width))
-                                                answerCircleRect.originalWidth = 30 / (picture.paintedWidth / picture.sourceSize.width);
-                                            if (answerCircleRect.originalHeight < 30 / (picture.paintedHeight / picture.sourceSize.height))
-                                                answerCircleRect.originalHeight = 30 / (picture.paintedHeight / picture.sourceSize.height);
+                                            if (answerCircleRect.originalWidth < 18 / (picture.paintedWidth / picture.sourceSize.width))
+                                                answerCircleRect.originalWidth = 18 / (picture.paintedWidth / picture.sourceSize.width);
+                                            if (answerCircleRect.originalHeight < 18 / (picture.paintedHeight / picture.sourceSize.height))
+                                                answerCircleRect.originalHeight = 18 / (picture.paintedHeight / picture.sourceSize.height);
                                         }
                                     }
                                     onReleased: root.setTotalStatus(answerCircleRect, modelData)
@@ -1407,10 +1407,10 @@ Item {
                                             answerColorRect.originalHeight += mouseY / (picture.paintedHeight / picture.sourceSize.height);
 
                                             // Minimum boyutları kontrol et
-                                            if (answerColorRect.originalWidth < 30 / (picture.paintedWidth / picture.sourceSize.width))
-                                                answerColorRect.originalWidth = 30 / (picture.paintedWidth / picture.sourceSize.width);
-                                            if (answerColorRect.originalHeight < 30 / (picture.paintedHeight / picture.sourceSize.height))
-                                                answerColorRect.originalHeight = 30 / (picture.paintedHeight / picture.sourceSize.height);
+                                            if (answerColorRect.originalWidth < 18 / (picture.paintedWidth / picture.sourceSize.width))
+                                                answerColorRect.originalWidth = 18 / (picture.paintedWidth / picture.sourceSize.width);
+                                            if (answerColorRect.originalHeight < 18 / (picture.paintedHeight / picture.sourceSize.height))
+                                                answerColorRect.originalHeight = 18 / (picture.paintedHeight / picture.sourceSize.height);
                                         }
                                     }
                                     onReleased: root.setTotalStatus(answerColorRect, modelData)
@@ -1515,10 +1515,10 @@ Item {
                                                 beginRectItem.originalHeight += mouseY / (picture.paintedHeight / picture.sourceSize.height);
 
                                                 // Minimum boyutları kontrol et
-                                                if (beginRectItem.originalWidth < 30 / (picture.paintedWidth / picture.sourceSize.width))
-                                                    beginRectItem.originalWidth = 30 / (picture.paintedWidth / picture.sourceSize.width);
-                                                if (beginRectItem.originalHeight < 30 / (picture.paintedHeight / picture.sourceSize.height))
-                                                    beginRectItem.originalHeight = 30 / (picture.paintedHeight / picture.sourceSize.height);
+                                                if (beginRectItem.originalWidth < 18 / (picture.paintedWidth / picture.sourceSize.width))
+                                                    beginRectItem.originalWidth = 18 / (picture.paintedWidth / picture.sourceSize.width);
+                                                if (beginRectItem.originalHeight < 18 / (picture.paintedHeight / picture.sourceSize.height))
+                                                    beginRectItem.originalHeight = 18 / (picture.paintedHeight / picture.sourceSize.height);
                                             }
                                         }
                                         onReleased: {
@@ -1726,10 +1726,10 @@ Item {
                                                 endRectItem.originalHeight += mouseY / (picture.paintedHeight / picture.sourceSize.height);
 
                                                 // Minimum boyutları kontrol et
-                                                if (endRectItem.originalWidth < 30 / (picture.paintedWidth / picture.sourceSize.width))
-                                                    endRectItem.originalWidth = 30 / (picture.paintedWidth / picture.sourceSize.width);
-                                                if (endRectItem.originalHeight < 30 / (picture.paintedHeight / picture.sourceSize.height))
-                                                    endRectItem.originalHeight = 30 / (picture.paintedHeight / picture.sourceSize.height);
+                                                if (endRectItem.originalWidth < 18 / (picture.paintedWidth / picture.sourceSize.width))
+                                                    endRectItem.originalWidth = 18 / (picture.paintedWidth / picture.sourceSize.width);
+                                                if (endRectItem.originalHeight < 18 / (picture.paintedHeight / picture.sourceSize.height))
+                                                    endRectItem.originalHeight = 18 / (picture.paintedHeight / picture.sourceSize.height);
                                             }
                                         }
                                         onReleased: {

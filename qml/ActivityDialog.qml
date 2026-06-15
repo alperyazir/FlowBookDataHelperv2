@@ -11,8 +11,8 @@ Dialog {
     property var answers: []
     property var activityModelData
     id: root
-    width: mainwindow.width*3/4
-    height: mainwindow.height*3/4
+    width: mainwindow.width * 0.92
+    height: mainwindow.height * 0.92
     modal: true
     anchors.centerIn: parent
     closePolicy: Popup.NoAutoClose // Prevents dialog from closing when clicking outside
@@ -49,6 +49,16 @@ Dialog {
         }
     }
 
+    // 'f' adds an answer zone at the cursor (like long-press).
+    Shortcut {
+        sequence: "f"
+        enabled: root.visible
+        onActivated: {
+            if (root.currentActivity && root.currentActivity.addAnswerAtCursor)
+                root.currentActivity.addAnswerAtCursor();
+        }
+    }
+
     // Escape: exit select mode -> clear the answer selection -> close.
     Shortcut {
         sequence: "Escape"
@@ -75,14 +85,37 @@ Dialog {
         height: 40
         border.color: "#009ca6"
         border.width: 1
-        Label {
-            text: "Activity"
-            color: "white"
+        Row {
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left
             anchors.leftMargin: 10
-            font.pixelSize: 16
-            font.bold: true
+            spacing: 10
+            Label {
+                text: "Activity"
+                color: "white"
+                anchors.verticalCenter: parent.verticalCenter
+                font.pixelSize: 16
+                font.bold: true
+            }
+            // The activity type, shown as a pill next to the title.
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: typeBadge.text.length > 0
+                width: typeBadge.implicitWidth + 18
+                height: 22
+                radius: 11
+                color: "#11343a"
+                border.color: "#1c5a63"
+                border.width: 1
+                Text {
+                    id: typeBadge
+                    anchors.centerIn: parent
+                    text: (root.activityModelData && root.activityModelData.type) || ""
+                    color: "#4fd2dc"
+                    font.pixelSize: 12
+                    font.bold: true
+                }
+            }
         }
     }
 
