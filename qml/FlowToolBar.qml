@@ -321,35 +321,10 @@ Rectangle {
                         onClicked: analyzeConfirmDialog.close()
                     }
 
-                    // Run only the icon matcher (no Analyze).
+                    // Run Analyze, then the icon matcher (if an icon was cropped).
                     Button {
-                        text: "Icons only"
+                        text: "Analyze"
                         width: 110; height: 36
-                        enabled: !pdfProcess.aiAnalyzing
-                                 && (analyzeConfirmDialog.audioIconPath !== ""
-                                     || analyzeConfirmDialog.videoIconPath !== "")
-                        background: Rectangle {
-                            color: !parent.enabled ? "#34464d"
-                                                   : (parent.hovered ? "#2A3337" : "#1A2327")
-                            border.color: "#009ca6"; border.width: 1; radius: 6
-                        }
-                        contentItem: Text {
-                            text: parent.text; color: "white"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        onClicked: {
-                            if (pdfProcess.aiAnalyzing)
-                                return;
-                            analyzeConfirmDialog.close();
-                            analyzeConfirmDialog.runIconMatch(true);  // flush edits first
-                        }
-                    }
-
-                    // Run Analyze, then the icon matcher (if icons were given).
-                    Button {
-                        text: "Analyze + Icons"
-                        width: 150; height: 36
                         enabled: !pdfProcess.aiAnalyzing
                         background: Rectangle {
                             color: !parent.enabled ? "#5a8d91"
