@@ -17,7 +17,7 @@ Dialog {
     // Custom header
     header: Rectangle {
         color: "#1A2327"
-        height: parent.height * .07
+        height: 44
         border.color: "#009ca6"
         border.width: 1
 
@@ -36,26 +36,26 @@ Dialog {
     footer: Rectangle {
         id: footRect
         color: "#1A2327"
-        height: parent.height * .07
+        height: 60
         border.color: "#009ca6"
         border.width: 1
 
         RowLayout {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            anchors.rightMargin: 10
+            anchors.rightMargin: 12
             spacing: 10
 
             Button {
                 text: "Cancel"
-                Layout.preferredWidth: 80
-                Layout.preferredHeight: footRect.height * 0.6
+                Layout.preferredWidth: 90
+                Layout.preferredHeight: 36
 
                 background: Rectangle {
                     color: parent.hovered ? "#2A3337" : "#1A2327"
-                    border.color: "#009ca6"
+                    border.color: "#445055"
                     border.width: 1
-                    radius: 2
+                    radius: 6
                 }
 
                 contentItem: Text {
@@ -69,21 +69,21 @@ Dialog {
             }
 
             Button {
-                text: "OK"
-                Layout.preferredWidth: 80
-                Layout.preferredHeight: footRect.height * 0.6
+                text: "Create"
+                Layout.preferredWidth: 110
+                Layout.preferredHeight: 36
                 enabled: isPdfValid
 
                 background: Rectangle {
-                    color: parent.enabled ? (parent.hovered ? "#2A3337" : "#1A2327") : "darkgray"
-                    border.color: "#009ca6"
-                    border.width: 1
-                    radius: 2
+                    color: !parent.enabled ? "#2a3338"
+                                           : (parent.hovered ? "#00b3be" : "#009ca6")
+                    radius: 6
                 }
 
                 contentItem: Text {
                     text: parent.text
-                    color: parent.enabled ? "white" : "black"
+                    color: parent.enabled ? "white" : "#6b7a80"
+                    font.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -249,7 +249,7 @@ Dialog {
                     color: "#1A2327"
                     border.color: "#009ca6"
                     border.width: 1
-                    radius: 2
+                    radius: 6
                 }
             }
 
@@ -260,7 +260,7 @@ Dialog {
                     color: "#1A2327"
                     border.color: "#009ca6"
                     border.width: 1
-                    radius: 2
+                    radius: 6
                 }
                 contentItem: Text {
                     text: "..."
@@ -285,8 +285,7 @@ Dialog {
         Rectangle {
             id: validPdfContent
             Layout.fillWidth: true
-            Layout.preferredHeight: root.height * 0.8
-            visible: isPdfValid
+            Layout.fillHeight: true
             border.width: 1
             border.color: "#009ca6"
             color: "#232f34"
@@ -300,7 +299,6 @@ Dialog {
                 // Publisher Name
                 RowLayout {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
                     spacing: 10
 
                     Label {
@@ -320,7 +318,7 @@ Dialog {
                             color: "#1A2327"
                             border.color: "#009ca6"
                             border.width: 1
-                            radius: 2
+                            radius: 6
                         }
                     }
                 }
@@ -347,7 +345,7 @@ Dialog {
                             color: "#1A2327"
                             border.color: "#009ca6"
                             border.width: 1
-                            radius: 2
+                            radius: 6
                         }
                     }
                 }
@@ -373,7 +371,7 @@ Dialog {
                             color: "#1A2327"
                             border.color: "#009ca6"
                             border.width: 1
-                            radius: 2
+                            radius: 6
                         }
 
                         contentItem: Text {
@@ -440,7 +438,7 @@ Dialog {
                             color: "#1A2327"
                             border.color: "#009ca6"
                             border.width: 1
-                            radius: 2
+                            radius: 6
                         }
 
                         contentItem: Text {
@@ -508,7 +506,7 @@ Dialog {
                             color: "#1A2327"
                             border.color: "#009ca6"
                             border.width: 1
-                            radius: 2
+                            radius: 6
                         }
                     }
 
@@ -519,7 +517,7 @@ Dialog {
                             color: "#1A2327"
                             border.color: "#009ca6"
                             border.width: 1
-                            radius: 2
+                            radius: 6
                         }
                         contentItem: Text {
                             text: "..."
@@ -562,7 +560,7 @@ Dialog {
                             color: "#1A2327"
                             border.color: "#009ca6"
                             border.width: 1
-                            radius: 2
+                            radius: 6
                         }
                     }
 
@@ -573,7 +571,7 @@ Dialog {
                             color: "#1A2327"
                             border.color: "#009ca6"
                             border.width: 1
-                            radius: 2
+                            radius: 6
                         }
                         contentItem: Text {
                             text: "..."
@@ -619,7 +617,7 @@ Dialog {
                             color: "#1A2327"
                             border.color: "#009ca6"
                             border.width: 1
-                            radius: 2
+                            radius: 6
                         }
                     }
 
@@ -630,7 +628,7 @@ Dialog {
                             color: "#1A2327"
                             border.color: "#009ca6"
                             border.width: 1
-                            radius: 2
+                            radius: 6
                         }
                         contentItem: Text {
                             text: "..."
@@ -678,7 +676,7 @@ Dialog {
                             color: "#1A2327"
                             border.color: "#009ca6"
                             border.width: 1
-                            radius: 2
+                            radius: 6
                         }
                     }
 
@@ -689,7 +687,7 @@ Dialog {
                             color: "#1A2327"
                             border.color: "#009ca6"
                             border.width: 1
-                            radius: 2
+                            radius: 6
                         }
                         contentItem: Text {
                             text: "..."
@@ -736,7 +734,7 @@ Dialog {
                             color: parent.hovered ? "#2A3337" : "#1A2327"
                             border.color: "#009ca6"
                             border.width: 1
-                            radius: 2
+                            radius: 6
                         }
                         contentItem: Text {
                             text: parent.text
@@ -757,7 +755,7 @@ Dialog {
                             color: parent.hovered ? "#2A3337" : "#1A2327"
                             border.color: "#009ca6"
                             border.width: 1
-                            radius: 2
+                            radius: 6
                         }
                         contentItem: Text {
                             text: parent.text
@@ -819,7 +817,7 @@ Dialog {
                                     color: parent.hovered ? "#2A3337" : "#1A2327"
                                     border.color: "#009ca6"
                                     border.width: 1
-                                    radius: 2
+                                    radius: 6
                                 }
                                 contentItem: Text {
                                     text: parent.text
@@ -845,8 +843,7 @@ Dialog {
                 Rectangle {
                     id: moduleRect
                     Layout.fillWidth: true
-                    Layout.fillHeight: false
-                    Layout.preferredHeight: parent.height * 0.35
+                    Layout.fillHeight: true
                     Layout.topMargin: 5
                     border.width: 1
                     border.color: "#009ca6"
@@ -923,7 +920,7 @@ Dialog {
                                             color: "#1A2327"
                                             border.color: "#009ca6"
                                             border.width: 1
-                                            radius: 2
+                                            radius: 6
                                         }
                                     }
 
@@ -940,7 +937,7 @@ Dialog {
                                             color: "#1A2327"
                                             border.color: "#009ca6"
                                             border.width: 1
-                                            radius: 2
+                                            radius: 6
                                         }
                                     }
 
@@ -965,7 +962,7 @@ Dialog {
                                             color: "#1A2327"
                                             border.color: "#009ca6"
                                             border.width: 1
-                                            radius: 2
+                                            radius: 6
                                         }
                                     }
 
@@ -981,7 +978,7 @@ Dialog {
                                             color: "#1A2327"
                                             border.color: "#009ca6"
                                             border.width: 1
-                                            radius: 2
+                                            radius: 6
                                         }
                                         contentItem: Text {
                                             text: "X"
@@ -1051,6 +1048,13 @@ Dialog {
                                         name: newName,
                                         startPage: newStartPage.toString(),
                                         endPage: ""
+                                    });
+
+                                    // Scroll to the just-added row (defer so the
+                                    // delegate exists before we position the view).
+                                    Qt.callLater(function () {
+                                        modulesList.positionViewAtIndex(
+                                            modulesModel.count - 1, ListView.Contain);
                                     });
                                 }
                                 background: Rectangle {
