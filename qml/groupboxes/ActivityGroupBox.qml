@@ -97,6 +97,19 @@ GroupBox {
         onRejected: console.log("File selection was canceled")
     }
 
+    // In-app list of the book's audio files ("Pick" button) — same picker as
+    // the Audio panel; pulls from the book's audio/ folder.
+    MediaPicker {
+        id: audioExtraPicker
+        kind: "audio"
+        onPicked: function (rel) {
+            if (root.sectionModelData.audioExtra === null)
+                root.sectionModelData.createAudioExtra(rel);
+            else
+                root.sectionModelData.audioExtra.path = rel;
+        }
+    }
+
     MediaPlayer {
         id: playRecordAudio
         audioOutput: AudioOutput {}
@@ -312,6 +325,18 @@ GroupBox {
                         onClicked: {
                             fileDialog.folder = "file:" + appPath;
                             fileDialog.open();
+                        }
+                    }
+
+                    AppButton {
+                        text: "Pick"
+                        variant: "primary"
+                        Layout.preferredWidth: 58
+                        Layout.preferredHeight: 32
+                        onClicked: {
+                            audioExtraPicker.currentPath = (root.sectionModelData && root.sectionModelData.audioExtra)
+                                                           ? root.sectionModelData.audioExtra.path : "";
+                            audioExtraPicker.open();
                         }
                     }
                 }
