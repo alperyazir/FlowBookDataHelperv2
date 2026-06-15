@@ -18,11 +18,51 @@ Dialog {
     closePolicy: Popup.NoAutoClose // Prevents dialog from closing when clicking outside
     visible: false
 
-    // Escape closes the dialog and clears the section selection in one press.
+    // Rubber-band ("Select") mode for the answer zones (the 'r' tool).
+    property bool selectMode: false
+    property var currentActivity: null   // the activity component on screen
+    onClosed: selectMode = false
+
+    Shortcut {
+        sequence: "r"
+        enabled: root.visible
+        onActivated: root.selectMode = !root.selectMode
+    }
+
+    // 'l' aligns the selected answer zones to the leftmost one.
+    Shortcut {
+        sequence: "l"
+        enabled: root.visible
+        onActivated: {
+            if (root.currentActivity && root.currentActivity.alignSelectedLeft)
+                root.currentActivity.alignSelectedLeft();
+        }
+    }
+
+    // 'b' aligns the selected answer zones to the bottom-most one.
+    Shortcut {
+        sequence: "b"
+        enabled: root.visible
+        onActivated: {
+            if (root.currentActivity && root.currentActivity.alignSelectedBottom)
+                root.currentActivity.alignSelectedBottom();
+        }
+    }
+
+    // Escape: exit select mode -> clear the answer selection -> close.
     Shortcut {
         sequence: "Escape"
         enabled: root.visible
         onActivated: {
+            if (root.selectMode) {
+                root.selectMode = false;
+                return;
+            }
+            if (root.currentActivity && root.currentActivity.selectedAnswers
+                && root.currentActivity.selectedAnswers.length > 0) {
+                root.currentActivity.clearAnsSelection();
+                return;
+            }
             root.close();
             sideBar.hideAllComponent();
         }
@@ -133,6 +173,7 @@ Dialog {
         activityDragDropPicture.imageSource = "file:" + appPath + root.activityModelData.sectionPath
         activityDragDropPicture.answers = root.activityModelData.answers
         activityDragDropPicture.activityModelData = root.activityModelData
+        root.currentActivity = activityDragDropPicture
         // content.enableRightClick(false)
         // activityDragDropPicture.onVisibleChanged.connect(function(visible) {
         //     if(!visible) {
@@ -152,6 +193,7 @@ Dialog {
         activityDragDropPictureGroup.imageSource = "file:" + appPath + root.activityModelData.sectionPath
         activityDragDropPictureGroup.answers = root.activityModelData.answers
         activityDragDropPictureGroup.activityModelData = root.activityModelData
+        root.currentActivity = activityDragDropPictureGroup
         // content.enableRightClick(false)
 
         // activityDragDropPictureGroup.onVisibleChanged.connect(function(visible) {
@@ -170,6 +212,7 @@ Dialog {
         activityDragDropPicture.imageSource = "file:" + appPath + root.activityModelData.sectionPath
         activityDragDropPicture.answers = root.activityModelData.answers
         activityDragDropPicture.activityModelData = root.activityModelData
+        root.currentActivity = activityDragDropPicture
         //content.enableRightClick(false)
         // activityDragDropPicture.onVisibleChanged.connect(function(visible) {
         //     if(!visible) {
@@ -203,6 +246,7 @@ Dialog {
         activityCircle.imageSource = "file:" + appPath + root.activityModelData.sectionPath
         activityCircle.answers = root.activityModelData.answers
         activityCircle.activityModelData = root.activityModelData
+        root.currentActivity = activityCircle
         //content.enableRightClick(false)
         // activityCircle.onVisibleChanged.connect(function(visible) {
         //     if(!visible) {
@@ -219,6 +263,7 @@ Dialog {
         activityMarkWithX.imageSource = "file:" + appPath + root.activityModelData.sectionPath
         activityMarkWithX.answers = root.activityModelData.answers
         activityMarkWithX.activityModelData = root.activityModelData
+        root.currentActivity = activityMarkWithX
         // content.enableRightClick(false)
         // activityMarkWithX.onVisibleChanged.connect(function(visible) {
         //     if(!visible) {
@@ -230,6 +275,7 @@ Dialog {
 
 
     function clearMainContainer() {
+        root.currentActivity = null;
         for (var i = mainContainer.children.length - 1; i >= 0; i--) {
             var child = mainContainer.children[i];
             if (child !== undefined && child !== null) {

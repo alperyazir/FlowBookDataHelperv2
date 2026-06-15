@@ -23,55 +23,73 @@ GroupBox {
 
     // --- Multi-selection state (indices into fillList) ---
     // Reassigned wholesale on every change so delegate bindings re-evaluate.
-    property var selectedList: []
-    readonly property int selCount: selectedList.length
+    // Selection is shared with the page (rubber-band / Ctrl+click) via
+    // sideBar.fillSelection — an array of the selected answer objects. Using
+    // object identity means it survives fillList reassignment (no stale
+    // indices). The toolbar/ops here act on this section's slice of it.
+    readonly property int selCount: {
+        var n = 0;
+        for (var i = 0; i < fillList.length; i++)
+            if (sideBar.fillSelection.indexOf(fillList[i]) !== -1)
+                n++;
+        return n;
+    }
     readonly property bool allSelected: fillList && fillList.length > 0
-                                        && selectedList.length === fillList.length
-    // True when every selected row is already bold (drives the Bold toggle).
+                                        && selCount === fillList.length
+    // True when every selected row in this section is already bold.
     readonly property bool selectionBold: {
-        if (selectedList.length === 0)
+        if (selCount === 0)
             return false;
-        for (var k = 0; k < selectedList.length; k++) {
-            var i = selectedList[k];
-            if (i < 0 || i >= fillList.length || !fillList[i].isTextBold)
+        for (var i = 0; i < fillList.length; i++) {
+            var it = fillList[i];
+            if (sideBar.fillSelection.indexOf(it) !== -1 && !it.isTextBold)
                 return false;
         }
         return true;
     }
-    // The list changes identity on add/remove; stale indices would be wrong.
-    onFillListChanged: selectedList = []
 
-    function isSel(i) {
-        return root.selectedList.indexOf(i) !== -1;
+    function isSel(item) {
+        return sideBar.fillSelection.indexOf(item) !== -1;
     }
-    function toggleSel(i) {
-        var arr = root.selectedList.slice();
-        var p = arr.indexOf(i);
+    function toggleSel(item) {
+        var arr = sideBar.fillSelection.slice();
+        var p = arr.indexOf(item);
         if (p === -1)
-            arr.push(i);
+            arr.push(item);
         else
             arr.splice(p, 1);
-        root.selectedList = arr;
+        sideBar.fillSelection = arr;
     }
     function selectAll() {
+        var arr = sideBar.fillSelection.slice();
+        for (var i = 0; i < fillList.length; i++)
+            if (arr.indexOf(fillList[i]) === -1)
+                arr.push(fillList[i]);
+        sideBar.fillSelection = arr;
+    }
+    function clearSelInList() {
         var arr = [];
-        for (var i = 0; i < root.fillList.length; i++)
-            arr.push(i);
-        root.selectedList = arr;
+        for (var i = 0; i < sideBar.fillSelection.length; i++)
+            if (fillList.indexOf(sideBar.fillSelection[i]) === -1)
+                arr.push(sideBar.fillSelection[i]);   // keep other sections
+        sideBar.fillSelection = arr;
     }
     function boldSelected(b) {
-        for (var k = 0; k < root.selectedList.length; k++) {
-            var i = root.selectedList[k];
-            if (i >= 0 && i < root.fillList.length)
-                root.fillList[i].isTextBold = b;
+        for (var i = 0; i < fillList.length; i++) {
+            var it = fillList[i];
+            if (sideBar.fillSelection.indexOf(it) !== -1)
+                it.isTextBold = b;
         }
     }
     function deleteSelected() {
-        // Remove from the highest index down so earlier indices stay valid.
-        var arr = root.selectedList.slice().sort(function (a, b) { return b - a; });
-        for (var k = 0; k < arr.length; k++)
-            root.removeAnswer(arr[k]);
-        root.selectedList = [];
+        var idxs = [];
+        for (var i = 0; i < fillList.length; i++)
+            if (sideBar.fillSelection.indexOf(fillList[i]) !== -1)
+                idxs.push(i);
+        idxs.sort(function (a, b) { return b - a; });   // delete high->low
+        for (var k = 0; k < idxs.length; k++)
+            root.removeAnswer(idxs[k]);
+        clearSelInList();
     }
 
     background: Rectangle {
@@ -104,7 +122,7 @@ GroupBox {
                 Layout.preferredWidth: 100
                 Layout.preferredHeight: 30
                 enabled: root.fillList && root.fillList.length > 0
-                onClicked: root.allSelected ? root.selectedList = [] : root.selectAll()
+                onClicked: root.allSelected ? root.clearSelInList() : root.selectAll()
             }
 
             Text {
@@ -195,10 +213,10 @@ GroupBox {
                         width: ListView.view ? ListView.view.width : 0
                         height: 46
                         radius: 6
-                        color: root.isSel(index) ? "#15323a" : "#1A2327"
+                        color: root.isSel(modelData) ? "#15323a" : "#1A2327"
                         border.color: pageSelected ? "#00e6e6"
-                                      : (root.isSel(index) ? "#009ca6" : "#2f4751")
-                        border.width: (pageSelected || root.isSel(index)) ? 2 : 1
+                                      : (root.isSel(modelData) ? "#009ca6" : "#2f4751")
+                        border.width: (pageSelected || root.isSel(modelData)) ? 2 : 1
 
                         // Clicking anywhere on the row (gaps) marks this fill as
                         // the one selected on the page. Declared first so the
@@ -215,24 +233,24 @@ GroupBox {
                             spacing: 6
 
                             // Selection box — fully binding-driven so it tracks
-                            // selectedList (a CheckBox would break its binding on click).
+                            // sideBar.fillSelection (a CheckBox would break its binding on click).
                             Rectangle {
                                 Layout.preferredWidth: 20
                                 Layout.preferredHeight: 20
                                 radius: 4
-                                color: root.isSel(index) ? "#009ca6" : "#1A2327"
-                                border.color: root.isSel(index) ? "#009ca6" : "#445055"
+                                color: root.isSel(modelData) ? "#009ca6" : "#1A2327"
+                                border.color: root.isSel(modelData) ? "#009ca6" : "#445055"
                                 border.width: 1
                                 Text {
                                     anchors.centerIn: parent
                                     text: "✓"
                                     color: "white"
                                     font.pixelSize: 12
-                                    visible: root.isSel(index)
+                                    visible: root.isSel(modelData)
                                 }
                                 MouseArea {
                                     anchors.fill: parent
-                                    onClicked: root.toggleSel(index)
+                                    onClicked: root.toggleSel(modelData)
                                 }
                             }
 

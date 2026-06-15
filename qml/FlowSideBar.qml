@@ -21,6 +21,9 @@ Rectangle {
     property var fillModelData: ({})
     property var fillList: []
     property int fillIndex
+    // Page <-> sidebar shared multi-selection of fill answer objects
+    // (rubber-band / Ctrl+click on the page, checkboxes in the Fill panel).
+    property var fillSelection: []
     property bool audioVisible: false
     property bool videoVisible: false
     property bool activityVisible: false

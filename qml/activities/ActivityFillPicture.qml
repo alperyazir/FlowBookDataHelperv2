@@ -25,6 +25,78 @@ Rectangle {
     height: parent.height
     color: "#232f34"
 
+    // --- Ctrl+click multi-selection of answer zones + group resize ---
+    property var selectedAnswers: []
+    function isAnsSelected(a) { return root.selectedAnswers.indexOf(a) !== -1; }
+    function setSingleAnsSelection(a) { root.selectedAnswers = a ? [a] : []; }
+    function toggleAnsSelection(a) {
+        var arr = root.selectedAnswers.slice();
+        var p = arr.indexOf(a);
+        if (p === -1) arr.push(a); else arr.splice(p, 1);
+        root.selectedAnswers = arr;
+    }
+    function clearAnsSelection() { root.selectedAnswers = []; }
+    function syncSizeLive(src, w, h) {
+        var sel = root.selectedAnswers;
+        if (sel.length < 2 || sel.indexOf(src) === -1) return;
+        for (var i = 0; i < sel.length; i++) {
+            var a = sel[i];
+            if (a === src) continue;
+            var c = a.coords;
+            if (c.width === w && c.height === h) continue;
+            a.coords = Qt.rect(c.x, c.y, w, h);
+        }
+    }
+    function syncSizeToSelection(src) {
+        if (root.selectedAnswers.indexOf(src) === -1) return;
+        syncSizeLive(src, src.coords.width, src.coords.height);
+    }
+    // --- Group move: absolute (snapshot + total delta) to avoid drift. ---
+    property var moveSnap: []
+    property real moveStartOX: 0
+    property real moveStartOY: 0
+    function snapshotAnsSelection() {
+        var sel = root.selectedAnswers;
+        var snap = [];
+        for (var i = 0; i < sel.length; i++)
+            snap.push({ a: sel[i], x: sel[i].coords.x, y: sel[i].coords.y });
+        return snap;
+    }
+    function applyAnsMove(snap, src, dX, dY) {
+        if (root.selectedAnswers.length < 2) return;
+        for (var i = 0; i < snap.length; i++) {
+            if (snap[i].a === src) continue;
+            var c = snap[i].a.coords;
+            snap[i].a.coords = Qt.rect(Math.round(snap[i].x + dX), Math.round(snap[i].y + dY), c.width, c.height);
+        }
+    }
+    // Align every selected zone to the leftmost one ('l').
+    function alignSelectedLeft() {
+        var sel = root.selectedAnswers;
+        if (sel.length < 2) return;
+        var minX = sel[0].coords.x;
+        for (var i = 1; i < sel.length; i++)
+            if (sel[i].coords.x < minX) minX = sel[i].coords.x;
+        for (var j = 0; j < sel.length; j++) {
+            var c = sel[j].coords;
+            sel[j].coords = Qt.rect(minX, c.y, c.width, c.height);
+        }
+    }
+    // Align every selected zone to the bottom-most one ('b').
+    function alignSelectedBottom() {
+        var sel = root.selectedAnswers;
+        if (sel.length < 2) return;
+        var maxB = sel[0].coords.y + sel[0].coords.height;
+        for (var i = 1; i < sel.length; i++) {
+            var b = sel[i].coords.y + sel[i].coords.height;
+            if (b > maxB) maxB = b;
+        }
+        for (var j = 0; j < sel.length; j++) {
+            var c = sel[j].coords;
+            sel[j].coords = Qt.rect(c.x, maxB - c.height, c.width, c.height);
+        }
+    }
+
     Rectangle {
         id: header
         width: parent.width
@@ -253,6 +325,18 @@ Rectangle {
                             }
                         }
 
+                        RubberBandSelector {
+                            anchors.fill: parent
+                            flick: flick
+                            image: activityImage
+                            answers: activityModelData.answers
+                            active: activityDialog.selectMode
+                            onSelected: hits => {
+                                root.selectedAnswers = hits;
+                                activityDialog.selectMode = false;
+                            }
+                        }
+
                         Repeater {
                             id: answersDropRepeater
                             model: activityModelData.answers
@@ -276,14 +360,35 @@ Rectangle {
                                          answerRect.height = originalHeight * activityImage.paintedHeight / activityImage.sourceSize.height
                                      }
                                  }
-                                Rectangle {
+                                Connections {
+                                    target: modelData
+                                    function onCoordsChanged() {
+                                        answerRect.width = modelData.coords.width * answerRect.xScale;
+                                        answerRect.height = modelData.coords.height * answerRect.yScale;
+                                        answerRect.x = (flick.contentWidth / 2 - activityImage.paintedWidth / 2) + modelData.coords.x * answerRect.xScale;
+                                        answerRect.y = (flick.contentHeight / 2 - activityImage.paintedHeight / 2) + modelData.coords.y * answerRect.yScale;
+                                    }
+                                }
 
+                                // Dragging breaks the x/y binding; re-derive position
+                                // from coords on zoom so moved zones stay put.
+                                Connections {
+                                    target: activityImage
+                                    function onPaintedWidthChanged() {
+                                        answerRect.x = (flick.contentWidth / 2 - activityImage.paintedWidth / 2) + modelData.coords.x * answerRect.xScale;
+                                    }
+                                    function onPaintedHeightChanged() {
+                                        answerRect.y = (flick.contentHeight / 2 - activityImage.paintedHeight / 2) + modelData.coords.y * answerRect.yScale;
+                                    }
+                                }
+
+                                Rectangle {
                                     color: "#7bd5bd"
-                                    border.color: "black"
-                                    border.width: 2
+                                    border.color: root.isAnsSelected(modelData) ? "#00e6e6" : "black"
+                                    border.width: root.isAnsSelected(modelData) ? 4 : 2
                                     radius: 5
                                     anchors.fill: parent
-                                    opacity: 0.4
+                                    opacity: root.isAnsSelected(modelData) ? 0.65 : 0.4
                                 }
 
                                 FlowText {
@@ -298,6 +403,25 @@ Rectangle {
                                 MouseArea {
                                     anchors.fill: parent
                                     drag.target: parent
+                                    onPressed: {
+                                        if (mouse.button === Qt.LeftButton) {
+                                            if (mouse.modifiers & Qt.ControlModifier)
+                                                root.toggleAnsSelection(modelData);
+                                            else if (!root.isAnsSelected(modelData))
+                                                root.setSingleAnsSelection(modelData);
+                                        }
+                                        root.moveStartOX = modelData.coords.x;
+                                        root.moveStartOY = modelData.coords.y;
+                                        root.moveSnap = root.snapshotAnsSelection();
+                                    }
+                                    onPositionChanged: {
+                                        if (drag.active) {
+                                            var curOX = (answerRect.x - (flick.contentWidth / 2 - activityImage.paintedWidth / 2)) / answerRect.xScale;
+                                            var curOY = (answerRect.y - (flick.contentHeight / 2 - activityImage.paintedHeight / 2)) / answerRect.yScale;
+                                            root.applyAnsMove(root.moveSnap, modelData,
+                                                              curOX - root.moveStartOX, curOY - root.moveStartOY);
+                                        }
+                                    }
                                     onReleased: answerRect.setStatus()
                                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                                     onDoubleClicked: {
@@ -373,9 +497,16 @@ Rectangle {
                                                     answerRect.width = 30 / (activityImage.paintedWidth / activityImage.sourceSize.width);
                                                 if (answerRect.height < 30 / (activityImage.paintedHeight / activityImage.sourceSize.height))
                                                     answerRect.height = 30 / (activityImage.paintedHeight / activityImage.sourceSize.height);
+
+                                                root.syncSizeLive(modelData,
+                                                                  answerRect.width / answerRect.xScale,
+                                                                  answerRect.height / answerRect.yScale);
                                             }
                                         }
-                                        onReleased: answerRect.setStatus()
+                                        onReleased: {
+                                            answerRect.setStatus();
+                                            root.syncSizeToSelection(modelData);
+                                        }
                                     }
                                 }
                                 function setStatus() {

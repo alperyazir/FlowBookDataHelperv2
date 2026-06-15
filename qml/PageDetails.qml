@@ -164,6 +164,205 @@ Item {
         pg.removeSection(idx);
     }
 
+    // --- On-page multi-selection of fill answers (rubber-band / Ctrl+click) ---
+    // The selection lives in sideBar.fillSelection (array of answer objects)
+    // so the page highlights and the Fill panel checkboxes stay in sync.
+    property bool fillSelectMode: false   // 'r' toggles the rubber-band tool
+    onPageChanged: { sideBar.fillSelection = []; fillSelectMode = false; }
+
+    function isFillSelected(ans) {
+        return sideBar.fillSelection.indexOf(ans) !== -1;
+    }
+    function setSingleFillSelection(ans) {
+        sideBar.fillSelection = ans ? [ans] : [];
+    }
+    function toggleFillSelection(ans) {
+        var arr = sideBar.fillSelection.slice();
+        var p = arr.indexOf(ans);
+        if (p === -1)
+            arr.push(ans);
+        else
+            arr.splice(p, 1);
+        sideBar.fillSelection = arr;
+    }
+    function clearFillSelection() {
+        sideBar.fillSelection = [];
+    }
+
+    // Open the Fill panel for the section of the first selected fill so the
+    // selection shows up (checked) in the sidebar list.
+    function openFillPanelForSelection() {
+        var sel = sideBar.fillSelection;
+        if (sel.length === 0)
+            return;
+        var first = sel[0];
+        var secs = root.page ? root.page.sections : [];
+        for (var i = 0; i < secs.length; i++) {
+            if (secs[i].type !== "fill")
+                continue;
+            var ans = secs[i].answers;
+            for (var j = 0; j < ans.length; j++) {
+                if (ans[j] === first) {
+                    sideBar.fillVisible = true;
+                    sideBar.page = page;
+                    sideBar.section = secs[i];
+                    sideBar.fillList = ans;
+                    sideBar.fillIndex = j;
+                    sideBar.sectionIndex = i;
+                    return;
+                }
+            }
+        }
+    }
+
+    // Picture-space point -> original-image coords (same transform the fill
+    // delegates and setTotalStatus use; no contentX since we're inside content).
+    function _picToOriginal(mx, my) {
+        var ax = mx - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+        var ay = my - (flick.contentHeight / 2 - picture.paintedHeight / 2);
+        return {
+            x: ax * (picture.sourceSize.width / picture.paintedWidth),
+            y: ay * (picture.sourceSize.height / picture.paintedHeight)
+        };
+    }
+
+    // Select every fill answer whose bounds intersect the dragged band rect
+    // (band corners given in picture space).
+    function selectFillsInPicRect(x0, y0, x1, y1) {
+        var p0 = _picToOriginal(Math.min(x0, x1), Math.min(y0, y1));
+        var p1 = _picToOriginal(Math.max(x0, x1), Math.max(y0, y1));
+        var rx = p0.x, ry = p0.y, rw = p1.x - p0.x, rh = p1.y - p0.y;
+        var sel = [];
+        var secs = root.page ? root.page.sections : [];
+        for (var i = 0; i < secs.length; i++) {
+            if (secs[i].type !== "fill")
+                continue;
+            var ans = secs[i].answers;
+            for (var j = 0; j < ans.length; j++) {
+                var c = ans[j].coords;
+                if (rx < c.x + c.width && rx + rw > c.x
+                    && ry < c.y + c.height && ry + rh > c.y)
+                    sel.push(ans[j]);
+            }
+        }
+        sideBar.fillSelection = sel;
+        openFillPanelForSelection();
+    }
+
+    // After resizing one selected fill, give every other selected fill the
+    // same size (position unchanged).
+    function syncSizeToSelection(src) {
+        if (sideBar.fillSelection.indexOf(src) === -1)
+            return;
+        syncSizeLive(src, src.coords.width, src.coords.height);
+    }
+
+    // --- Group move: absolute (snapshot + total delta) to avoid integer
+    // truncation drift that would otherwise break the formation. ---
+    property var moveSnap: []
+    property real moveStartOX: 0
+    property real moveStartOY: 0
+
+    function snapshotFillSelection() {
+        var sel = sideBar.fillSelection;
+        var snap = [];
+        for (var i = 0; i < sel.length; i++)
+            snap.push({ a: sel[i], x: sel[i].coords.x, y: sel[i].coords.y });
+        return snap;
+    }
+    function applyFillMove(snap, src, dX, dY) {
+        if (sideBar.fillSelection.length < 2)
+            return;
+        for (var i = 0; i < snap.length; i++) {
+            if (snap[i].a === src)
+                continue;
+            var c = snap[i].a.coords;
+            snap[i].a.coords = Qt.rect(Math.round(snap[i].x + dX), Math.round(snap[i].y + dY), c.width, c.height);
+        }
+    }
+
+    // Align every selected fill to the leftmost one ('l').
+    function alignSelectedLeft() {
+        var sel = sideBar.fillSelection;
+        if (sel.length < 2)
+            return;
+        var minX = sel[0].coords.x;
+        for (var i = 1; i < sel.length; i++)
+            if (sel[i].coords.x < minX)
+                minX = sel[i].coords.x;
+        for (var j = 0; j < sel.length; j++) {
+            var c = sel[j].coords;
+            sel[j].coords = Qt.rect(minX, c.y, c.width, c.height);
+        }
+    }
+
+    // Align every selected fill to the bottom-most one ('b').
+    function alignSelectedBottom() {
+        var sel = sideBar.fillSelection;
+        if (sel.length < 2)
+            return;
+        var maxB = sel[0].coords.y + sel[0].coords.height;
+        for (var i = 1; i < sel.length; i++) {
+            var b = sel[i].coords.y + sel[i].coords.height;
+            if (b > maxB) maxB = b;
+        }
+        for (var j = 0; j < sel.length; j++) {
+            var c = sel[j].coords;
+            sel[j].coords = Qt.rect(c.x, maxB - c.height, c.width, c.height);
+        }
+    }
+
+    // Live variant called on every drag step: w/h are given directly in
+    // original coords (the dragged fill's own coords aren't written until
+    // release, so we can't read them yet).
+    function syncSizeLive(src, w, h) {
+        var sel = sideBar.fillSelection;
+        if (sel.length < 2 || sel.indexOf(src) === -1)
+            return;
+        for (var i = 0; i < sel.length; i++) {
+            var a = sel[i];
+            if (a === src)
+                continue;
+            var c = a.coords;
+            if (c.width === w && c.height === h)
+                continue;
+            a.coords = Qt.rect(c.x, c.y, w, h);
+        }
+    }
+
+    // Top banner shown while the fill-select (rubber-band) tool is active.
+    Rectangle {
+        visible: root.fillSelectMode
+        z: 200
+        anchors.top: parent.top
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.topMargin: 10
+        width: bannerRow.implicitWidth + 28
+        height: 34
+        radius: 17
+        color: "#cc009ca6"
+        border.color: "#00e6e6"
+        border.width: 1
+        Row {
+            id: bannerRow
+            anchors.centerIn: parent
+            spacing: 8
+            Text {
+                text: "▭ Select fill"
+                color: "white"
+                font.bold: true
+                font.pixelSize: 14
+                anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+                text: "drag to select · Esc to exit"
+                color: "#d5f2f4"
+                font.pixelSize: 12
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
+    }
+
     MouseArea {
         id: mainMouseArea
         anchors.fill: parent
@@ -622,21 +821,85 @@ Item {
                 anchors.fill: parent
                 propagateComposedEvents: true
                 pressAndHoldInterval: 500
+                // Only hold onto left-drags while the rubber-band tool is active;
+                // otherwise let the Flickable steal them so left-drag pans when
+                // zoomed in.
+                preventStealing: root.fillSelectMode
+
+                // Rubber-band selection of fills (in picture space).
+                property bool bandPressed: false
+                property bool banding: false
+                property real bandX0: 0
+                property real bandY0: 0
+                property real bandX1: 0
+                property real bandY1: 0
 
                 // A click on the page image drops focus from any sidebar
                 // text field (this MouseArea, not mainMouseArea, gets the
                 // left-clicks on the page).
-                onPressed: root.clearTextFocus()
+                cursorShape: root.fillSelectMode ? Qt.CrossCursor : Qt.ArrowCursor
+
+                onPressed: mouse => {
+                    root.clearTextFocus();
+                    if (mouse.button === Qt.LeftButton && root.fillSelectMode && !root.cropMode) {
+                        mouseArea.bandPressed = true;
+                        mouseArea.banding = false;
+                        mouseArea.bandX0 = mouse.x;
+                        mouseArea.bandY0 = mouse.y;
+                        mouseArea.bandX1 = mouse.x;
+                        mouseArea.bandY1 = mouse.y;
+                    }
+                }
+
+                onPositionChanged: mouse => {
+                    if (mouseArea.bandPressed) {
+                        mouseArea.bandX1 = mouse.x;
+                        mouseArea.bandY1 = mouse.y;
+                        if (!mouseArea.banding
+                            && (Math.abs(mouseArea.bandX1 - mouseArea.bandX0) > 3
+                                || Math.abs(mouseArea.bandY1 - mouseArea.bandY0) > 3))
+                            mouseArea.banding = true;
+                    }
+                }
+
+                onReleased: mouse => {
+                    if (mouseArea.bandPressed) {
+                        if (mouseArea.banding) {
+                            root.selectFillsInPicRect(mouseArea.bandX0, mouseArea.bandY0,
+                                                      mouseArea.bandX1, mouseArea.bandY1);
+                            root.fillSelectMode = false;   // one-shot: exit after selecting
+                        } else {
+                            root.clearFillSelection();   // plain click on empty space
+                        }
+                        mouseArea.bandPressed = false;
+                        mouseArea.banding = false;
+                    }
+                }
 
                 onWheel: function (wheel) {
                     if (wheel.angleDelta.y / 120 * flick.contentWidth * 0.1 + flick.contentWidth > flick.width && wheel.angleDelta.y / 120 * flick.contentHeight * 0.1 + flick.contentHeight > flick.height) {
-                        flick.resizeContent(wheel.angleDelta.y / 120 * flick.contentWidth * 0.1 + flick.contentWidth, wheel.angleDelta.y / 120 * flick.contentHeight * 0.1 + flick.contentHeight, Qt.point(flick.contentX + flick.width / 2, flick.contentY + flick.height / 2));
+                        // Zoom around the cursor: wheel.x/y are already in content
+                        // coords (this MouseArea fills the content image).
+                        flick.resizeContent(wheel.angleDelta.y / 120 * flick.contentWidth * 0.1 + flick.contentWidth, wheel.angleDelta.y / 120 * flick.contentHeight * 0.1 + flick.contentHeight, Qt.point(wheel.x, wheel.y));
                         flick.returnToBounds();
                     } else {
                         flick.resizeContent(flick.width, flick.height, Qt.point(flick.width / 2, flick.height / 2));
                         flick.returnToBounds();
                     }
                 }
+            }
+
+            // Rubber-band selection rectangle (picture space).
+            Rectangle {
+                visible: mouseArea.banding
+                z: 50
+                x: Math.min(mouseArea.bandX0, mouseArea.bandX1)
+                y: Math.min(mouseArea.bandY0, mouseArea.bandY1)
+                width: Math.abs(mouseArea.bandX1 - mouseArea.bandX0)
+                height: Math.abs(mouseArea.bandY1 - mouseArea.bandY0)
+                color: "#2200e6e6"
+                border.color: "#00e6e6"
+                border.width: 1
             }
 
             Repeater {
@@ -778,11 +1041,38 @@ Item {
                             height: originalHeight * (picture.paintedHeight / picture.sourceSize.height)
                             visible: sectionType === "fill"
 
+                            // Re-sync the live size when the model coords change
+                            // (e.g. group resize), so this fill follows along even
+                            // after its own resize broke the originalWidth binding.
+                            Connections {
+                                target: modelData
+                                function onCoordsChanged() {
+                                    answerRect.originalWidth = modelData.coords.width;
+                                    answerRect.originalHeight = modelData.coords.height;
+                                    answerRect.x = (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.coords.x * (picture.paintedWidth / picture.sourceSize.width);
+                                    answerRect.y = (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.coords.y * (picture.paintedHeight / picture.sourceSize.height);
+                                }
+                            }
+
+                            // Dragging breaks the x/y binding (drag.target sets them
+                            // imperatively); re-derive position from coords on zoom so
+                            // moved fills stay put when the image is rescaled.
+                            Connections {
+                                target: picture
+                                function onPaintedWidthChanged() {
+                                    answerRect.x = (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.coords.x * (picture.paintedWidth / picture.sourceSize.width);
+                                }
+                                function onPaintedHeightChanged() {
+                                    answerRect.y = (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.coords.y * (picture.paintedHeight / picture.sourceSize.height);
+                                }
+                            }
+
                             Rectangle {
                                 id: fillBg
-                                property bool isSelected: sideBar.fillVisible
+                                property bool isSelected: (sideBar.fillVisible
                                                           && sideBar.section === sectionData
-                                                          && sideBar.fillIndex === index
+                                                          && sideBar.fillIndex === index)
+                                                          || root.isFillSelected(modelData)
 
                                 color: "#7bd5bd"
                                 border.color: isSelected ? "#00e6e6" : "black"
@@ -853,7 +1143,18 @@ Item {
                                 drag.target: parent
                                 acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                                 enabled: !answerRect.editing
-                                onPressed: {
+                                onPressed: mouse => {
+                                    // Ctrl+click toggles this fill in the page
+                                    // multi-selection without opening the panel.
+                                    if (mouse.modifiers & Qt.ControlModifier) {
+                                        root.toggleFillSelection(modelData);
+                                        root.openFillPanelForSelection();
+                                        return;
+                                    }
+                                    // Keep the group when pressing an already-selected
+                                    // fill (so a drag moves the whole selection).
+                                    if (!root.isFillSelected(modelData))
+                                        root.setSingleFillSelection(modelData);
                                     sideBar.hideAllComponent();
                                     sideBar.fillVisible = true;
                                     sideBar.page = page;
@@ -861,6 +1162,19 @@ Item {
                                     sideBar.fillList = sectionItem.sectionAnswers;
                                     sideBar.fillIndex = index;
                                     sideBar.sectionIndex = sectionItem.sectionIndex;
+                                    root.moveStartOX = modelData.coords.x;
+                                    root.moveStartOY = modelData.coords.y;
+                                    root.moveSnap = root.snapshotFillSelection();
+                                }
+                                onPositionChanged: mouse => {
+                                    if (drag.active) {
+                                        var sx = picture.paintedWidth / picture.sourceSize.width;
+                                        var sy = picture.paintedHeight / picture.sourceSize.height;
+                                        var curOX = (answerRect.x - (flick.contentWidth / 2 - picture.paintedWidth / 2)) / sx;
+                                        var curOY = (answerRect.y - (flick.contentHeight / 2 - picture.paintedHeight / 2)) / sy;
+                                        root.applyFillMove(root.moveSnap, modelData,
+                                                           curOX - root.moveStartOX, curOY - root.moveStartOY);
+                                    }
                                 }
                                 onReleased: root.setTotalStatus(answerRect, modelData)
                                 onDoubleClicked: {
@@ -905,9 +1219,16 @@ Item {
                                                 answerRect.originalWidth = 30 / (picture.paintedWidth / picture.sourceSize.width);
                                             if (answerRect.originalHeight < 30 / (picture.paintedHeight / picture.sourceSize.height))
                                                 answerRect.originalHeight = 30 / (picture.paintedHeight / picture.sourceSize.height);
+
+                                            // Group resize, live: match every other
+                                            // selected fill on each drag step.
+                                            root.syncSizeLive(modelData, answerRect.originalWidth, answerRect.originalHeight);
                                         }
                                     }
-                                    onReleased: root.setTotalStatus(answerRect, modelData)
+                                    onReleased: {
+                                        root.setTotalStatus(answerRect, modelData);
+                                        root.syncSizeToSelection(modelData);
+                                    }
                                 }
                             }
                         }

@@ -151,17 +151,28 @@ ApplicationWindow {
         onActivated: content.startHeaderPickMode(sideBar.activityModelData)
     }
 
-    // `b`: toggle bold on the fill currently selected on the page.
+    // `r`: toggle the fill-select (rubber-band) tool on the page.
+    Shortcut {
+        sequence: "r"
+        enabled: !typingInField && !awaitingActivityKey && !activityDialog.visible
+        onActivated: content.pageDetails.fillSelectMode = !content.pageDetails.fillSelectMode
+    }
+
+    // `l`: align the selected fills to the leftmost one.
+    Shortcut {
+        sequence: "l"
+        enabled: sideBar.fillSelection.length > 1 && !typingInField
+                 && !awaitingActivityKey && !activityDialog.visible
+        onActivated: content.pageDetails.alignSelectedLeft()
+    }
+
+    // `b`: align the selected fills to the bottom-most one.
+    // (Bold is still available from the Fill panel's Bold toggle.)
     Shortcut {
         sequence: "b"
-        enabled: sideBar.fillVisible && !typingInField && !awaitingActivityKey
-        onActivated: {
-            if (sideBar.section && sideBar.fillIndex >= 0
-                && sideBar.fillIndex < sideBar.section.answers.length) {
-                var ans = sideBar.section.answers[sideBar.fillIndex];
-                ans.isTextBold = !ans.isTextBold;
-            }
-        }
+        enabled: sideBar.fillSelection.length > 1 && !typingInField
+                 && !awaitingActivityKey && !activityDialog.visible
+        onActivated: content.pageDetails.alignSelectedBottom()
     }
 
     // Space: open the selected activity, or play/pause the selected audio/video.
@@ -180,8 +191,14 @@ ApplicationWindow {
         enabled: !activityDialog.visible
                  && (sideBar.audioVisible || sideBar.videoVisible || sideBar.activityVisible
                      || sideBar.fillVisible || sideBar.circleVisible
-                     || sideBar.fillwColorVisible || sideBar.drawMatchedVisible)
-        onActivated: sideBar.hideAllComponent()
+                     || sideBar.fillwColorVisible || sideBar.drawMatchedVisible
+                     || sideBar.fillSelection.length > 0
+                     || content.pageDetails.fillSelectMode)
+        onActivated: {
+            content.pageDetails.fillSelectMode = false;
+            content.pageDetails.clearFillSelection();
+            sideBar.hideAllComponent();
+        }
     }
 
     Shortcut {
