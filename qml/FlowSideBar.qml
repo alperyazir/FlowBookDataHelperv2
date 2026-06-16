@@ -94,7 +94,7 @@ Rectangle {
         sectionIndex: root.sectionIndex
         fillIndex: root.fillIndex
         width: parent.width * .98
-        height: parent.height / 3 * 2
+        height: parent.height / 5 * 4.5
 
         onRemoveSection: {
             page.removeSection(secIndex);

@@ -28,6 +28,9 @@ Item {
     property string cropNewSectionPath: ""
     property var cropPngRect: null         // crop rect in page-PNG px (for zone sync)
     property bool cropHeaderPick: false    // rect picks the headerText, no crop
+    property bool cropFillRedetect: false  // rect re-checks fill sizes vs the answered PDF
+    property var cropFillSectionRef: null  // fill section to update (survives endCropMode)
+    property var cropFillBand: null        // re-check rect in page-PNG px (kept for the result)
     property string cropIconKind: ""       // rect crops an icon template ("audio"/"video")
     property real cropStartX: 0
     property real cropStartY: 0
@@ -150,6 +153,15 @@ Item {
         if (!hasSelection) return;
         if (!sideBar.page || sideBar.sectionIndex < 0) return;
 
+        // A multi-selection (checkbox / rubber-band) takes priority: Delete
+        // removes every selected fill answer across all fill sections, not the
+        // whole section.
+        if (sideBar.fillVisible && sideBar.fillSelection
+            && sideBar.fillSelection.length > 0) {
+            deleteSelectedFills();
+            return;
+        }
+
         // If a single fill is selected, delete just that one instead of the whole section
         if (sideBar.fillVisible && sideBar.section
             && sideBar.fillIndex >= 0
@@ -188,6 +200,77 @@ Item {
     }
     function clearFillSelection() {
         sideBar.fillSelection = [];
+    }
+
+    // Delete every fill answer in the current multi-selection. The selection
+    // can span several fill sections, so remove from each one high index ->
+    // low so the remaining indices stay valid.
+    function deleteSelectedFills() {
+        var sel = sideBar.fillSelection;
+        if (!root.page || !sel || sel.length === 0)
+            return;
+        var secs = root.page.sections;
+        for (var i = 0; i < secs.length; i++) {
+            if (secs[i].type !== "fill")
+                continue;
+            var ans = secs[i].answers;
+            var idxs = [];
+            for (var j = 0; j < ans.length; j++)
+                if (sel.indexOf(ans[j]) !== -1)
+                    idxs.push(j);
+            idxs.sort(function (a, b) { return b - a; });
+            for (var k = 0; k < idxs.length; k++)
+                secs[i].removeAnswer(idxs[k]);
+        }
+        sideBar.fillSelection = [];
+        // Refresh the open Fill panel list against its (still-present) section.
+        if (sideBar.fillVisible && sideBar.section)
+            sideBar.fillList = sideBar.section.answers;
+    }
+
+    // Apply a fill re-check result: drop the section's fills whose center sits
+    // in the drawn band, then add the freshly detected ones (page-PNG px).
+    function applyFillRedetect(res) {
+        var sec = root.cropFillSectionRef;
+        var band = root.cropFillBand;
+        root.cropFillSectionRef = null;
+        root.cropFillBand = null;
+        if (!sec || !band) {
+            print("Fill re-check: no target section / band");
+            return;
+        }
+        var found = res.answer ? res.answer.length : 0;
+        if (found === 0) {
+            // Detection came back empty — keep the existing fills rather than
+            // wiping them on a miss.
+            print("Fill re-check: nothing detected in rect, fills kept");
+            return;
+        }
+        // Delete existing answers that overlap the band (high -> low). Using
+        // rect intersection — not center-in-band — so an oversized/merged fill
+        // (exactly what re-check targets) whose center sits outside the drawn
+        // rect is still replaced instead of left behind as a duplicate.
+        var ans = sec.answers;
+        var del = [];
+        for (var i = 0; i < ans.length; i++) {
+            var c = ans[i].coords;
+            if (c.x < band.x + band.w && c.x + c.width > band.x
+                && c.y < band.y + band.h && c.y + c.height > band.y)
+                del.push(i);
+        }
+        del.sort(function (a, b) { return b - a; });
+        for (var k = 0; k < del.length; k++)
+            sec.removeAnswer(del[k]);
+        // Insert the redetected fills.
+        for (var j = 0; j < found; j++) {
+            var a = res.answer[j];
+            var na = sec.createNewAnswer(a.coords.x, a.coords.y,
+                                         a.coords.w, a.coords.h, a.text || "");
+            if (na && a.isTextBold !== undefined)
+                na.isTextBold = a.isTextBold;
+        }
+        sideBar.fillList = sec.answers;
+        print("Fill re-check: removed " + del.length + ", added " + found);
     }
 
     // Open the Fill panel for the section of the first selected fill so the
@@ -310,6 +393,37 @@ Item {
         for (var j = 0; j < sel.length; j++) {
             var c = sel[j].coords;
             sel[j].coords = Qt.rect(c.x, maxB - c.height, c.width, c.height);
+        }
+    }
+
+    // Align every selected fill's right edge to the rightmost one.
+    function alignSelectedRight() {
+        var sel = sideBar.fillSelection;
+        if (sel.length < 2)
+            return;
+        var maxR = sel[0].coords.x + sel[0].coords.width;
+        for (var i = 1; i < sel.length; i++) {
+            var r = sel[i].coords.x + sel[i].coords.width;
+            if (r > maxR) maxR = r;
+        }
+        for (var j = 0; j < sel.length; j++) {
+            var c = sel[j].coords;
+            sel[j].coords = Qt.rect(maxR - c.width, c.y, c.width, c.height);
+        }
+    }
+
+    // Align every selected fill to the top-most one.
+    function alignSelectedTop() {
+        var sel = sideBar.fillSelection;
+        if (sel.length < 2)
+            return;
+        var minY = sel[0].coords.y;
+        for (var i = 1; i < sel.length; i++)
+            if (sel[i].coords.y < minY)
+                minY = sel[i].coords.y;
+        for (var j = 0; j < sel.length; j++) {
+            var c = sel[j].coords;
+            sel[j].coords = Qt.rect(c.x, minY, c.width, c.height);
         }
     }
 
@@ -1943,6 +2057,18 @@ Item {
         print("Redetect mode started");
     }
 
+    // Crop mode that re-checks the fill sizes inside the drawn rect against
+    // the answered PDF: every fill whose center falls in the rect is deleted
+    // and replaced with freshly diff-detected ones (text + box re-derived).
+    function startFillRedetectMode() {
+        if (!sideBar.fillVisible || !sideBar.section)
+            return;
+        startCropMode(sideBar.section, "sectionPath");
+        root.cropFillRedetect = true;
+        root.cropFillSectionRef = sideBar.section;
+        print("Fill re-check mode started");
+    }
+
     // The drawn rect only PICKS the headerText (no crop, no answers):
     // the instruction line's text is read from the original PDF.
     function startHeaderPickMode(targetObj) {
@@ -1974,6 +2100,7 @@ Item {
         root.cropMode = false;
         root.cropRedetect = false;
         root.cropHeaderPick = false;
+        root.cropFillRedetect = false;   // cropFillSectionRef/Band survive for the result
         root.cropIconKind = "";
         root.cropActivity = null;
         root.cropDrawing = false;
@@ -2025,6 +2152,20 @@ Item {
 
         // Page index (0-based)
         var pageIndex = page.page_number - 1;
+
+        // Fill re-check: re-run fill detection in the rect against the
+        // answered PDF (no crop image; coords come back in page-PNG px).
+        if (root.cropFillRedetect) {
+            root.cropFillBand = { x: originalX, y: originalY, w: originalW, h: originalH };
+            pdfProcess.redetectCircleOptions(
+                pdfPath, page.page_number,
+                originalX, originalY, originalW, originalH,
+                picture.sourceSize.width, picture.sourceSize.height,
+                "", "fill"
+            );
+            endCropMode();
+            return;
+        }
 
         // Header pick: the rect only selects the instruction text.
         if (root.cropHeaderPick) {
@@ -2272,6 +2413,13 @@ Item {
                 return;
             }
             var res = JSON.parse(resultJson);
+
+            // Fill re-check: replace the fills inside the drawn band with the
+            // freshly detected ones. Targets the fill section, not an activity.
+            if (res.fill) {
+                root.applyFillRedetect(res);
+                return;
+            }
 
             // matchTheWords: the result is word list + items, not
             // answer boxes (and there is no section image to apply).

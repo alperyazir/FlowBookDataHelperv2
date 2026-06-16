@@ -210,12 +210,17 @@ def separate_clickables(clickables):
     return clickables
 
 
-def snap_page(po, pa, sx, sy, skip_rects=None):
+def snap_page(po, pa, sx, sy, skip_rects=None, use_cv=True):
     """Full fill pipeline for one page: diff -> snap -> optional CV
     fallback -> editor-format fill sections (PNG-pixel coords).
 
     skip_rects: clickable rects (PDF points) another activity already
-    owns (e.g. dragdrop drop zones) — dropped from the fill section."""
+    owns (e.g. dragdrop drop zones) — dropped from the fill section.
+    use_cv: run the OpenCV banner-snap fallback for answers that match
+    no blank/tick box. On free-label artwork (label-the-picture pages)
+    the flood-fill grabs big illustration regions and merges neighbours
+    into one block — the re-check path passes use_cv=False so unmatched
+    answers keep their tight text bbox instead."""
     answers = diff_answer_spans(po, pa)
     if not answers:
         return [], {}
@@ -255,7 +260,7 @@ def snap_page(po, pa, sx, sy, skip_rects=None):
                        for r in skip_rects)
         clickables = [c for c in clickables if not owned(c)]
     unmatched = [c for c in clickables if c["snap"] == "none"]
-    if unmatched and HAVE_CV:
+    if unmatched and HAVE_CV and use_cv:
         for c in unmatched:
             rect = cv_snap_box(po, c["answer"]["bbox"])
             if rect:

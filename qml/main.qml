@@ -138,8 +138,9 @@ ApplicationWindow {
     }
     // `c`: completes the a→c "add circle" combo, OR — when an activity panel is
     // open on the right — crops that activity (smart crop / auto re-detect per
-    // type, exactly like its Crop button). Guarded so it never steals a 'c'
-    // typed into a text field.
+    // type, exactly like its Crop button), OR — when the Fill panel is open —
+    // draws a rect to re-check the fill sizes in it against the answered PDF.
+    // Guarded so it never steals a 'c' typed into a text field.
     Shortcut {
         sequence: "c"
         enabled: !typingInField
@@ -148,6 +149,8 @@ ApplicationWindow {
                 triggerActivityCombo("circle");
             else if (sideBar.activityVisible)
                 content.startCropMode(sideBar.activityModelData);
+            else if (sideBar.fillVisible)
+                content.pageDetails.startFillRedetectMode();
         }
     }
     Shortcut {
@@ -195,6 +198,22 @@ ApplicationWindow {
         enabled: sideBar.fillSelection.length > 1 && !typingInField
                  && !awaitingActivityKey && !activityDialog.visible
         onActivated: content.pageDetails.alignSelectedBottom()
+    }
+
+    // Right arrow: align the selected fills to the rightmost one.
+    Shortcut {
+        sequence: "Right"
+        enabled: sideBar.fillSelection.length > 1 && !typingInField
+                 && !awaitingActivityKey && !activityDialog.visible
+        onActivated: content.pageDetails.alignSelectedRight()
+    }
+
+    // Up arrow: align the selected fills to the top-most one.
+    Shortcut {
+        sequence: "Up"
+        enabled: sideBar.fillSelection.length > 1 && !typingInField
+                 && !awaitingActivityKey && !activityDialog.visible
+        onActivated: content.pageDetails.alignSelectedTop()
     }
 
     // `b`: bold / unbold the selected fills (same as the Fill panel's Bold
@@ -270,6 +289,9 @@ ApplicationWindow {
 
     Shortcut {
         sequences: ["Delete", "Backspace"]
+        // Don't fire while editing a fill's text/color field — there Backspace
+        // must edit the text, not delete the selection.
+        enabled: !typingInField
         onActivated: content.pageDetails.removeSelectedSection()
     }
 

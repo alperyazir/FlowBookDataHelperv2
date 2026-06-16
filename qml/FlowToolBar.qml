@@ -718,10 +718,12 @@ Rectangle {
                     { k: "V", d: "Add a video section at the cursor" },
                     { k: "F", d: "Add a fill at the cursor" },
                     { k: "H", d: "Pick the open activity's header text (like its Pick button)" },
-                    { k: "C", d: "Crop the open activity (like its Crop button)" },
+                    { k: "C", d: "Crop the open activity, or re-check the open Fill panel's sizes vs the answered PDF" },
                     { k: "R", d: "Toggle the fill-select (rubber-band) tool" },
                     { k: "B", d: "Bold / unbold the selected fills" },
                     { k: "←", d: "Align the selected fills to the leftmost one" },
+                    { k: "→", d: "Align the selected fills to the rightmost one" },
+                    { k: "↑", d: "Align the selected fills to the top-most one" },
                     { k: "↓", d: "Align the selected fills to the bottom-most one" },
                     { k: "← →", d: "Previous / next page (when nothing is selected)" },
                     { k: "↑ ↓", d: "Jump 10 pages forward / back (when nothing is selected)" },
@@ -749,6 +751,8 @@ Rectangle {
                     { k: "R", d: "Toggle the select (rubber-band) mode" },
                     { k: "F", d: "Add an answer zone at the cursor" },
                     { k: "←", d: "Align the selected zones to the leftmost one" },
+                    { k: "→", d: "Align the selected zones to the rightmost one" },
+                    { k: "↑", d: "Align the selected zones to the top-most one" },
                     { k: "↓", d: "Align the selected zones to the bottom-most one" },
                     { k: "Esc", d: "Exit select mode / clear selection / close" }
                 ]

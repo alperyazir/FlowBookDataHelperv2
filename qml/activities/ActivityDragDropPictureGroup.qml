@@ -95,6 +95,32 @@ Rectangle {
             sel[j].coords = Qt.rect(c.x, maxB - c.height, c.width, c.height);
         }
     }
+    // Align every selected zone's right edge to the rightmost one.
+    function alignSelectedRight() {
+        var sel = root.selectedAnswers;
+        if (sel.length < 2) return;
+        var maxR = sel[0].coords.x + sel[0].coords.width;
+        for (var i = 1; i < sel.length; i++) {
+            var r = sel[i].coords.x + sel[i].coords.width;
+            if (r > maxR) maxR = r;
+        }
+        for (var j = 0; j < sel.length; j++) {
+            var c = sel[j].coords;
+            sel[j].coords = Qt.rect(maxR - c.width, c.y, c.width, c.height);
+        }
+    }
+    // Align every selected zone to the top-most one.
+    function alignSelectedTop() {
+        var sel = root.selectedAnswers;
+        if (sel.length < 2) return;
+        var minY = sel[0].coords.y;
+        for (var i = 1; i < sel.length; i++)
+            if (sel[i].coords.y < minY) minY = sel[i].coords.y;
+        for (var j = 0; j < sel.length; j++) {
+            var c = sel[j].coords;
+            sel[j].coords = Qt.rect(c.x, minY, c.width, c.height);
+        }
+    }
     property real hoverX: 0
     property real hoverY: 0
     // Add an answer zone at the cursor ('f' shortcut), like the long-press.

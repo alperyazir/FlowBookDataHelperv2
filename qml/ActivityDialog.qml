@@ -55,6 +55,30 @@ Dialog {
         }
     }
 
+    // Right arrow aligns the selected answer zones to the rightmost one.
+    Shortcut {
+        sequence: "Right"
+        enabled: root.visible && root.currentActivity
+                 && root.currentActivity.selectedAnswers
+                 && root.currentActivity.selectedAnswers.length > 1
+        onActivated: {
+            if (root.currentActivity && root.currentActivity.alignSelectedRight)
+                root.currentActivity.alignSelectedRight();
+        }
+    }
+
+    // Up arrow aligns the selected answer zones to the top-most one.
+    Shortcut {
+        sequence: "Up"
+        enabled: root.visible && root.currentActivity
+                 && root.currentActivity.selectedAnswers
+                 && root.currentActivity.selectedAnswers.length > 1
+        onActivated: {
+            if (root.currentActivity && root.currentActivity.alignSelectedTop)
+                root.currentActivity.alignSelectedTop();
+        }
+    }
+
     // 'f' adds an answer zone at the cursor (like long-press).
     Shortcut {
         sequence: "f"

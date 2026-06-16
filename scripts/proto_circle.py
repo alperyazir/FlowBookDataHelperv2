@@ -948,6 +948,31 @@ def redetect(raw_dir, page_no, rect_px, png_size, out_path, kind="circle"):
     x, y, w, h = rect_px
     band = (x * sx, y * sy, (x + w) * sx, (y + h) * sy)
 
+    # Fill re-check: re-run the full fill snap pipeline for the page, then
+    # keep only the fills whose center falls inside the user's rect. Unlike
+    # circle/markwithx this produces no crop image and the coords stay in
+    # page-PNG pixels (fills overlay the page directly). The editor deletes
+    # the existing fills in the band and inserts these.
+    if kind == "fill":
+        from proto_snap import snap_page
+        snap_sx = png_size[0] / po.rect.width
+        snap_sy = png_size[1] / po.rect.height
+        # use_cv=False: keep tight text bboxes for free-label answers
+        # instead of the CV fallback that grabs/merges artwork regions.
+        secs, _stats = snap_page(po, pa, snap_sx, snap_sy, use_cv=False)
+        out = []
+        for sec in secs:
+            for a in sec.get("answer", []):
+                c = a["coords"]
+                cx = c["x"] + c["w"] / 2.0
+                cy = c["y"] + c["h"] / 2.0
+                if x <= cx <= x + w and y <= cy <= y + h:
+                    out.append({"coords": c, "text": a.get("text", ""),
+                                "isTextBold": bool(a.get("is_text_bold", True))})
+        print(json.dumps({"fill": True, "answer": out}, ensure_ascii=False))
+        orig.close(); ans.close()
+        return 0
+
     # The user's rect is authoritative: crop exactly it, even when no
     # options are detected inside (the crop is still wanted).
     rect = fitz.Rect(*band)
