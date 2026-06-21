@@ -664,6 +664,9 @@ bool PdfProcess::removeDir(const QString &dirPath) {
 // (not the FlowBook runtime, which may legitimately ship .ini/settings.json).
 static bool isExcludedFromPackage(const QString &name, bool isDir) {
     const QString lower = name.toLower();
+    // raw/ is excluded wholesale here; packBookOriginalPdf() adds just the
+    // original PDF back (compressed) after the copy, so the answered PDF and
+    // other raw artifacts still stay out of the package.
     if (isDir)
         return name == "raw" || name == "review" || name == "temp";
     // macOS / Windows junk
@@ -715,6 +718,44 @@ bool PdfProcess::copyDir(const QString &srcPath, const QString &dstPath, bool fi
         }
     }
     return true;
+}
+
+void PdfProcess::packBookOriginalPdf(const QString &srcBook, const QString &dstBook) {
+    const QString rawDir = srcBook + "/raw";
+    if (!QDir(rawDir).exists())
+        return;   // no raw/ for this book — nothing to keep
+
+    const QString outPdf = dstBook + "/raw/original.pdf";
+    QDir().mkpath(dstBook + "/raw");
+
+    // Balanced image compression: 150 dpi, JPEG quality 80. The script finds
+    // the original (non-answered) PDF in raw/ and never bloats — if the
+    // compressed file isn't smaller, the source is copied through.
+    QStringList args;
+    args << "-u" << (scriptsDir() + "/compress_pdf.py")
+         << "--from-raw" << rawDir << outPdf
+         << "150" << "80";
+
+    QProcess proc;
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    proc.setProcessEnvironment(env);
+    proc.setProcessChannelMode(QProcess::MergedChannels);
+    proc.start(pythonExecutable(), args);
+    // Packaging already runs on a worker thread; block until the (possibly
+    // large) PDF is done. First run may also pip-install fitz/Pillow.
+    proc.waitForFinished(600000);
+
+    const QString out = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
+    qDebug() << "compress_pdf output:" << out;
+    if (proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0
+        && out.contains("OK")) {
+        setLogMessages("       ✓  kept original.pdf");
+    } else {
+        // Non-fatal: the book images already shipped; just warn.
+        setLogMessages("       ⚠  could not add original.pdf");
+        emit scriptError(extractScriptError(out, proc.exitCode()));
+    }
 }
 
 bool PdfProcess::launchTestFlowBook(const QString &testVersion) {
@@ -933,6 +974,8 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
                 break;
             }
             setLogMessages(QString("       ✓  %1").arg(book));
+            // raw/ is excluded above; add back just the (compressed) original PDF.
+            packBookOriginalPdf(srcBook, dstBook);
         }
         if (!bookCopyOk)
             continue;
@@ -1038,6 +1081,27 @@ void PdfProcess::copyAdditionalFiles(const QStringList &filePaths)
 */
 }
 
+QString PdfProcess::extractScriptError(const QString &output, int exitCode)
+{
+    // Prefer the script's own "ERROR: ..." line (last one wins, so a real
+    // error beats earlier pip noise); fall back to the last output line,
+    // then a generic message. Strip the "ERROR:" prefix for a clean toast.
+    const QStringList lines = output.split('\n', Qt::SkipEmptyParts);
+    QString err;
+    for (const QString &raw : lines) {
+        const QString t = raw.trimmed();
+        if (t.startsWith(QStringLiteral("ERROR"), Qt::CaseInsensitive))
+            err = t;
+    }
+    if (err.isEmpty() && !lines.isEmpty())
+        err = lines.last().trimmed();
+    if (err.isEmpty())
+        err = QStringLiteral("Process failed (exit code %1)").arg(exitCode);
+    if (err.startsWith(QStringLiteral("ERROR:"), Qt::CaseInsensitive))
+        err = err.mid(6).trimmed();
+    return err;
+}
+
 void PdfProcess::cropSectionFromPdf(const QString &pdfPath, int pageIndex,
                                      double x, double y, double w, double h,
                                      double pngWidth, double pngHeight,
@@ -1053,10 +1117,8 @@ void PdfProcess::cropSectionFromPdf(const QString &pdfPath, int pageIndex,
     process->setProcessEnvironment(env);
     process->setProcessChannelMode(QProcess::MergedChannels);
 
-    QString capturedOutput;
-
     connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            [this, process, outputPath, &capturedOutput](int exitCode, QProcess::ExitStatus exitStatus) {
+            [this, process, outputPath](int exitCode, QProcess::ExitStatus exitStatus) {
                 QByteArray remaining = process->readAllStandardOutput();
                 QString output = QString::fromUtf8(remaining).trimmed();
                 qDebug() << "Crop script output:" << output;
@@ -1066,6 +1128,7 @@ void PdfProcess::cropSectionFromPdf(const QString &pdfPath, int pageIndex,
                     emit cropCompleted(true, outputPath);
                 } else {
                     qDebug() << "Crop failed with exit code:" << exitCode;
+                    emit scriptError(extractScriptError(output, exitCode));
                     emit cropCompleted(false, outputPath);
                 }
                 process->deleteLater();
@@ -1073,6 +1136,7 @@ void PdfProcess::cropSectionFromPdf(const QString &pdfPath, int pageIndex,
 
     connect(process, &QProcess::errorOccurred, [this, process, outputPath](QProcess::ProcessError error) {
         qDebug() << "Crop process error:" << error << process->errorString();
+        emit scriptError(QStringLiteral("Crop could not start: ") + process->errorString());
         emit cropCompleted(false, outputPath);
         process->deleteLater();
     });
@@ -1131,12 +1195,15 @@ void PdfProcess::redetectCircleOptions(const QString &rawDir, int pageNumber,
 
                 bool ok = exitStatus == QProcess::NormalExit && exitCode == 0
                           && !json.isEmpty() && !json.contains("\"error\"");
+                if (!ok)
+                    emit scriptError(extractScriptError(output, exitCode));
                 emit circleRedetectCompleted(ok, json, outputPath);
                 process->deleteLater();
             });
 
     connect(process, &QProcess::errorOccurred, [this, process, outputPath](QProcess::ProcessError error) {
         qDebug() << "Redetect process error:" << error << process->errorString();
+        emit scriptError(QStringLiteral("Re-detect could not start: ") + process->errorString());
         emit circleRedetectCompleted(false, QString(), outputPath);
         process->deleteLater();
     });
@@ -1197,12 +1264,17 @@ void PdfProcess::detectHeaderText(const QString &rawDir, int pageNumber,
                         break;
                     }
                 }
+                // Only a real process failure is an error worth a warning —
+                // a clean run that simply found no header text is not.
+                if (exitStatus != QProcess::NormalExit || exitCode != 0)
+                    emit scriptError(extractScriptError(output, exitCode));
                 emit headerTextDetected(ok, text);
                 process->deleteLater();
             });
 
     connect(process, &QProcess::errorOccurred, [this, process](QProcess::ProcessError error) {
         qDebug() << "Headertext process error:" << error << process->errorString();
+        emit scriptError(QStringLiteral("Header pick could not start: ") + process->errorString());
         emit headerTextDetected(false, QString());
         process->deleteLater();
     });

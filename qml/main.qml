@@ -465,8 +465,15 @@ ApplicationWindow {
 
     FlowToast {
         id: toast
-        width: parent.width / 6
-        height: 50
+    }
+
+    // Surface Python script failures (crop, re-detect, header pick, …) to the
+    // user as a red warning toast instead of only printing to the console.
+    Connections {
+        target: pdfProcess
+        function onScriptError(message) {
+            toast.show(message, true);
+        }
     }
 
     ActivityDialog {

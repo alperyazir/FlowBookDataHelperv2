@@ -62,6 +62,9 @@ signals:
     void circleRedetectCompleted(bool success, const QString &resultJson,
                                  const QString &outputPath);
     void headerTextDetected(bool success, const QString &text);
+    // A Python helper script failed — carries a short, user-readable reason
+    // (the script's "ERROR: ..." line) for the editor to show as a warning.
+    void scriptError(const QString &message);
 
 private:
     Q_PROPERTY(int progress READ progress WRITE setProgress NOTIFY progressChanged FINAL)
@@ -71,11 +74,18 @@ private:
     QString getPlatformFolderName(const QString &platform) const;
     QString getLatestFlowBookVersion(const QString &platformPath) const;
     static QString pythonExecutable();
+    // Pull a short, user-readable reason out of a failed script's merged
+    // stdout/stderr (prefers its "ERROR: ..." line).
+    static QString extractScriptError(const QString &output, int exitCode);
     // Python scripts ship inside the binary (scripts.qrc) and are
     // extracted to a writable dir once per run; returns that dir.
     static QString scriptsDir();
 
     bool package(const QStringList &platforms, const QStringList &bookNames);
+    // Add the book's original (non-answered) PDF back into the package as
+    // raw/original.pdf, image-compressed (the rest of raw/ stays excluded).
+    // Non-fatal: logs a warning and returns on its own if there's no original.
+    void packBookOriginalPdf(const QString &srcBook, const QString &dstBook);
 
     QAtomicInt _isPackaging = 0;   // guards against overlapping package runs
 
