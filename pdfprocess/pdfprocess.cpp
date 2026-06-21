@@ -12,6 +12,8 @@
 #include <QStandardPaths>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QTemporaryDir>
+#include <QHash>
 
 QString PdfProcess::scriptsDir()
 {
@@ -664,9 +666,9 @@ bool PdfProcess::removeDir(const QString &dirPath) {
 // (not the FlowBook runtime, which may legitimately ship .ini/settings.json).
 static bool isExcludedFromPackage(const QString &name, bool isDir) {
     const QString lower = name.toLower();
-    // raw/ is excluded wholesale here; packBookOriginalPdf() adds just the
-    // original PDF back (compressed) after the copy, so the answered PDF and
-    // other raw artifacts still stay out of the package.
+    // raw/ is excluded wholesale here; the package step adds just the
+    // (compressed) original PDF back as raw/original.pdf, so the answered PDF
+    // and other raw artifacts still stay out of the package.
     if (isDir)
         return name == "raw" || name == "review" || name == "temp";
     // macOS / Windows junk
@@ -720,13 +722,12 @@ bool PdfProcess::copyDir(const QString &srcPath, const QString &dstPath, bool fi
     return true;
 }
 
-void PdfProcess::packBookOriginalPdf(const QString &srcBook, const QString &dstBook) {
-    const QString rawDir = srcBook + "/raw";
+bool PdfProcess::compressOriginalPdf(const QString &rawDir, const QString &outPdf,
+                                     const QString &bookLabel) {
     if (!QDir(rawDir).exists())
-        return;   // no raw/ for this book — nothing to keep
+        return false;   // no raw/ for this book — nothing to keep
 
-    const QString outPdf = dstBook + "/raw/original.pdf";
-    QDir().mkpath(dstBook + "/raw");
+    QDir().mkpath(QFileInfo(outPdf).absolutePath());
 
     // Balanced image compression: 150 dpi, JPEG quality 80. The script finds
     // the original (non-answered) PDF in raw/ and never bloats — if the
@@ -750,12 +751,30 @@ void PdfProcess::packBookOriginalPdf(const QString &srcBook, const QString &dstB
     qDebug() << "compress_pdf output:" << out;
     if (proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0
         && out.contains("OK")) {
-        setLogMessages("       ✓  kept original.pdf");
-    } else {
-        // Non-fatal: the book images already shipped; just warn.
-        setLogMessages("       ⚠  could not add original.pdf");
-        emit scriptError(extractScriptError(out, proc.exitCode()));
+        // Report the size change so the user sees what compression did. The
+        // script prints byte counts ("... 24752690 -> 1171165 bytes ...").
+        auto mb = [](qint64 b) { return QString::number(b / 1048576.0, 'f', 1) + " MB"; };
+        QRegularExpression re(QStringLiteral("(\\d+)\\s*->\\s*(\\d+)"));
+        QRegularExpressionMatch m = re.match(out);
+        if (m.hasMatch()) {
+            qint64 src = m.captured(1).toLongLong();
+            qint64 dst = m.captured(2).toLongLong();
+            int pct = src > 0 ? int(100.0 * (src - dst) / src) : 0;
+            setLogMessages(QString("       %1: %2 -> %3  (-%4%)")
+                               .arg(bookLabel, mb(src), mb(dst)).arg(pct));
+        } else {
+            QRegularExpression re1(QStringLiteral("(\\d+)\\s*bytes"));
+            QRegularExpressionMatch m1 = re1.match(out);
+            const QString sz = m1.hasMatch() ? mb(m1.captured(1).toLongLong()) : QString();
+            setLogMessages(QString("       %1: kept original %2").arg(bookLabel, sz));
+        }
+        return true;
     }
+
+    // Non-fatal: the book images still ship; just warn the user once.
+    setLogMessages(QString("       %1: no original PDF to keep").arg(bookLabel));
+    emit scriptError(extractScriptError(out, proc.exitCode()));
+    return false;
 }
 
 bool PdfProcess::launchTestFlowBook(const QString &testVersion) {
@@ -903,6 +922,21 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
         }
     }
 
+    // Compress each book's original PDF ONCE up front, then reuse the result
+    // for every platform below (the same PDF must not be recompressed per
+    // platform). Cached in a temp dir that's auto-removed when we return.
+    QTemporaryDir originalCache;
+    QHash<QString, QString> compressedOriginal;   // book -> cached pdf path
+    if (originalCache.isValid()) {
+        setLogMessages("🗜  Compressing original PDFs…");
+        for (const QString &book : bookNames) {
+            const QString rawDir = appDir + "books/" + book + "/raw";
+            const QString cached = originalCache.path() + "/" + book + ".pdf";
+            if (compressOriginalPdf(rawDir, cached, book))
+                compressedOriginal.insert(book, cached);
+        }
+    }
+
     int totalPlatforms = platforms.length();
     int currentPlatform = 0;
     // Her platform için progress aralığı (10-100 arası)
@@ -938,7 +972,7 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
             qDebug() << "No FlowBook version found for platform:" << platformFolder << "in" << packagePath;
             continue;
         }
-        setLogMessages(QString("    FlowBook %1").arg(flowBookVersion));
+        setLogMessages(QString("    %1 · FlowBook %2").arg(platformName, flowBookVersion));
 
         // Source FlowBook path
         QString sourceFlowBookPath = packagePath + "/" + flowBookVersion;
@@ -949,7 +983,7 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
 
         // FlowBook kopyalama
         setProgress(baseProgress + progressPerPlatform * 0.4); // %40
-        setLogMessages("    Copying app…");
+        setLogMessages(QString("    %1 · copying app…").arg(platformName));
         qDebug() << "sourceFlowBookPath" << sourceFlowBookPath;
         qDebug() << "targetPath" << targetPath;
 
@@ -961,7 +995,7 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
 
         // Book data kopyalama (her seçili kitap data/books/ altına, filtreli)
         setProgress(baseProgress + progressPerPlatform * 0.6); // %60
-        setLogMessages("    Adding books…");
+        setLogMessages(QString("    %1 · adding books…").arg(platformName));
         bool bookCopyOk = true;
         for (const QString &book : bookNames) {
             QString srcBook = appDir + "books/" + book;
@@ -973,16 +1007,25 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
                 bookCopyOk = false;
                 break;
             }
-            setLogMessages(QString("       ✓  %1").arg(book));
-            // raw/ is excluded above; add back just the (compressed) original PDF.
-            packBookOriginalPdf(srcBook, dstBook);
+            setLogMessages(QString("       + %1").arg(book));
+            // raw/ is excluded above; drop in the pre-compressed original PDF
+            // (built once before the platform loop) as raw/original.pdf. The
+            // size was already reported during the compression stage, so this
+            // copy is silent unless it fails.
+            if (compressedOriginal.contains(book)) {
+                const QString dst = dstBook + "/raw/original.pdf";
+                QDir().mkpath(dstBook + "/raw");
+                QFile::remove(dst);
+                if (!QFile::copy(compressedOriginal.value(book), dst))
+                    qDebug() << "Failed to copy compressed original.pdf to" << dst;
+            }
         }
         if (!bookCopyOk)
             continue;
 
         // Zip işlemi
         setProgress(baseProgress + progressPerPlatform * 0.8); // %80
-        setLogMessages("    Zipping…");
+        setLogMessages(QString("    %1 · zipping…").arg(platformName));
         QString zipPath = releaseBookPath + "/" + targetFolderName + ".zip";
         if (!zipFolder(targetPath, zipPath)) {
             setLogMessages(QString("    ✖  Failed to zip %1").arg(platformName));

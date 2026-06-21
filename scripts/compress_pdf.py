@@ -97,6 +97,11 @@ def compress(src, dst, dpi=150, quality=80):
                 base = doc.extract_image(xref)
             except Exception:
                 continue
+            # Fast path: an image that's already JPEG and no bigger than the
+            # target resolution isn't worth the decode+re-encode cost.
+            if (base.get("ext", "").lower() in ("jpeg", "jpg")
+                    and max(base.get("width", 0), base.get("height", 0)) <= max_px):
+                continue
             new_bytes = _recompress_image(base["image"], max_px, quality)
             if new_bytes is None:
                 continue
@@ -106,7 +111,9 @@ def compress(src, dst, dpi=150, quality=80):
             except Exception:
                 continue
     # garbage=4 drops the now-orphaned original image streams; deflate the rest.
-    doc.save(dst, garbage=4, deflate=True, clean=True)
+    # (No clean=True — it sanitizes every content stream and is slow; the size
+    # win comes from the image re-encode + garbage collection, not from clean.)
+    doc.save(dst, garbage=4, deflate=True)
     doc.close()
     return replaced
 

@@ -82,10 +82,12 @@ private:
     static QString scriptsDir();
 
     bool package(const QStringList &platforms, const QStringList &bookNames);
-    // Add the book's original (non-answered) PDF back into the package as
-    // raw/original.pdf, image-compressed (the rest of raw/ stays excluded).
-    // Non-fatal: logs a warning and returns on its own if there's no original.
-    void packBookOriginalPdf(const QString &srcBook, const QString &dstBook);
+    // Image-compress the original (non-answered) PDF found in rawDir into
+    // outPdf. Returns true on success. Done once per book up front and reused
+    // across platforms (the same PDF must not be recompressed per platform).
+    // bookLabel is used only for the progress log line.
+    bool compressOriginalPdf(const QString &rawDir, const QString &outPdf,
+                             const QString &bookLabel);
 
     QAtomicInt _isPackaging = 0;   // guards against overlapping package runs
 

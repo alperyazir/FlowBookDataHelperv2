@@ -266,7 +266,13 @@ Dialog {
         }
 
         function onLogMessagesChanged() {
-            addLogMessage(pdfProcess.logMessages);
+            var m = pdfProcess.logMessages;
+            addLogMessage(m);
+            // Keep the prominent status line on the current step so the user
+            // always sees what stage packaging/analysis is at, not a stuck
+            // "Processing…". Trimmed so leading indent doesn't shift it.
+            if (m && m.trim() !== "")
+                statusText = m.trim();
         }
 
         function onAiAnalysisCompleted(success) {
