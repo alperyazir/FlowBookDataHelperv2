@@ -12,8 +12,9 @@
 #include <QStandardPaths>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QTemporaryDir>
 #include <QHash>
+#include <QFileInfo>
+#include <QDateTime>
 
 QString PdfProcess::scriptsDir()
 {
@@ -674,7 +675,8 @@ static bool isExcludedFromPackage(const QString &name, bool isDir) {
     // (compressed) original PDF back as raw/original.pdf, so the answered PDF
     // and other raw artifacts still stay out of the package.
     if (isDir)
-        return name == "raw" || name == "review" || name == "temp";
+        return name == "raw" || name == "review" || name == "temp"
+            || name == ".pkgcache";
     // macOS / Windows junk
     if (name == ".DS_Store" || name.startsWith("._")
         || lower == "thumbs.db" || lower == "desktop.ini")
@@ -726,63 +728,104 @@ bool PdfProcess::copyDir(const QString &srcPath, const QString &dstPath, bool fi
     return true;
 }
 
-bool PdfProcess::compressOriginalPdf(const QString &rawDir, const QString &outPdf,
-                                     const QString &bookLabel) {
-    if (!QDir(rawDir).exists())
-        return false;   // no raw/ for this book — nothing to keep
+QString PdfProcess::booksDir() const {
+    QString appDir = QGuiApplication::applicationDirPath();
+#ifdef Q_OS_MAC
+    appDir += "/../../../";
+#else
+    appDir += "/../";
+#endif
+    return appDir + "books/";
+}
 
-    QDir().mkpath(QFileInfo(outPdf).absolutePath());
+QString PdfProcess::originalPdfStatus(const QString &book) {
+    const QString bookDir = booksDir() + book;
+    const QString rawDir = bookDir + "/raw";
+    const QString cacheDir = bookDir + "/.pkgcache";
+    const QString cachePdf = cacheDir + "/original.pdf";
+    const QString stampPath = cacheDir + "/stamp.json";
+    const QString lockPath = cacheDir + "/lock";
 
-    // Balanced image compression: 150 dpi, JPEG quality 80. The script finds
-    // the original (non-answered) PDF in raw/ and never bloats — if the
-    // compressed file isn't smaller, the source is copied through.
+    // Ready: the cache exists and its stamp still matches the source original.
+    if (QFileInfo::exists(cachePdf) && QFileInfo::exists(stampPath)) {
+        QFile f(stampPath);
+        if (f.open(QIODevice::ReadOnly)) {
+            const QJsonObject o = QJsonDocument::fromJson(f.readAll()).object();
+            const QFileInfo si(rawDir + "/" + o.value("src").toString());
+            if (si.exists()
+                && si.size() == (qint64)o.value("size").toDouble()
+                && qAbs(si.lastModified().toSecsSinceEpoch()
+                        - (qint64)o.value("mtime").toDouble()) <= 2)
+                return QStringLiteral("ready");
+        }
+    }
+    // In progress: a lock file that isn't stale (30 min).
+    if (QFileInfo::exists(lockPath)) {
+        const QFileInfo li(lockPath);
+        if (li.lastModified().secsTo(QDateTime::currentDateTime()) < 30 * 60)
+            return QStringLiteral("inprogress");
+    }
+    // None: raw/ has no PDF at all to keep.
+    if (QDir(rawDir).entryList(QStringList() << "*.pdf", QDir::Files).isEmpty())
+        return QStringLiteral("none");
+    return QStringLiteral("stale");
+}
+
+void PdfProcess::ensureOriginalCompressed(const QString &book) {
+    const QString s = originalPdfStatus(book);
+    if (s == "ready" || s == "inprogress" || s == "none")
+        return;   // already done / running / nothing to do
     QStringList args;
     args << "-u" << (scriptsDir() + "/compress_pdf.py")
-         << "--from-raw" << rawDir << outPdf
-         << "150" << "80";
+         << "--cache" << (booksDir() + book + "/raw") << "150" << "80";
+    // Detached: the (possibly slow) job survives the app closing and finishes
+    // writing the cache on its own; status is read back from the filesystem.
+    QProcess::startDetached(pythonExecutable(), args);
+}
 
-    // Announce before starting so the status line shows activity during the
-    // (possibly slow) compression, not just the result afterwards.
-    setLogMessages(QString("       %1 · compressing…").arg(bookLabel));
+QString PdfProcess::ensureCachedOriginalSync(const QString &book, const QString &label) {
+    const QString rawDir = booksDir() + book + "/raw";
+    if (QDir(rawDir).entryList(QStringList() << "*.pdf", QDir::Files).isEmpty())
+        return QString();   // no original to keep
 
+    const bool wasReady = originalPdfStatus(book) == "ready";
+    if (!wasReady)
+        setLogMessages(QString("       %1 · compressing…").arg(label));
+
+    QStringList args;
+    args << "-u" << (scriptsDir() + "/compress_pdf.py")
+         << "--cache" << rawDir << "150" << "80";
     QProcess proc;
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert("PYTHONIOENCODING", "utf-8");
     proc.setProcessEnvironment(env);
     proc.setProcessChannelMode(QProcess::MergedChannels);
     proc.start(pythonExecutable(), args);
-    // Packaging already runs on a worker thread; block until the (possibly
-    // large) PDF is done. First run may also pip-install fitz/Pillow.
-    proc.waitForFinished(600000);
+    // Instant when the background run already built it; otherwise this blocks
+    // while it compresses (or waits for an in-flight background run).
+    proc.waitForFinished(45 * 60 * 1000);
 
     const QString out = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
-    qDebug() << "compress_pdf output:" << out;
-    if (proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0
-        && out.contains("OK")) {
-        // Report the size change so the user sees what compression did. The
-        // script prints byte counts ("... 24752690 -> 1171165 bytes ...").
-        auto mb = [](qint64 b) { return QString::number(b / 1048576.0, 'f', 1) + " MB"; };
-        QRegularExpression re(QStringLiteral("(\\d+)\\s*->\\s*(\\d+)"));
-        QRegularExpressionMatch m = re.match(out);
-        if (m.hasMatch()) {
-            qint64 src = m.captured(1).toLongLong();
-            qint64 dst = m.captured(2).toLongLong();
-            int pct = src > 0 ? int(100.0 * (src - dst) / src) : 0;
-            setLogMessages(QString("       %1: %2 -> %3  (-%4%)")
-                               .arg(bookLabel, mb(src), mb(dst)).arg(pct));
-        } else {
-            QRegularExpression re1(QStringLiteral("(\\d+)\\s*bytes"));
-            QRegularExpressionMatch m1 = re1.match(out);
-            const QString sz = m1.hasMatch() ? mb(m1.captured(1).toLongLong()) : QString();
-            setLogMessages(QString("       %1: kept original %2").arg(bookLabel, sz));
-        }
-        return true;
+    qDebug() << "compress_pdf --cache output:" << out;
+    const QString cachePdf = booksDir() + book + "/.pkgcache/original.pdf";
+    if (!QFileInfo::exists(cachePdf)) {
+        setLogMessages(QString("       %1: no original PDF to keep").arg(label));
+        emit scriptError(extractScriptError(out, proc.exitCode()));
+        return QString();
     }
-
-    // Non-fatal: the book images still ship; just warn the user once.
-    setLogMessages(QString("       %1: no original PDF to keep").arg(bookLabel));
-    emit scriptError(extractScriptError(out, proc.exitCode()));
-    return false;
+    // Report the size only when we actually (re)built it this run.
+    auto mb = [](qint64 b) { return QString::number(b / 1048576.0, 'f', 1) + " MB"; };
+    QRegularExpressionMatch m =
+        QRegularExpression(QStringLiteral("(\\d+)\\s*->\\s*(\\d+)")).match(out);
+    if (m.hasMatch()) {
+        const qint64 a = m.captured(1).toLongLong(), b = m.captured(2).toLongLong();
+        const int pct = a > 0 ? int(100.0 * (a - b) / a) : 0;
+        setLogMessages(QString("       %1: %2 -> %3  (-%4%)")
+                           .arg(label, mb(a), mb(b)).arg(pct));
+    } else if (!wasReady) {
+        setLogMessages(QString("       %1: original.pdf ready").arg(label));
+    }
+    return cachePdf;
 }
 
 bool PdfProcess::launchTestFlowBook(const QString &testVersion) {
@@ -930,20 +973,17 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
         }
     }
 
-    // Compress each book's original PDF ONCE up front, then reuse the result
-    // for every platform below (the same PDF must not be recompressed per
-    // platform). Cached in a temp dir that's auto-removed when we return.
-    QTemporaryDir originalCache;
+    // Make sure each book's compressed original is ready ONCE up front, then
+    // reuse it for every platform below. Normally this was already built in
+    // the background when the book was opened, so it's instant; otherwise it
+    // compresses now. The cache is persistent (books/<book>/.pkgcache/).
     QHash<QString, QString> compressedOriginal;   // book -> cached pdf path
-    if (originalCache.isValid()) {
-        setLogMessages(QString("🗜  Compressing original PDFs  (once for all %1 platform%2)…")
-                           .arg(platforms.size()).arg(platforms.size() == 1 ? "" : "s"));
-        for (const QString &book : bookNames) {
-            const QString rawDir = appDir + "books/" + book + "/raw";
-            const QString cached = originalCache.path() + "/" + book + ".pdf";
-            if (compressOriginalPdf(rawDir, cached, book))
-                compressedOriginal.insert(book, cached);
-        }
+    setLogMessages(QString("🗜  Preparing original PDFs  (reused for all %1 platform%2)…")
+                       .arg(platforms.size()).arg(platforms.size() == 1 ? "" : "s"));
+    for (const QString &book : bookNames) {
+        const QString cached = ensureCachedOriginalSync(book, book);
+        if (!cached.isEmpty())
+            compressedOriginal.insert(book, cached);
     }
 
     int totalPlatforms = platforms.length();

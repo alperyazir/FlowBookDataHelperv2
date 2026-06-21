@@ -38,6 +38,13 @@ public:
     Q_INVOKABLE void detectHeaderText(const QString &rawDir, int pageNumber,
                                       double x, double y, double w, double h,
                                       double pngWidth, double pngHeight);
+    // Packaging PDF cache (books/<book>/.pkgcache/original.pdf):
+    // "ready" | "inprogress" | "stale" | "none". Cheap filesystem check.
+    Q_INVOKABLE QString originalPdfStatus(const QString &book);
+    // Kick off a background (detached) compression of the book's original PDF
+    // into its cache, if it isn't already fresh or running. Called when a book
+    // is opened and from the Package screen's manual "Optimize" action.
+    Q_INVOKABLE void ensureOriginalCompressed(const QString &book);
 
     int _progress;
     QString _logMessages;
@@ -87,12 +94,12 @@ private:
     static QString scriptsDir();
 
     bool package(const QStringList &platforms, const QStringList &bookNames);
-    // Image-compress the original (non-answered) PDF found in rawDir into
-    // outPdf. Returns true on success. Done once per book up front and reused
-    // across platforms (the same PDF must not be recompressed per platform).
-    // bookLabel is used only for the progress log line.
-    bool compressOriginalPdf(const QString &rawDir, const QString &outPdf,
-                             const QString &bookLabel);
+    // books/ root (platform-correct app-relative path).
+    QString booksDir() const;
+    // Ensure the book's compressed original cache is fresh (runs the cache
+    // script synchronously — instant when already built in the background),
+    // then return the cached original.pdf path, or "" if there's none.
+    QString ensureCachedOriginalSync(const QString &book, const QString &label);
 
     QAtomicInt _isPackaging = 0;   // guards against overlapping package runs
 

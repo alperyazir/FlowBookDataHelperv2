@@ -499,6 +499,14 @@ ApplicationWindow {
 
     OpenProject {
         id: openProject
+        // When a book becomes the current one, build its packaging PDF cache
+        // in the background (detached) so it's ready — and packaging instant —
+        // by the time the user opens the Package screen. No-op if already
+        // fresh or running.
+        onCurrentProjectChanged: {
+            if (currentProject && currentProject !== "")
+                pdfProcess.ensureOriginalCompressed(currentProject);
+        }
     }
 
     TestDialog {

@@ -17,9 +17,12 @@ success or "ERROR: ..." on failure.
 """
 
 import io
+import json
 import os
 import shutil
+import subprocess
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -83,7 +86,7 @@ def _recompress_image(raw_bytes, max_px, quality):
     return out if len(out) < len(raw_bytes) else None
 
 
-def compress(src, dst, dpi=150, quality=80):
+def _compress_pymupdf(src, dst, dpi=150, quality=80):
     doc = fitz.open(src)
 
     # Pass 1 (sequential — the fitz doc is not thread-safe): gather the images
@@ -162,9 +165,175 @@ def compress(src, dst, dpi=150, quality=80):
     return replaced
 
 
+def _ghostscript_exe():
+    """Path to a Ghostscript console binary, or None. Much faster than the
+    PyMuPDF path on weak machines, so prefer it when present."""
+    for name in ("gswin64c", "gswin32c", "gs"):
+        p = shutil.which(name)
+        if p:
+            return p
+    return None
+
+
+def _compress_ghostscript(src, dst, dpi, quality):
+    """Downsample + re-encode images via Ghostscript's pdfwrite. Returns
+    True on success (dst written). Vector text is preserved."""
+    gs = _ghostscript_exe()
+    if not gs:
+        return False
+    args = [
+        gs, "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.5",
+        "-dNOPAUSE", "-dBATCH", "-dQUIET", "-dSAFER",
+        "-dDetectDuplicateImages=true",
+        "-dDownsampleColorImages=true", "-dColorImageDownsampleType=/Bicubic",
+        f"-dColorImageResolution={dpi}",
+        "-dDownsampleGrayImages=true", "-dGrayImageDownsampleType=/Bicubic",
+        f"-dGrayImageResolution={dpi}",
+        "-dDownsampleMonoImages=true", "-dMonoImageDownsampleType=/Subsample",
+        f"-dMonoImageResolution={dpi * 2}",
+        "-dAutoFilterColorImages=false", "-dColorImageFilter=/DCTEncode",
+        "-dAutoFilterGrayImages=false", "-dGrayImageFilter=/DCTEncode",
+        f"-dJPEGQ={quality}",
+        f"-sOutputFile={dst}", src,
+    ]
+    try:
+        r = subprocess.run(args, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+    except Exception:
+        return False
+    return r.returncode == 0 and os.path.isfile(dst) and os.path.getsize(dst) > 0
+
+
+def do_compress(src, dst, dpi=150, quality=80):
+    """Compress src -> dst, preferring Ghostscript then PyMuPDF. Atomic
+    (writes a temp then renames) and never bloats — if the result isn't
+    smaller, the source is copied through. Never loses the PDF. Returns a
+    short status string."""
+    os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
+    src_size = os.path.getsize(src)
+    tmp = dst + ".tmp"
+
+    engine = None
+    try:
+        if _compress_ghostscript(src, tmp, dpi, quality):
+            engine = "gs"
+        else:
+            _compress_pymupdf(src, tmp, dpi, quality)
+            engine = "mupdf"
+    except Exception as e:
+        if os.path.exists(tmp):
+            try: os.remove(tmp)
+            except OSError: pass
+        shutil.copy(src, dst)                       # never lose the PDF
+        return f"OK copied (uncompressed, {engine or 'error'}: {e}) {src_size} bytes"
+
+    new_size = os.path.getsize(tmp)
+    if new_size < src_size:
+        os.replace(tmp, dst)
+        pct = 100.0 * (src_size - new_size) / src_size
+        return (f"OK compressed {src_size} -> {new_size} bytes "
+                f"(-{pct:.0f}%, {engine}, {dpi}dpi q{quality})")
+    os.remove(tmp)
+    shutil.copy(src, dst)
+    return f"OK kept original {src_size} bytes (compression did not help)"
+
+
+# --- cache mode --------------------------------------------------------------
+# Persistent per-book cache so the slow compression runs once, ahead of
+# packaging (triggered in the background when a book is opened). Lives in
+# books/<book>/.pkgcache/ (a sibling of raw/, NOT inside it — so the editor's
+# raw/ PDF detection never picks up the downsampled copy).
+
+LOCK_STALE_SECS = 30 * 60        # a lock older than this is from a dead run
+WAIT_POLL_SECS = 2
+WAIT_MAX_SECS = 45 * 60
+
+
+def _cache_paths(raw_dir):
+    book_dir = os.path.dirname(os.path.abspath(raw_dir.rstrip("/\\")))
+    cdir = os.path.join(book_dir, ".pkgcache")
+    return cdir, os.path.join(cdir, "original.pdf"), \
+        os.path.join(cdir, "stamp.json"), os.path.join(cdir, "lock")
+
+
+def _stamp_for(src, dpi, quality):
+    st = os.stat(src)
+    return {"src": os.path.basename(src), "size": st.st_size,
+            "mtime": int(st.st_mtime), "dpi": dpi, "quality": quality}
+
+
+def _cache_fresh(cache_pdf, stamp_path, want):
+    if not (os.path.isfile(cache_pdf) and os.path.isfile(stamp_path)):
+        return False
+    try:
+        have = json.load(open(stamp_path))
+    except Exception:
+        return False
+    return (have.get("src") == want["src"] and have.get("size") == want["size"]
+            and abs(have.get("mtime", 0) - want["mtime"]) <= 2
+            and have.get("dpi") == want["dpi"]
+            and have.get("quality") == want["quality"])
+
+
+def _lock_fresh(lock_path):
+    try:
+        return (time.time() - os.path.getmtime(lock_path)) < LOCK_STALE_SECS
+    except OSError:
+        return False
+
+
+def cache_mode(raw_dir, dpi, quality):
+    src = find_original_pdf(raw_dir)
+    if not src:
+        print(f"ERROR: no original PDF found in: {raw_dir}", flush=True)
+        return 1
+    cdir, cache_pdf, stamp_path, lock_path = _cache_paths(raw_dir)
+    os.makedirs(cdir, exist_ok=True)
+    want = _stamp_for(src, dpi, quality)
+
+    if _cache_fresh(cache_pdf, stamp_path, want):
+        print("OK fresh (cache up to date)", flush=True)
+        return 0
+
+    # Another run may be building it — wait for it rather than racing.
+    waited = 0
+    while os.path.isfile(lock_path) and _lock_fresh(lock_path) and waited < WAIT_MAX_SECS:
+        time.sleep(WAIT_POLL_SECS)
+        waited += WAIT_POLL_SECS
+        if _cache_fresh(cache_pdf, stamp_path, want):
+            print("OK fresh (built by another run)", flush=True)
+            return 0
+
+    # Take the lock and build.
+    try:
+        with open(lock_path, "w") as fh:
+            fh.write(str(os.getpid()))
+    except OSError:
+        pass
+    try:
+        msg = do_compress(src, cache_pdf, dpi, quality)
+        with open(stamp_path, "w") as fh:
+            json.dump(want, fh)
+        print(msg, flush=True)
+        return 0
+    finally:
+        try: os.remove(lock_path)
+        except OSError: pass
+
+
 def main():
     a = sys.argv[1:]
-    if len(a) >= 1 and a[0] == "--from-raw":
+
+    if a and a[0] == "--cache":
+        a = a[1:]
+        if not a:
+            print("ERROR: usage: --cache <raw_dir> [dpi] [quality]", flush=True)
+            return 1
+        dpi = int(a[1]) if len(a) >= 2 else 150
+        quality = int(a[2]) if len(a) >= 3 else 80
+        return cache_mode(a[0], dpi, quality)
+
+    if a and a[0] == "--from-raw":
         a = a[1:]
         if len(a) < 2:
             print("ERROR: usage: --from-raw <raw_dir> <output.pdf> [dpi] [quality]", flush=True)
@@ -173,53 +342,19 @@ def main():
         if not src:
             print(f"ERROR: no original PDF found in: {a[0]}", flush=True)
             return 1
-        dst = a[1]
-        rest = a[2:]
+        dst, rest = a[1], a[2:]
     else:
         if len(a) < 2:
             print("ERROR: usage: <input.pdf> <output.pdf> [dpi] [quality]", flush=True)
             return 1
-        src, dst = a[0], a[1]
-        rest = a[2:]
+        src, dst, rest = a[0], a[1], a[2:]
+
     dpi = int(rest[0]) if len(rest) >= 1 else 150
     quality = int(rest[1]) if len(rest) >= 2 else 80
-
     if not os.path.isfile(src):
         print(f"ERROR: input PDF not found: {src}", flush=True)
         return 1
-    os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
-
-    src_size = os.path.getsize(src)
-    tmp = dst + ".tmp"
-    try:
-        replaced = compress(src, tmp, dpi, quality)
-    except Exception as e:
-        print(f"ERROR: compression failed: {e}", flush=True)
-        # Drop any partial temp file so it can't ship in the package.
-        if os.path.exists(tmp):
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
-        # Never lose the PDF — fall back to copying the source through.
-        try:
-            shutil.copy(src, dst)
-            print(f"OK copied (uncompressed) {src_size} bytes", flush=True)
-            return 0
-        except Exception as e2:
-            print(f"ERROR: fallback copy failed: {e2}", flush=True)
-            return 1
-
-    new_size = os.path.getsize(tmp)
-    if new_size < src_size:
-        os.replace(tmp, dst)
-        pct = 100.0 * (src_size - new_size) / src_size
-        print(f"OK compressed {src_size} -> {new_size} bytes "
-              f"(-{pct:.0f}%, {replaced} images, {dpi}dpi q{quality})", flush=True)
-    else:
-        os.remove(tmp)
-        shutil.copy(src, dst)
-        print(f"OK kept original {src_size} bytes (compression did not help)", flush=True)
+    print(do_compress(src, dst, dpi, quality), flush=True)
     return 0
 
 
