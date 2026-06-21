@@ -1043,8 +1043,15 @@ bool PdfProcess::zipFolder(const QString &sourceDir, const QString &zipFilePath)
     process->start(sevenZipPath, arguments);
 #endif
 
-    if (!process->waitForFinished(60000)) { // 30 second timeout
+    // Generous timeout: packages can be several hundred MB (uncompressed
+    // original PDFs), and zipping that on a slow machine takes minutes. The
+    // old 60s cap made zipFolder report failure while 7z kept running in the
+    // background — so the caller skipped cleanup and the uncompressed folder
+    // was left behind next to a zip that finished later.
+    if (!process->waitForFinished(60 * 60 * 1000)) {  // 60 min
         qDebug() << "Zip process timed out";
+        process->kill();                 // don't leave an orphaned 7z running
+        process->waitForFinished(5000);
         process->deleteLater();
         return false;
     }
