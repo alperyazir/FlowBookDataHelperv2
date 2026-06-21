@@ -17,18 +17,6 @@ Dialog {
     // Two-step flow: 1 = pick books, 2 = pick platforms.
     property int step: 1
 
-    // Bumped on a timer while the book list is shown so each row re-queries
-    // pdfProcess.originalPdfStatus() and reflects background compression
-    // finishing (the status call itself isn't a reactive binding source).
-    property int statusTick: 0
-
-    Timer {
-        running: packageDialog.visible && packageDialog.step === 1
-        interval: 1500
-        repeat: true
-        onTriggered: packageDialog.statusTick++
-    }
-
     // Books selected for this package — they all go under data/books/ together
     // (e.g. a paired Student Book + Workbook). Defaults to the open project.
     property var selectedBooks: []
@@ -236,23 +224,14 @@ Dialog {
                     id: bookRow
                     required property var modelData
                     readonly property bool sel: packageDialog.selectedBooks.indexOf(modelData) !== -1
-                    // PDF-cache readiness: ready | inprogress | stale | none.
-                    // statusTick is referenced so the poll timer refreshes it.
-                    readonly property string pdfStatus: {
-                        packageDialog.statusTick;
-                        return pdfProcess.originalPdfStatus(bookRow.modelData);
-                    }
                     width: ListView.view ? ListView.view.width : 0
                     height: 34
                     radius: 4
                     color: bookRow.sel ? "#15323a" : (bookMouse.containsMouse ? "#1c2a31" : "transparent")
 
                     Row {
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.fill: parent
                         anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-                        width: parent.width - badge.width - 24
                         spacing: 10
                         Rectangle {
                             width: 18
@@ -276,7 +255,6 @@ Dialog {
                             color: "white"
                             font.pixelSize: 14
                             elide: Text.ElideRight
-                            width: parent.width - 28
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
@@ -287,36 +265,6 @@ Dialog {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: packageDialog.toggleBook(bookRow.modelData)
-                    }
-
-                    // PDF-cache status badge. The "optimize" state is clickable
-                    // (triggers a background compression); the others fall
-                    // through to the row's select toggle.
-                    Text {
-                        id: badge
-                        anchors.right: parent.right
-                        anchors.rightMargin: 10
-                        anchors.verticalCenter: parent.verticalCenter
-                        font.pixelSize: 11
-                        text: bookRow.pdfStatus === "ready" ? "✓ optimized"
-                            : bookRow.pdfStatus === "inprogress" ? "optimizing…"
-                            : bookRow.pdfStatus === "none" ? "no PDF"
-                            : "⟳ optimize"
-                        color: bookRow.pdfStatus === "ready" ? "#4fd2dc"
-                            : bookRow.pdfStatus === "inprogress" ? "#e0a32e"
-                            : bookRow.pdfStatus === "none" ? "#5e7178"
-                            : "#00e6e6"
-
-                        MouseArea {
-                            anchors.fill: parent
-                            anchors.margins: -4
-                            enabled: bookRow.pdfStatus === "stale"
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                pdfProcess.ensureOriginalCompressed(bookRow.modelData);
-                                packageDialog.statusTick++;
-                            }
-                        }
                     }
                 }
             }
