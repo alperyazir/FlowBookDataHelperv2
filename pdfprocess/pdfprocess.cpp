@@ -671,9 +671,11 @@ static bool isExcludedFromPackage(const QString &name, bool isDir) {
     const QString lower = name.toLower();
     // raw/ is excluded wholesale here; the package step copies just the
     // original PDF back as raw/original.pdf, so the answered PDF and other
-    // raw artifacts still stay out of the package.
+    // raw artifacts still stay out of the package. .pkgcache is a leftover of
+    // the old PDF-optimize cache — never ship it.
     if (isDir)
-        return name == "raw" || name == "review" || name == "temp";
+        return name == "raw" || name == "review" || name == "temp"
+            || name == ".pkgcache";
     // macOS / Windows junk
     if (name == ".DS_Store" || name.startsWith("._")
         || lower == "thumbs.db" || lower == "desktop.ini")
