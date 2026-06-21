@@ -20,6 +20,7 @@ import io
 import os
 import shutil
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _bootstrap import ensure_runtime_deps
@@ -30,6 +31,14 @@ from PIL import Image
 
 ANSWERED_KEYS = ("cevap", "answer", "key")
 COVER_KEYS = ("kapak", "cover", "kapag")
+
+# Images smaller than this (raw embedded bytes) are icons/logos/rules: lots
+# of them on a page, but each saves almost nothing — skip to save time.
+MIN_IMAGE_BYTES = 30 * 1024
+# Pre-extract guard: an image whose longest side is under this is a small
+# icon/glyph. We can tell from the image tuple (no decode), so it lets us
+# skip the costly extract_image for the bulk of a page's little images.
+MIN_IMAGE_PIXELS = 256
 
 
 def find_original_pdf(raw_dir):
@@ -76,40 +85,75 @@ def _recompress_image(raw_bytes, max_px, quality):
 
 def compress(src, dst, dpi=150, quality=80):
     doc = fitz.open(src)
+
+    # Pass 1 (sequential — the fitz doc is not thread-safe): gather the images
+    # worth recompressing and their raw bytes.
     seen = set()
-    replaced = 0
-    for page in doc:
+    jobs = []        # (page_index, xref)
+    payloads = []    # (raw_bytes, max_px, quality) — fed to the worker pool
+    for pno in range(doc.page_count):
+        page = doc[pno]
         for img in page.get_images(full=True):
-            xref = img[0]
-            smask = img[1]
+            # img tuple: (xref, smask, width, height, bpc, colorspace,
+            #             alt_cs, name, filter, referencer)
+            xref, smask = img[0], img[1]
+            width, height = img[2], img[3]
+            img_filter = str(img[8]) if len(img) > 8 else ""
             if xref in seen:
                 continue
             seen.add(xref)
             if smask:                       # soft-masked: skip (keeps alpha)
                 continue
-            # Target pixel budget = displayed size (pt -> inch) * dpi.
+            # Cheap pre-extract skip (from the tuple, no decode): a small icon
+            # saves almost nothing but extracting it is the bulk of pass-1 on
+            # icon-heavy pages.
+            if max(width, height) < MIN_IMAGE_PIXELS:
+                continue
             rects = page.get_image_rects(xref)
             if not rects:
                 continue
+            # Target pixel budget = displayed size (pt -> inch) * dpi.
             disp_pt = max(max(r.width, r.height) for r in rects)
             max_px = max(1, int(disp_pt / 72.0 * dpi))
+            # Already JPEG and no bigger than target — re-encoding wouldn't
+            # help; skip without the costly extract_image.
+            if "DCTDecode" in img_filter and max(width, height) <= max_px:
+                continue
             try:
                 base = doc.extract_image(xref)
             except Exception:
                 continue
-            # Fast path: an image that's already JPEG and no bigger than the
-            # target resolution isn't worth the decode+re-encode cost.
-            if (base.get("ext", "").lower() in ("jpeg", "jpg")
-                    and max(base.get("width", 0), base.get("height", 0)) <= max_px):
+            raw = base["image"]
+            # Final byte-size guard for whatever survived the cheap skips.
+            if len(raw) < MIN_IMAGE_BYTES:
                 continue
-            new_bytes = _recompress_image(base["image"], max_px, quality)
-            if new_bytes is None:
-                continue
-            try:
-                page.replace_image(xref, stream=new_bytes)
-                replaced += 1
-            except Exception:
-                continue
+            jobs.append((pno, xref))
+            payloads.append((raw, max_px, quality))
+
+    # Pass 2 (parallel): the decode/resize/encode is the CPU cost and PIL
+    # releases the GIL in its C codecs, so a thread pool spreads it across
+    # cores without the pickling/spawn overhead of processes.
+    if payloads:
+        workers = min(os.cpu_count() or 4, 8)
+        if workers > 1 and len(payloads) > 1:
+            with ThreadPoolExecutor(max_workers=workers) as ex:
+                results = list(ex.map(lambda p: _recompress_image(*p), payloads))
+        else:
+            results = [_recompress_image(*p) for p in payloads]
+    else:
+        results = []
+
+    # Pass 3 (sequential — touches the doc): apply the recompressed images.
+    replaced = 0
+    for (pno, xref), new_bytes in zip(jobs, results):
+        if new_bytes is None:
+            continue
+        try:
+            doc[pno].replace_image(xref, stream=new_bytes)
+            replaced += 1
+        except Exception:
+            continue
+
     # garbage=4 drops the now-orphaned original image streams; deflate the rest.
     # (No clean=True — it sanitizes every content stream and is slow; the size
     # win comes from the image re-encode + garbage collection, not from clean.)
