@@ -55,6 +55,11 @@ public:
 signals:
     void progressChanged();
     void logMessagesChanged();
+    // Carries the exact log line as a parameter. setLogMessages() is often
+    // called from the packaging worker thread, so a slot that re-reads the
+    // logMessages property races the writer and sees the latest value N times
+    // (duplicate lines, lost lines). Connect to THIS for logging instead.
+    void logMessage(const QString &message);
     void aiAnalyzingChanged();
     void copyCompleted(bool success);
     void aiAnalysisCompleted(bool success);

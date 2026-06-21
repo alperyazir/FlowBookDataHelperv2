@@ -508,6 +508,10 @@ QString PdfProcess::logMessages() const
 
 void PdfProcess::setLogMessages(const QString &newLogMessages)
 {
+    // Every call is a log event — emit the text as a parameter so a
+    // cross-thread (queued) receiver gets this exact line, not a re-read of
+    // the property that the worker thread may have already overwritten.
+    emit logMessage(newLogMessages);
     if (_logMessages == newLogMessages)
         return;
     _logMessages = newLogMessages;
@@ -737,6 +741,10 @@ bool PdfProcess::compressOriginalPdf(const QString &rawDir, const QString &outPd
          << "--from-raw" << rawDir << outPdf
          << "150" << "80";
 
+    // Announce before starting so the status line shows activity during the
+    // (possibly slow) compression, not just the result afterwards.
+    setLogMessages(QString("       %1 · compressing…").arg(bookLabel));
+
     QProcess proc;
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert("PYTHONIOENCODING", "utf-8");
@@ -928,7 +936,8 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
     QTemporaryDir originalCache;
     QHash<QString, QString> compressedOriginal;   // book -> cached pdf path
     if (originalCache.isValid()) {
-        setLogMessages("🗜  Compressing original PDFs…");
+        setLogMessages(QString("🗜  Compressing original PDFs  (once for all %1 platform%2)…")
+                           .arg(platforms.size()).arg(platforms.size() == 1 ? "" : "s"));
         for (const QString &book : bookNames) {
             const QString rawDir = appDir + "books/" + book + "/raw";
             const QString cached = originalCache.path() + "/" + book + ".pdf";

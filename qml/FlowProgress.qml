@@ -265,14 +265,16 @@ Dialog {
             progress = pdfProcess.progress;
         }
 
-        function onLogMessagesChanged() {
-            var m = pdfProcess.logMessages;
-            addLogMessage(m);
+        // Use the parameter (the exact line at emit time) — NOT a re-read of
+        // pdfProcess.logMessages, which races the worker thread and would show
+        // the latest message several times while losing intermediate ones.
+        function onLogMessage(message) {
+            addLogMessage(message);
             // Keep the prominent status line on the current step so the user
             // always sees what stage packaging/analysis is at, not a stuck
             // "Processing…". Trimmed so leading indent doesn't shift it.
-            if (m && m.trim() !== "")
-                statusText = m.trim();
+            if (message && message.trim() !== "")
+                statusText = message.trim();
         }
 
         function onAiAnalysisCompleted(success) {
