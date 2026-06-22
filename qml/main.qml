@@ -509,6 +509,10 @@ ApplicationWindow {
         id: packageDialog
     }
 
+    OptimizeDialog {
+        id: optimizeDialog
+    }
+
     GamesDialog {
         id: gamesDialog
     }

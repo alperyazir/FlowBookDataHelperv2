@@ -61,6 +61,10 @@ Rectangle {
                     }
                 }
                 AppMenuItem {
+                    text: "Optimize PDFs…"
+                    onTriggered: optimizeDialog.open()
+                }
+                AppMenuItem {
                     text: "Package"
                     onTriggered: {
                         packageDialog.currentProject = openProject.currentProject;
@@ -78,15 +82,6 @@ Rectangle {
                 id: settingsMenu
                 y: parent.height + 2
                 implicitWidth: 240
-                AppMenuItem {
-                    text: "Module side on the left"
-                    checkable: true
-                    checked: (config && config.bookSets && config.bookSets.length > 0
-                              && config.bookSets[0].books && config.bookSets[0].books.length > 0)
-                             ? config.bookSets[0].books[0].isModuleSideLeft : false
-                    onTriggered: config.bookSets[0].books[0].isModuleSideLeft =
-                                 !config.bookSets[0].books[0].isModuleSideLeft
-                }
                 AppMenuItem {
                     text: "Auto-save"
                     checkable: true

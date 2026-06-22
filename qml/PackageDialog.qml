@@ -17,6 +17,17 @@ Dialog {
     // Two-step flow: 1 = pick books, 2 = pick platforms.
     property int step: 1
 
+    // Bumped while the book list shows so each row re-queries the optimize
+    // status (a book that hasn't been optimized gets a badge — its full-size
+    // original.pdf will ship). Optimizing itself is done in Project ▸ Optimize.
+    property int statusTick: 0
+    Timer {
+        running: packageDialog.visible && packageDialog.step === 1
+        interval: 1500
+        repeat: true
+        onTriggered: packageDialog.statusTick++
+    }
+
     // Books selected for this package — they all go under data/books/ together
     // (e.g. a paired Student Book + Workbook). Defaults to the open project.
     property var selectedBooks: []
@@ -224,14 +235,21 @@ Dialog {
                     id: bookRow
                     required property var modelData
                     readonly property bool sel: packageDialog.selectedBooks.indexOf(modelData) !== -1
+                    // Optimize status; statusTick forces a refresh.
+                    readonly property string pdfStatus: {
+                        packageDialog.statusTick;
+                        return pdfProcess.originalPdfStatus(bookRow.modelData);
+                    }
                     width: ListView.view ? ListView.view.width : 0
                     height: 34
                     radius: 4
                     color: bookRow.sel ? "#15323a" : (bookMouse.containsMouse ? "#1c2a31" : "transparent")
 
                     Row {
-                        anchors.fill: parent
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
                         anchors.leftMargin: 8
+                        width: parent.width - pkgBadge.width - 24
                         spacing: 10
                         Rectangle {
                             width: 18
@@ -255,6 +273,7 @@ Dialog {
                             color: "white"
                             font.pixelSize: 14
                             elide: Text.ElideRight
+                            width: parent.width - 28
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
@@ -265,6 +284,20 @@ Dialog {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: packageDialog.toggleBook(bookRow.modelData)
+                    }
+
+                    // Informational: warns when this book's original.pdf hasn't
+                    // been optimized (Project ▸ Optimize). Empty when ready/none.
+                    Text {
+                        id: pkgBadge
+                        anchors.right: parent.right
+                        anchors.rightMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        font.pixelSize: 11
+                        text: bookRow.pdfStatus === "stale" ? "⚠ not optimized"
+                            : bookRow.pdfStatus === "inprogress" ? "optimizing…"
+                            : ""
+                        color: bookRow.pdfStatus === "inprogress" ? "#e0a32e" : "#d08770"
                     }
                 }
             }

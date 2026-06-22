@@ -1890,7 +1890,10 @@ Item {
 
                         Image {
                             id: activityImg
-                            source: "qrc:/icons/activity.svg"
+                            // fillpicture activities show the magnifier icon; all
+                            // other activity types use the generic activity icon.
+                            source: modelData.activity.type === "fillpicture"
+                                    ? "qrc:/icons/magnifier.svg" : "qrc:/icons/activity.svg"
                             height: parent.height > 0 ? root.imageHeights : 0
                             width: height
                             smooth: true

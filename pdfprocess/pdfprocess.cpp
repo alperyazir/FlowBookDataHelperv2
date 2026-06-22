@@ -13,6 +13,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QFileInfo>
+#include <QDateTime>
 
 QString PdfProcess::scriptsDir()
 {
@@ -755,6 +756,79 @@ QString PdfProcess::findOriginalPdf(const QString &rawDir) const {
     return d.filePath(rest.first());
 }
 
+QString PdfProcess::booksDir() const {
+    QString appDir = QGuiApplication::applicationDirPath();
+#ifdef Q_OS_MAC
+    appDir += "/../../../";
+#else
+    appDir += "/../";
+#endif
+    return appDir + "books/";
+}
+
+QString PdfProcess::originalPdfStatus(const QString &book) {
+    const QString bookDir = booksDir() + book;
+    const QString rawDir = bookDir + "/raw";
+    const QString cacheDir = bookDir + "/.pkgcache";
+    const QString cachePdf = cacheDir + "/original.pdf";
+    const QString stampPath = cacheDir + "/stamp.json";
+    const QString lockPath = cacheDir + "/lock";
+
+    // Ready: the cache exists and its stamp still matches the source original.
+    if (QFileInfo::exists(cachePdf) && QFileInfo::exists(stampPath)) {
+        QFile f(stampPath);
+        if (f.open(QIODevice::ReadOnly)) {
+            const QJsonObject o = QJsonDocument::fromJson(f.readAll()).object();
+            const QFileInfo si(rawDir + "/" + o.value("src").toString());
+            if (si.exists()
+                && si.size() == (qint64)o.value("size").toDouble()
+                && qAbs(si.lastModified().toSecsSinceEpoch()
+                        - (qint64)o.value("mtime").toDouble()) <= 2)
+                return QStringLiteral("ready");
+        }
+    }
+    // In progress: a lock file that isn't stale (30 min).
+    if (QFileInfo::exists(lockPath)) {
+        const QFileInfo li(lockPath);
+        if (li.lastModified().secsTo(QDateTime::currentDateTime()) < 30 * 60)
+            return QStringLiteral("inprogress");
+    }
+    // None: raw/ has no PDF at all to keep.
+    if (QDir(rawDir).entryList(QStringList() << "*.pdf", QDir::Files).isEmpty())
+        return QStringLiteral("none");
+    return QStringLiteral("stale");
+}
+
+QVariantMap PdfProcess::originalPdfInfo(const QString &book) {
+    QVariantMap r;
+    const QString status = originalPdfStatus(book);
+    r["status"] = status;
+    const QString orig = findOriginalPdf(booksDir() + book + "/raw");
+    r["original"] = orig.isEmpty() ? (qlonglong)-1 : (qlonglong)QFileInfo(orig).size();
+    const QString cachePdf = booksDir() + book + "/.pkgcache/original.pdf";
+    r["compressed"] = (status == "ready" && QFileInfo::exists(cachePdf))
+                          ? (qlonglong)QFileInfo(cachePdf).size() : (qlonglong)-1;
+    return r;
+}
+
+void PdfProcess::ensureOriginalCompressed(const QString &book) {
+    const QString s = originalPdfStatus(book);
+    if (s == "ready" || s == "inprogress" || s == "none")
+        return;   // already done / running / nothing to do
+    QStringList args;
+    args << "-u" << (scriptsDir() + "/compress_pdf.py")
+         << "--cache" << (booksDir() + book + "/raw") << "150" << "80";
+    // Detached: the (possibly slow) job survives the app closing and finishes
+    // writing the cache on its own; status is read back from the filesystem.
+    QProcess::startDetached(pythonExecutable(), args);
+}
+
+void PdfProcess::optimizeOriginalPdf(const QString &book, bool force) {
+    if (force)                 // invalidate the cache so it rebuilds
+        QFile::remove(booksDir() + book + "/.pkgcache/stamp.json");
+    ensureOriginalCompressed(book);
+}
+
 bool PdfProcess::launchTestFlowBook(const QString &testVersion) {
     // Get application directory
     QString appDir = QGuiApplication::applicationDirPath();
@@ -971,14 +1045,19 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
                 break;
             }
             setLogMessages(QString("       + %1").arg(book));
-            // raw/ is excluded above; copy just the original (non-answered)
-            // PDF back, as-is, as raw/original.pdf.
-            const QString origPdf = findOriginalPdf(srcBook + "/raw");
-            if (!origPdf.isEmpty()) {
+            // raw/ is excluded above; copy the book's original PDF back as
+            // raw/original.pdf — the optimized (compressed) cache if the user
+            // ran Optimize, otherwise the source original as-is.
+            QString srcPdf;
+            if (originalPdfStatus(book) == "ready")
+                srcPdf = booksDir() + book + "/.pkgcache/original.pdf";
+            else
+                srcPdf = findOriginalPdf(srcBook + "/raw");
+            if (!srcPdf.isEmpty()) {
                 const QString dst = dstBook + "/raw/original.pdf";
                 QDir().mkpath(dstBook + "/raw");
                 QFile::remove(dst);
-                if (!QFile::copy(origPdf, dst))
+                if (!QFile::copy(srcPdf, dst))
                     qDebug() << "Failed to copy original.pdf to" << dst;
             }
         }

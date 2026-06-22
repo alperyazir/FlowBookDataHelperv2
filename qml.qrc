@@ -18,6 +18,7 @@
         <file>icons/arrowDownWhite.png</file>
         <file>icons/activity.png</file>
         <file>icons/activity.svg</file>
+        <file>icons/magnifier.svg</file>
         <file>icons/eye_open.png</file>
         <file>icons/eye_closed.png</file>
         <file>icons/sound.png</file>
@@ -72,6 +73,7 @@
         <file>qml/OpenProject.qml</file>
         <file>qml/TestDialog.qml</file>
         <file>qml/PackageDialog.qml</file>
+        <file>qml/OptimizeDialog.qml</file>
         <file>qml/groupboxes/AudioGroupBox.qml</file>
         <file>qml/groupboxes/VideoGroupBox.qml</file>
         <file>qml/newComponents/AppButton.qml</file>

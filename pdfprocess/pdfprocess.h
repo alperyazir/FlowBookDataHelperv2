@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QVariantMap>
 
 
 class PdfProcess: public QObject {
@@ -38,6 +39,18 @@ public:
     Q_INVOKABLE void detectHeaderText(const QString &rawDir, int pageNumber,
                                       double x, double y, double w, double h,
                                       double pngWidth, double pngHeight);
+    // Original-PDF optimize (for the Project ▸ Optimize dialog + Package badge).
+    // status: "ready" (a fresh compressed cache exists) | "inprogress" |
+    // "stale" (not optimized / source changed) | "none" (no PDF).
+    Q_INVOKABLE QString originalPdfStatus(const QString &book);
+    // { status, original: <bytes|-1>, compressed: <bytes|-1> } for the dialog.
+    Q_INVOKABLE QVariantMap originalPdfInfo(const QString &book);
+    // Start a background (detached) compression into the book's cache, unless
+    // it's already fresh or running.
+    Q_INVOKABLE void ensureOriginalCompressed(const QString &book);
+    // Project ▸ Optimize button. force=true rebuilds even a fresh cache
+    // (invalidates the stamp first), e.g. for the "Re-optimize" action.
+    Q_INVOKABLE void optimizeOriginalPdf(const QString &book, bool force);
 
     int _progress;
     QString _logMessages;
@@ -90,6 +103,8 @@ private:
     // The original (non-answered) PDF in a book's raw/ dir, or "" if none.
     // Prefers an 'original'/'soru' name, skips answer keys and obvious covers.
     QString findOriginalPdf(const QString &rawDir) const;
+    // books/ root (platform-correct app-relative path).
+    QString booksDir() const;
 
     QAtomicInt _isPackaging = 0;   // guards against overlapping package runs
 
