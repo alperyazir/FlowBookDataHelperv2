@@ -24,6 +24,7 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QException>
+#include <QRandomGenerator>
 
 
 struct CircleExtra : public QObject {
@@ -1031,8 +1032,16 @@ public:
         }
 
         if (!_words.isEmpty()) {
+            // Drag&drop word pools ship shuffled so their saved order isn't the
+            // answer key. Shuffle a copy (not the model) at save time. Other
+            // activity types keep their authored order.
+            QVector<QString> words = _words;
+            if (_type == "dragdroppicture" || _type == "dragdroppicturegroup") {
+                for (int i = words.size() - 1; i > 0; --i)
+                    words.swapItemsAt(i, QRandomGenerator::global()->bounded(i + 1));
+            }
             QJsonArray wordsArray;
-            for (const QString &word : _words) {
+            for (const QString &word : words) {
                 wordsArray.append(word);
             }
             activityObj["words"] = wordsArray;
