@@ -20,6 +20,7 @@ Debug mode renders an overlay png instead of writing into the book:
 """
 
 import os
+import random
 import re
 import sys
 
@@ -456,12 +457,16 @@ def build_dragdrop_sections(po, pa, page_num, images_dir, prefix, sx, sy,
                 entry["needs_review"] = True
             answers.append(entry)
             consumed.append(tuple(r))
+        # Ship the draggable word pool shuffled — its order must not reveal the
+        # answer sequence. (The editor's C++ save reshuffles too.)
+        shuffled_words = list(ex["words"])
+        random.shuffle(shuffled_words)
         sections.append({
             "activity": {
                 "type": "dragdroppicturegroup" if group_mode
                         else "dragdroppicture",
                 "answer": answers,
-                "words": ex["words"],
+                "words": shuffled_words,
                 "circleCount": 0,
                 "markCount": 0,
                 "coords": place_button(ex["header"], occupied,
