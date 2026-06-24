@@ -198,6 +198,7 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
                 section->_title = sObj["title"].toString();
                 section->_type = sObj["type"].toString();
                 section->_audio_path = sObj["audio_path"].toString();
+                section->_karaoke = sObj["karaoke"].toBool(false);
 
 
                 Video *video = new Video;

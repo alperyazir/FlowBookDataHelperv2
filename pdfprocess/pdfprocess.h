@@ -39,6 +39,26 @@ public:
     Q_INVOKABLE void detectHeaderText(const QString &rawDir, int pageNumber,
                                       double x, double y, double w, double h,
                                       double pngWidth, double pngHeight);
+    // Forced-align the text under the rect to the audio and write word-level
+    // karaoke timing into <book>/audio/audio.json (keyed by the audio file
+    // name). rawDir is <book>/raw; pageIndex is 0-based.
+    Q_INVOKABLE void cropPassageAudio(const QString &rawDir, int pageIndex,
+                                      double x, double y, double w, double h,
+                                      double pngWidth, double pngHeight,
+                                      const QString &audioPath,
+                                      const QString &audioJsonPath,
+                                      const QString &lang = "en");
+    // Read the word list for one audio id ("4.mp3") from audio/audio.json.
+    // Returns a list of {text, bbox:{x,y,w,h}, start, end, score} maps, empty
+    // if the file/id is missing. Read in C++ (QFile) so it works cross-platform
+    // without QML's file:// XHR quirks.
+    Q_INVOKABLE QVariantList loadKaraokeWords(const QString &audioJsonPath,
+                                              const QString &audioId);
+    // Help ▸ Dependencies. checkDependencies() reports status (async, via
+    // dependenciesChecked); installDependencies() pip-installs the given pip
+    // package names (async, via dependenciesInstalled; progress on logMessage).
+    Q_INVOKABLE void checkDependencies();
+    Q_INVOKABLE void installDependencies(const QStringList &pkgs);
     // Original-PDF optimize (for the Project ▸ Optimize dialog + Package badge).
     // status: "ready" (a fresh compressed cache exists) | "inprogress" |
     // "stale" (not optimized / source changed) | "none" (no PDF).
@@ -80,6 +100,14 @@ signals:
     void circleRedetectCompleted(bool success, const QString &resultJson,
                                  const QString &outputPath);
     void headerTextDetected(bool success, const QString &text);
+    // Passage karaoke alignment lifecycle. started carries the audio path so
+    // the audio panel can show a busy state; completed carries success plus a
+    // compact summary JSON ({audio_id, words, mean_score, needs_review}).
+    void passageCropStarted(const QString &audioPath);
+    void passageCropCompleted(bool success, const QString &audioPath,
+                              const QString &summaryJson);
+    void dependenciesChecked(bool ok, const QString &json);
+    void dependenciesInstalled(bool ok);
     // A Python helper script failed — carries a short, user-readable reason
     // (the script's "ERROR: ..." line) for the editor to show as a warning.
     void scriptError(const QString &message);

@@ -151,6 +151,8 @@ ApplicationWindow {
                 content.startCropMode(sideBar.activityModelData);
             else if (sideBar.fillVisible)
                 content.pageDetails.startFillRedetectMode();
+            else if (sideBar.audioVisible)
+                content.pageDetails.startPassageCropMode(sideBar.audioModelData);
         }
     }
     Shortcut {
@@ -511,6 +513,10 @@ ApplicationWindow {
 
     OptimizeDialog {
         id: optimizeDialog
+    }
+
+    DependencyDialog {
+        id: dependencyDialog
     }
 
     GamesDialog {

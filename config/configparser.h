@@ -1374,6 +1374,7 @@ struct Section : public QObject {
     Q_PROPERTY(QVariant magnifier READ magnifier WRITE setMagnifier NOTIFY magnifierChanged)
     Q_PROPERTY(QVariant activity READ activity WRITE setActivity NOTIFY activityChanged)
     Q_PROPERTY(QString audioPath READ audioPath WRITE setAudioPath NOTIFY audioPathChanged)
+    Q_PROPERTY(bool karaoke READ karaoke WRITE setKaraoke NOTIFY karaokeChanged)
     Q_PROPERTY(QRect showAllAnswers READ showAllAnswers WRITE setShowAllAnswers NOTIFY showAllAnswersChanged)
     Q_PROPERTY(QRect lockScreen READ lockScreen WRITE setLockScreen NOTIFY lockScreenChanged)
     Q_PROPERTY(QVariant video READ video WRITE setVideo NOTIFY videoChanged)
@@ -1392,6 +1393,7 @@ public:
     Magnifier *_magnifier;
     Activity *_activity;
     QString _audio_path;
+    bool _karaoke = false;   // audio section has word-level karaoke timing in audio/audio.json
     QRect _show_all_answers;
     QRect _lock_screen;
     Video *_video;
@@ -1447,6 +1449,14 @@ public:
         if (_audio_path != audioPath) {
             _audio_path = audioPath;
             emit audioPathChanged();
+        }
+    }
+
+    bool karaoke() const { return _karaoke; }
+    void setKaraoke(bool karaoke) {
+        if (_karaoke != karaoke) {
+            _karaoke = karaoke;
+            emit karaokeChanged();
         }
     }
 
@@ -1591,6 +1601,12 @@ public:
             sectionObj["audio_path"] = _audio_path;
         }
 
+        // Word-level karaoke timing lives in audio/audio.json (keyed by file
+        // name); the section only flags that the reader should load it.
+        if (_karaoke) {
+            sectionObj["karaoke"] = true;
+        }
+
         if (_video && !_video->_path.isEmpty()) {
             sectionObj["video_path"] = _video->_path;
         }
@@ -1688,6 +1704,7 @@ signals:
     void magnifierChanged();
     void activityChanged();
     void audioPathChanged();
+    void karaokeChanged();
     void showAllAnswersChanged();
     void lockScreenChanged();
     void videoChanged();

@@ -32,6 +32,32 @@ Item {
     property var cropFillSectionRef: null  // fill section to update (survives endCropMode)
     property var cropFillBand: null        // re-check rect in page-PNG px (kept for the result)
     property string cropIconKind: ""       // rect crops an icon template ("audio"/"video")
+    property bool cropPassage: false       // rect picks the passage text to karaoke-align
+    property var cropPassageAudioRef: null // audio section to flag karaoke on (survives endCropMode)
+    // Karaoke preview: word boxes (with start/end) for the selected audio, lit
+    // in sync with in-editor playback. karaokeTime < 0 hides the overlay.
+    property var karaokeWords: []
+    property real karaokeTime: -1
+    property int karaokeActiveIndex: -1
+    onKaraokeTimeChanged: {
+        if (karaokeTime < 0 || !karaokeWords || karaokeWords.length === 0) {
+            karaokeActiveIndex = -1;
+            return;
+        }
+        // Active word = the last word whose start has been reached; it stays
+        // lit until the next word starts (short words don't blink).
+        var idx = -1;
+        for (var i = 0; i < karaokeWords.length; i++) {
+            if (karaokeWords[i].start <= karaokeTime)
+                idx = i;
+            else
+                break;
+        }
+        if (idx === karaokeWords.length - 1
+                && karaokeTime > karaokeWords[idx].end + 0.4)
+            idx = -1;   // clear after the last word + small tail
+        karaokeActiveIndex = idx;
+    }
     property real cropStartX: 0
     property real cropStartY: 0
     property real cropEndX: 0
@@ -1015,6 +1041,27 @@ Item {
                 color: "#2200e6e6"
                 border.color: "#00e6e6"
                 border.width: 1
+            }
+
+            // Karaoke highlight overlay: one box per passage word, mapped from
+            // PNG px to the painted page (same transform as section rects).
+            Repeater {
+                id: karaokeOverlay
+                model: root.karaokeWords
+                Rectangle {
+                    // Word bbox from fitz is line-height tall; inset vertically
+                    // and keep the fill light so the text stays readable.
+                    property real sx: picture.paintedWidth / picture.sourceSize.width
+                    property real sy: picture.paintedHeight / picture.sourceSize.height
+                    visible: root.karaokeTime >= 0 && index === root.karaokeActiveIndex
+                    x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.bbox.x * sx
+                    y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + (modelData.bbox.y + modelData.bbox.h * 0.08) * sy
+                    width: modelData.bbox.w * sx
+                    height: modelData.bbox.h * 0.60 * sy
+                    radius: 3
+                    z: 50
+                    color: "#4dffd200"
+                }
             }
 
             Repeater {
@@ -2099,12 +2146,33 @@ Item {
         print("Icon template crop mode started: " + kind);
     }
 
+    // Audio section is selected: pressing "c" picks the passage to karaoke-align.
+    function startPassageCropMode(audioObj) {
+        if (!audioObj)
+            return;
+        root.cropMode = true;
+        root.cropRedetect = false;
+        root.cropHeaderPick = false;
+        root.cropFillRedetect = false;
+        root.cropIconKind = "";
+        root.cropActivity = null;
+        root.cropActivityRef = null;
+        root.cropNewSectionPath = "";
+        root.cropPngRect = null;
+        root.cropPassage = true;
+        root.cropPassageAudioRef = audioObj;   // survives endCropMode for the result
+        root.cropDrawing = false;
+        mainMouseArea.cursorShape = Qt.CrossCursor;
+        print("Passage crop mode started for audio: " + (audioObj.audioPath || ""));
+    }
+
     function endCropMode() {
         root.cropMode = false;
         root.cropRedetect = false;
         root.cropHeaderPick = false;
         root.cropFillRedetect = false;   // cropFillSectionRef/Band survive for the result
         root.cropIconKind = "";
+        root.cropPassage = false;        // cropPassageAudioRef survives for the result
         root.cropActivity = null;
         root.cropDrawing = false;
         mainMouseArea.cursorShape = Qt.ArrowCursor;
@@ -2192,6 +2260,30 @@ Item {
                 originalX, originalY, originalW, originalH,
                 picture.sourceSize.width, picture.sourceSize.height,
                 iconOut
+            );
+            endCropMode();
+            return;
+        }
+
+        // Passage crop: forced-align the selected audio to the text under the
+        // rect and write word-level karaoke timing into audio/audio.json. No
+        // crop image; result comes back via pdfProcess.passageCropCompleted.
+        if (root.cropPassage) {
+            var bookAbs = appPath + bookDir.substring(2);
+            var aRel = root.cropPassageAudioRef
+                       ? String(root.cropPassageAudioRef.audioPath || "") : "";
+            if (aRel === "") {
+                print("Passage crop: audio section has no audio path");
+                endCropMode();
+                return;
+            }
+            var audioAbs = appPath + aRel.substring(2);          // "./books/.../x.mp3"
+            var audioJson = bookAbs + "/audio/audio.json";
+            pdfProcess.cropPassageAudio(
+                pdfPath, pageIndex,
+                originalX, originalY, originalW, originalH,
+                picture.sourceSize.width, picture.sourceSize.height,
+                audioAbs, audioJson, "en"
             );
             endCropMode();
             return;
@@ -2390,6 +2482,19 @@ Item {
             } else {
                 print("Crop failed for: " + outputPath);
             }
+        }
+
+        // Passage karaoke alignment finished: flag the audio section so the
+        // reader loads audio.json. The AudioGroupBox shows the busy/result
+        // status off the same signal.
+        function onPassageCropCompleted(success, audioPath, summaryJson) {
+            if (success && root.cropPassageAudioRef) {
+                root.cropPassageAudioRef.karaoke = true;
+                print("Karaoke attached to " + audioPath + ": " + summaryJson);
+            } else if (!success) {
+                print("Karaoke alignment failed for: " + audioPath);
+            }
+            root.cropPassageAudioRef = null;
         }
 
         function onHeaderTextDetected(success, text) {

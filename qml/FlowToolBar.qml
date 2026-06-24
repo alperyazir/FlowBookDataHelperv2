@@ -99,6 +99,7 @@ Rectangle {
                 y: parent.height + 2
                 implicitWidth: 200
                 AppMenuItem { text: "Keyboard Shortcuts"; onTriggered: shortcutsDialog.open() }
+                AppMenuItem { text: "Dependencies"; onTriggered: dependencyDialog.open() }
             }
         }
 

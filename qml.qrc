@@ -74,6 +74,7 @@
         <file>qml/TestDialog.qml</file>
         <file>qml/PackageDialog.qml</file>
         <file>qml/OptimizeDialog.qml</file>
+        <file>qml/DependencyDialog.qml</file>
         <file>qml/groupboxes/AudioGroupBox.qml</file>
         <file>qml/groupboxes/VideoGroupBox.qml</file>
         <file>qml/newComponents/AppButton.qml</file>

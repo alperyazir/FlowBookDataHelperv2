@@ -12,6 +12,7 @@
 #include <QStandardPaths>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QFileInfo>
 #include <QDateTime>
 
@@ -1250,6 +1251,172 @@ void PdfProcess::cropSectionFromPdf(const QString &pdfPath, int pageIndex,
 
     process->start(pythonExecutable(), arguments);
     qDebug() << "Crop process started";
+}
+
+void PdfProcess::cropPassageAudio(const QString &rawDir, int pageIndex,
+                                  double x, double y, double w, double h,
+                                  double pngWidth, double pngHeight,
+                                  const QString &audioPath,
+                                  const QString &audioJsonPath,
+                                  const QString &lang)
+{
+    qDebug() << "Passage karaoke align:" << rawDir << "page:" << pageIndex
+             << "rect:" << x << y << w << h << "audio:" << audioPath
+             << "json:" << audioJsonPath << "lang:" << lang;
+
+    emit passageCropStarted(audioPath);
+
+    QProcess *process = new QProcess(this);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    process->setProcessEnvironment(env);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [this, process, audioPath](int exitCode, QProcess::ExitStatus exitStatus) {
+                QString output = QString::fromUtf8(process->readAllStandardOutput()).trimmed();
+                qDebug() << "Karaoke script output:" << output;
+
+                QString summaryJson;
+                bool ok = (exitStatus == QProcess::NormalExit && exitCode == 0
+                           && output.contains("OK"));
+                if (ok) {
+                    // align_audio.py prints "SUMMARY: {json}" just before "OK".
+                    const QStringList lines = output.split('\n', Qt::SkipEmptyParts);
+                    for (const QString &raw : lines) {
+                        const QString t = raw.trimmed();
+                        if (t.startsWith(QStringLiteral("SUMMARY:")))
+                            summaryJson = t.mid(8).trimmed();
+                    }
+                } else {
+                    emit scriptError(extractScriptError(output, exitCode));
+                }
+                emit passageCropCompleted(ok, audioPath, summaryJson);
+                process->deleteLater();
+            });
+
+    connect(process, &QProcess::errorOccurred, [this, process, audioPath](QProcess::ProcessError error) {
+        qDebug() << "Karaoke process error:" << error << process->errorString();
+        emit scriptError(QStringLiteral("Karaoke could not start: ") + process->errorString());
+        emit passageCropCompleted(false, audioPath, QString());
+        process->deleteLater();
+    });
+
+    QString scriptPath = scriptsDir() + "/align_audio.py";
+
+    QStringList arguments;
+    arguments << "-u" << scriptPath
+              << rawDir
+              << QString::number(pageIndex)
+              << QString::number(x, 'f', 2)
+              << QString::number(y, 'f', 2)
+              << QString::number(w, 'f', 2)
+              << QString::number(h, 'f', 2)
+              << QString::number(pngWidth, 'f', 2)
+              << QString::number(pngHeight, 'f', 2)
+              << audioPath
+              << audioJsonPath
+              << lang;
+
+    qDebug() << "KARAOKE SCRIPT ARGS:" << arguments;
+
+    process->start(pythonExecutable(), arguments);
+    qDebug() << "Karaoke process started";
+}
+
+QVariantList PdfProcess::loadKaraokeWords(const QString &audioJsonPath,
+                                          const QString &audioId)
+{
+    QVariantList out;
+    QFile f(audioJsonPath);
+    if (!f.open(QIODevice::ReadOnly)) {
+        qDebug() << "loadKaraokeWords: cannot open" << audioJsonPath;
+        return out;
+    }
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+    f.close();
+    if (err.error != QJsonParseError::NoError || !doc.isObject())
+        return out;
+    const QJsonObject obj = doc.object();
+    if (!obj.contains(audioId))
+        return out;
+    const QJsonArray words = obj.value(audioId).toObject().value("words").toArray();
+    for (const QJsonValue &wv : words)
+        out.append(wv.toObject().toVariantMap());
+    return out;
+}
+
+void PdfProcess::checkDependencies()
+{
+    QProcess *process = new QProcess(this);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    process->setProcessEnvironment(env);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+                QString output = QString::fromUtf8(process->readAllStandardOutput());
+                QString json;
+                const QStringList lines = output.split('\n');
+                for (const QString &raw : lines) {
+                    const QString t = raw.trimmed();
+                    if (t.startsWith(QStringLiteral("DEPS_JSON:")))
+                        json = t.mid(10).trimmed();
+                }
+                bool ok = (exitStatus == QProcess::NormalExit && exitCode == 0
+                           && !json.isEmpty());
+                if (!ok)
+                    emit scriptError(extractScriptError(output, exitCode));
+                emit dependenciesChecked(ok, json);
+                process->deleteLater();
+            });
+    connect(process, &QProcess::errorOccurred, [this, process](QProcess::ProcessError) {
+        emit scriptError(QStringLiteral("Dependency check could not start: ") + process->errorString());
+        emit dependenciesChecked(false, QString());
+        process->deleteLater();
+    });
+
+    QString scriptPath = scriptsDir() + "/deps.py";
+    process->start(pythonExecutable(), {"-u", scriptPath, "check"});
+}
+
+void PdfProcess::installDependencies(const QStringList &pkgs)
+{
+    if (pkgs.isEmpty()) {
+        emit dependenciesInstalled(true);
+        return;
+    }
+    QProcess *process = new QProcess(this);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    process->setProcessEnvironment(env);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+
+    // Stream pip output to the log so the dialog can show progress.
+    connect(process, &QProcess::readyReadStandardOutput, [this, process]() {
+        const QString chunk = QString::fromUtf8(process->readAllStandardOutput());
+        const QStringList ls = chunk.split('\n', Qt::SkipEmptyParts);
+        for (const QString &line : ls)
+            emit logMessage(line.trimmed());
+    });
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+                bool ok = (exitStatus == QProcess::NormalExit && exitCode == 0);
+                emit dependenciesInstalled(ok);
+                process->deleteLater();
+            });
+    connect(process, &QProcess::errorOccurred, [this, process](QProcess::ProcessError) {
+        emit scriptError(QStringLiteral("Install could not start: ") + process->errorString());
+        emit dependenciesInstalled(false);
+        process->deleteLater();
+    });
+
+    QString scriptPath = scriptsDir() + "/deps.py";
+    QStringList args;
+    args << "-u" << scriptPath << "install" << pkgs;
+    process->start(pythonExecutable(), args);
 }
 
 void PdfProcess::redetectCircleOptions(const QString &rawDir, int pageNumber,

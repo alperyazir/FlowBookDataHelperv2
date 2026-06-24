@@ -2,8 +2,10 @@
     <qresource prefix="/">
         <file>scripts/_bootstrap.py</file>
         <file>scripts/ai_analyzer.py</file>
+        <file>scripts/align_audio.py</file>
         <file>scripts/compress_pdf.py</file>
         <file>scripts/crop_section.py</file>
+        <file>scripts/deps.py</file>
         <file>scripts/proto_annotate.py</file>
         <file>scripts/proto_audio.py</file>
         <file>scripts/proto_audit.py</file>

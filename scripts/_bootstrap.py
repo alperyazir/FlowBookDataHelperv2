@@ -31,3 +31,23 @@ def ensure_runtime_deps():
                     [sys.executable, "-m", "pip", "install", pkg])
             except Exception as e:
                 print(f"  WARNING: could not install {pkg}: {e}", flush=True)
+
+
+# Heavy, optional deps used only by the audio karaoke aligner. Kept out of
+# ensure_runtime_deps() so plain crop/PDF scripts never pull torch.
+_ALIGN_DEPS = (
+    ("whisperx", "whisperx"),
+)
+
+
+def ensure_align_deps():
+    for mod, pkg in _ALIGN_DEPS:
+        try:
+            importlib.import_module(mod)
+        except ImportError:
+            print(f"Installing {pkg} (this is large, first run only) ...", flush=True)
+            try:
+                subprocess.check_call(
+                    [sys.executable, "-m", "pip", "install", pkg])
+            except Exception as e:
+                print(f"  WARNING: could not install {pkg}: {e}", flush=True)

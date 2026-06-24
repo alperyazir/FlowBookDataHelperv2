@@ -19,8 +19,78 @@ GroupBox {
     property int sectionIndex
     signal removeSection(int secIndex)
 
+    // Karaoke (passage word-timing) status, driven by pdfProcess signals.
+    property bool karaokeBusy: false
+    property string karaokeStatus: ""
+
+    function _baseName(p) { return p ? String(p).substring(String(p).lastIndexOf("/") + 1) : ""; }
+    function _isThisAudio(p) { return _baseName(p) === _baseName(root.audioModelData && root.audioModelData.audioPath); }
+
+    // <book>/audio/audio.json sits next to the audio file.
+    function _audioJsonPath() {
+        var p = (root.audioModelData && root.audioModelData.audioPath) ? String(root.audioModelData.audioPath) : "";
+        var i = p.lastIndexOf("/");
+        return i >= 0 ? p.substring(0, i + 1) + "audio.json" : "";
+    }
+
+    // Load this audio's word timings into the page overlay (for in-editor preview).
+    function loadKaraoke() {
+        content.pageDetails.karaokeTime = -1;
+        content.pageDetails.karaokeWords = [];
+        if (!root.audioModelData || !root.audioModelData.karaoke)
+            return;
+        var rel = _audioJsonPath();
+        if (rel === "")
+            return;
+        var id = _baseName(root.audioModelData.audioPath);
+        // rel is "./books/.../audio/audio.json"; drop the "./" and join the app
+        // root. Read in C++ (QFile) so it works the same on Windows.
+        var path = appPath + (rel.indexOf("./") === 0 ? rel.substring(2) : rel);
+        content.pageDetails.karaokeWords = pdfProcess.loadKaraokeWords(path, id);
+    }
+
+    onAudioModelDataChanged: loadKaraoke()
+    Component.onCompleted: loadKaraoke()
+
+    Connections {
+        target: pdfProcess
+        function onPassageCropStarted(audioPath) {
+            if (root._isThisAudio(audioPath)) {
+                root.karaokeBusy = true;
+                root.karaokeStatus = "Aligning…";
+            }
+        }
+        function onPassageCropCompleted(success, audioPath, summaryJson) {
+            if (!root._isThisAudio(audioPath))
+                return;
+            root.karaokeBusy = false;
+            if (!success) {
+                root.karaokeStatus = "Failed — try again";
+                return;
+            }
+            var info = {};
+            try { info = JSON.parse(summaryJson); } catch (e) {}
+            var msg = (info.words || 0) + " words";
+            if (info.mean_score !== undefined)
+                msg += " · score " + info.mean_score;
+            if (info.needs_review)
+                msg += " · ⚠ review";
+            root.karaokeStatus = msg;
+            if (root.audioModelData)
+                root.audioModelData.karaoke = true;   // order-independent of PageDetails handler
+            root.loadKaraoke();   // pull the fresh timings into the page overlay
+        }
+    }
+
     // Stop playback when this panel is deselected (another section clicked).
-    onVisibleChanged: if (!visible) playRecordAudio.stop()
+    onVisibleChanged: {
+        if (!visible) {
+            playRecordAudio.stop();
+            content.pageDetails.karaokeTime = -1;   // hide the page overlay
+        } else {
+            loadKaraoke();
+        }
+    }
 
     // Play / pause / resume — used by the Play button and the Space shortcut.
     function togglePlay() {
@@ -69,7 +139,16 @@ GroupBox {
         audioOutput: AudioOutput {}
         onSourceChanged: play()
         // Keep the slider in sync after a drag breaks the value binding.
-        onPositionChanged: if (!audioSlider.pressed) audioSlider.value = position
+        onPositionChanged: {
+            if (!audioSlider.pressed)
+                audioSlider.value = position;
+            // Drive the page karaoke highlight (position is ms).
+            if (root.audioModelData && root.audioModelData.karaoke)
+                content.pageDetails.karaokeTime = position / 1000.0;
+        }
+        // Clear the highlight when playback stops/ends.
+        onPlaybackStateChanged: if (playbackState === MediaPlayer.StoppedState)
+                                    content.pageDetails.karaokeTime = -1
     }
 
     ColumnLayout {
@@ -185,6 +264,50 @@ GroupBox {
                 Layout.preferredHeight: 32
                 onClicked: playRecordAudio.stop()
             }
+        }
+
+        Rectangle { Layout.fillWidth: true; height: 1; color: "#2a3f48" }
+
+        // Karaoke: word-level highlight timing for a read-aloud passage.
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
+
+            Text {
+                text: "Karaoke"
+                color: "#8aa0a8"
+                font.pixelSize: 13
+                Layout.preferredWidth: 64
+            }
+
+            Text {
+                Layout.fillWidth: true
+                font.pixelSize: 13
+                wrapMode: Text.WordWrap
+                color: root.karaokeBusy ? "#e0a000"
+                       : ((root.audioModelData && root.audioModelData.karaoke) ? "#3ecf8e" : "#8aa0a8")
+                text: root.karaokeBusy ? root.karaokeStatus
+                      : ((root.audioModelData && root.audioModelData.karaoke)
+                         ? ("✓ " + (root.karaokeStatus !== "" ? root.karaokeStatus : "set"))
+                         : "Not set")
+            }
+
+            BusyIndicator {
+                running: root.karaokeBusy
+                visible: root.karaokeBusy
+                implicitWidth: 22
+                implicitHeight: 22
+            }
+        }
+
+        // Start passage selection (same as pressing "c" with this audio open).
+        AppButton {
+            text: "Select karaoke (C)"
+            variant: "secondary"
+            Layout.fillWidth: true
+            Layout.preferredHeight: 32
+            enabled: !root.karaokeBusy
+            onClicked: content.pageDetails.startPassageCropMode(root.audioModelData)
         }
 
         Item { Layout.fillHeight: true }
