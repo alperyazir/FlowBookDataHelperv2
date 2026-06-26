@@ -37,6 +37,15 @@ Dialog {
         return out;
     }
 
+    // Everything "Install missing" will install: the missing pip packages plus
+    // the "ffmpeg" pseudo-package (handled specially by deps.py) when absent.
+    function installTargets() {
+        var out = missingPkgs();
+        if (info && info.ffmpeg && !info.ffmpeg.installed)
+            out.push("ffmpeg");
+        return out;
+    }
+
     onOpened: refresh()
 
     Connections {
@@ -85,11 +94,11 @@ Dialog {
                 variant: "primary"
                 width: 150; height: 34
                 enabled: !dependencyDialog.installing && !dependencyDialog.checking
-                         && dependencyDialog.missingPkgs().length > 0
+                         && dependencyDialog.installTargets().length > 0
                 onClicked: {
                     dependencyDialog.installing = true;
                     dependencyDialog.progress = "Starting… (large packages can take several minutes)";
-                    pdfProcess.installDependencies(dependencyDialog.missingPkgs());
+                    pdfProcess.installDependencies(dependencyDialog.installTargets());
                 }
             }
             AppButton {
@@ -156,7 +165,7 @@ Dialog {
             }
         }
 
-        // ffmpeg (external binary, cannot be pip-installed).
+        // ffmpeg (external binary; installed via the imageio-ffmpeg wheel).
         RowLayout {
             Layout.fillWidth: true
             spacing: 10
@@ -166,11 +175,16 @@ Dialog {
                 color: "white"; font.pixelSize: 14
                 Layout.preferredWidth: 150
             }
+            Text {
+                visible: !(dependencyDialog.info.ffmpeg && dependencyDialog.info.ffmpeg.installed)
+                text: "downloads binary"
+                color: "#8a7000"; font.pixelSize: 10
+            }
             Item { Layout.fillWidth: true }
             Text {
                 text: (dependencyDialog.info.ffmpeg && dependencyDialog.info.ffmpeg.installed)
                       ? "✓ found"
-                      : "✗ not found — install separately"
+                      : "✗ not installed"
                 color: (dependencyDialog.info.ffmpeg && dependencyDialog.info.ffmpeg.installed)
                        ? "#3ecf8e" : "#ff6b6b"
                 font.pixelSize: 13
