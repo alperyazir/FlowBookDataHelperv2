@@ -88,6 +88,16 @@ Rectangle {
                     checked: mainwindow.autoSaveEnabled
                     onTriggered: mainwindow.autoSaveEnabled = !mainwindow.autoSaveEnabled
                 }
+                AppMenuItem {
+                    text: "Show clickable hints"
+                    checkable: true
+                    // Bind straight to the book's property (guarded) so the tick
+                    // tracks showClickableHintsChanged and flips on toggle.
+                    checked: (config && config.bookSets && config.bookSets.length > 0
+                              && config.bookSets[0].books && config.bookSets[0].books.length > 0)
+                             ? config.bookSets[0].books[0].showClickableHints : false
+                    onTriggered: mainwindow.setClickableHints(!mainwindow.clickableHintsEnabled())
+                }
             }
         }
 

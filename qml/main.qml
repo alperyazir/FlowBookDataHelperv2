@@ -48,6 +48,20 @@ ApplicationWindow {
         }
     }
 
+    // Per-book "show clickable hints" reader option, stored in config.json
+    // (Book.show_clickable_hints). Guarded helpers so the Settings toggle never
+    // crashes before a book is loaded.
+    function clickableHintsEnabled() {
+        return !!(config && config.bookSets && config.bookSets.length > 0
+                  && config.bookSets[0].books && config.bookSets[0].books.length > 0
+                  && config.bookSets[0].books[0].showClickableHints);
+    }
+    function setClickableHints(on) {
+        if (config && config.bookSets && config.bookSets.length > 0
+                && config.bookSets[0].books && config.bookSets[0].books.length > 0)
+            config.bookSets[0].books[0].showClickableHints = on;
+    }
+
     // Reliable "is there work that would be lost?" check, backed by the C++
     // hash compare (current model vs. last saved/loaded baseline).
     function hasUnsavedChanges() {

@@ -78,6 +78,8 @@ bool BookSet::initialize(const QString &config_path)
             book->_type = bObj["type"].toString();
             book->_name = bObj["name"].toString();
             book->_isModuleSideLeft = bObj["is_module_side_left"].toBool();
+            // Missing key => false (default off).
+            book->_show_clickable_hints = bObj["show_clickable_hints"].toBool();
 
             // Load modules. handleBooksModules creates Module/Page objects;
             // reparent them under this book so the ownership chain is well

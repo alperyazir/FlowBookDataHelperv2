@@ -2418,6 +2418,9 @@ struct Book : public QObject {
     Q_PROPERTY(QString type READ type WRITE setType NOTIFY typeChanged)
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(bool isModuleSideLeft READ isModuleSideLeft WRITE setIsModuleSideLeft NOTIFY isModuleSideLeftChanged)
+    // Per-book reader option: when true, the reader shows clickable hints on
+    // fill activities. Authored here, consumed by the reader. Default false.
+    Q_PROPERTY(bool showClickableHints READ showClickableHints WRITE setShowClickableHints NOTIFY showClickableHintsChanged)
     Q_PROPERTY(QVariantList modules READ modules WRITE setModules NOTIFY modulesChanged)
     Q_PROPERTY(QVariantList pages READ pages NOTIFY pagesChanged)
     Q_PROPERTY(QVariantList games READ games NOTIFY gamesChanged)
@@ -2428,6 +2431,7 @@ public:
     QString _type;
     QString _name;
     bool _isModuleSideLeft;
+    bool _show_clickable_hints = false;   // reader hint toggle; off by default
     QVector<Module*> _modules;
     // NOTE: pages and games are computed flat views over _modules; not stored.
     // Modules own their pages/games (Qt parent chain). Avoids dangling
@@ -2454,6 +2458,14 @@ public:
         if (_isModuleSideLeft != isModuleSideLeft) {
             _isModuleSideLeft = isModuleSideLeft;
             emit isModuleSideLeftChanged();
+        }
+    }
+
+    bool showClickableHints() const { return _show_clickable_hints; }
+    void setShowClickableHints(bool show) {
+        if (_show_clickable_hints != show) {
+            _show_clickable_hints = show;
+            emit showClickableHintsChanged();
         }
     }
 
@@ -2511,6 +2523,7 @@ public:
         }
 
         bookObj["is_module_side_left"] = _isModuleSideLeft;
+        bookObj["show_clickable_hints"] = _show_clickable_hints;
 
         if (!_modules.isEmpty()) {
             QJsonArray modulesArray;
@@ -2745,6 +2758,7 @@ signals:
     void typeChanged();
     void nameChanged();
     void isModuleSideLeftChanged();
+    void showClickableHintsChanged();
     void modulesChanged();
     void pagesChanged();
     void gamesChanged();
