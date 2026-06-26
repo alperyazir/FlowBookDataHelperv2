@@ -237,6 +237,8 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
                 act->_textFontSize = scObj["textFontSize"].toInt();
                 cObj = scObj["coords"].toObject();
                 act->_coords = QRect(cObj["x"].toInt(), cObj["y"].toInt(), cObj["w"].toInt(), cObj["h"].toInt());
+                cObj = scObj["image_coords"].toObject();
+                act->_image_coords = QRect(cObj["x"].toInt(), cObj["y"].toInt(), cObj["w"].toInt(), cObj["h"].toInt());
 
                 auto actansws = scObj["answer"].toArray();
 

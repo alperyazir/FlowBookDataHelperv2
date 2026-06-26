@@ -44,11 +44,17 @@ GroupBox {
         ddppicturegroup.updateData();
         fillpicture.updateData();
         findPuzzle.updateData();
+        coloring.updateData();
     }
 
     // Open the activity preview/editor dialog for the current activity.
     // Used by the "Activity" button and the Space shortcut.
     function openActivityDialog() {
+        // Coloring is authored entirely on the page (crop the outline); it has no
+        // interactive preview dialog, so don't pop an empty one.
+        if (root.activityModelData.type === "coloring")
+            return;
+
         activityDialog.wordLists = root.activityModelData.words;
         activityDialog.imageSource = root.activityModelData.sectionPath;
         activityDialog.headerText = root.activityModelData.headerText;
@@ -229,6 +235,13 @@ GroupBox {
         MarkWithX {
             id: activityMarkWithX
             visible: root.activityModelData.type === "markwithx"
+            enabled: visible
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+        }
+        Coloring {
+            id: coloring
+            visible: root.activityModelData.type === "coloring"
             enabled: visible
             Layout.fillWidth: true
             Layout.fillHeight: true

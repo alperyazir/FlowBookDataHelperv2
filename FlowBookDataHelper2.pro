@@ -7,6 +7,7 @@ QT += quick concurrent quickcontrols2 network
 HEADERS += \
     clipboardhelper.h \
     config/configparser.h \
+    logger.h \
     pdfprocess/pdfprocess.h \
     games/gamesparser.h \
     activity/activitytracker.h
@@ -14,6 +15,7 @@ HEADERS += \
 SOURCES += \
     clipboardhelper.cpp \
     config/configparser.cpp \
+    logger.cpp \
     main.cpp \
     pdfprocess/pdfprocess.cpp \
     games/gamesparser.cpp \

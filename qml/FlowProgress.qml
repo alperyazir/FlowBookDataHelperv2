@@ -284,6 +284,12 @@ Dialog {
                 if (projectName && projectName !== "") {
                     console.log("Reloading config after AI analysis for: " + projectName);
                     config.initialize(true, appPath + "books/" + projectName);
+                    // Re-anchor the unsaved-changes baseline once bindings settle
+                    // so the post-AI reload isn't mistaken for unsaved edits.
+                    Qt.callLater(function() {
+                        if (config && config.bookSets && config.bookSets.length > 0)
+                            config.bookSets[0].resetBaseline();
+                    });
                 }
             }
         }

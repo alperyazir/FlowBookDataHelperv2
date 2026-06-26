@@ -104,6 +104,23 @@ GroupBox {
         }
     }
 
+    // Seek (and play) to a karaoke word's start time. Used when the author
+    // clicks a word in the list below to jump there and verify its alignment.
+    // If playback hasn't started, load the source first and defer the seek
+    // until the player is seekable.
+    property int _pendingSeekMs: -1
+    function seekToWord(startSec) {
+        var ms = Math.max(0, Math.round(startSec * 1000));
+        if (playRecordAudio.playbackState === MediaPlayer.StoppedState) {
+            playRecordAudio.source = "file:" + appPath + audioTextField.text;
+            playRecordAudio.play();
+        }
+        if (playRecordAudio.seekable)
+            playRecordAudio.setPosition(ms);
+        else
+            root._pendingSeekMs = ms;
+    }
+
     background: Rectangle {
         color: "#232f34"
         border.color: "#009ca6"
@@ -149,6 +166,11 @@ GroupBox {
         // Clear the highlight when playback stops/ends.
         onPlaybackStateChanged: if (playbackState === MediaPlayer.StoppedState)
                                     content.pageDetails.karaokeTime = -1
+        // Apply a click-to-seek that arrived before the player was seekable.
+        onSeekableChanged: if (seekable && root._pendingSeekMs >= 0) {
+                               setPosition(root._pendingSeekMs);
+                               root._pendingSeekMs = -1;
+                           }
     }
 
     ColumnLayout {
@@ -310,7 +332,138 @@ GroupBox {
             onClicked: content.pageDetails.startPassageCropMode(root.audioModelData)
         }
 
-        Item { Layout.fillHeight: true }
+        // ----- Karaoke words: the aligned passage, in sync with playback -----
+        // Shows every word from audio.json. The word currently playing is
+        // highlighted (same as the page overlay) so the author can verify the
+        // alignment; clicking a word jumps playback to it.
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: 8
+            visible: root.audioModelData && root.audioModelData.karaoke
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: "Words"
+                    color: "white"
+                    font.pixelSize: 14
+                    font.bold: true
+                }
+                Item { Layout.fillWidth: true }
+                Text {
+                    text: (content.pageDetails.karaokeWords
+                           ? content.pageDetails.karaokeWords.length : 0) + " words"
+                    color: "#8aa0a8"
+                    font.pixelSize: 12
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                color: "#1A2327"
+                border.color: "#2a3f48"
+                border.width: 1
+                radius: 6
+                clip: true
+
+                Flickable {
+                    id: wordsFlick
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    contentWidth: width
+                    contentHeight: wordsFlow.height
+                    boundsBehavior: Flickable.StopAtBounds
+                    clip: true
+
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+                    // Keep the currently-playing word in view as audio advances.
+                    function scrollToActive() {
+                        var i = content.pageDetails.karaokeActiveIndex;
+                        if (i < 0)
+                            return;
+                        var it = wordsRep.itemAt(i);
+                        if (!it)
+                            return;
+                        if (it.y < contentY)
+                            contentY = it.y;
+                        else if (it.y + it.height > contentY + height)
+                            contentY = it.y + it.height - height;
+                    }
+
+                    Flow {
+                        id: wordsFlow
+                        width: wordsFlick.width
+                        spacing: 6
+
+                        Repeater {
+                            id: wordsRep
+                            model: content.pageDetails.karaokeWords
+
+                            delegate: Rectangle {
+                                id: chip
+                                readonly property bool isActive:
+                                    index === content.pageDetails.karaokeActiveIndex
+                                width: chipText.implicitWidth + 16
+                                height: chipText.implicitHeight + 10
+                                radius: 4
+                                color: isActive ? "#ffd200"
+                                       : (chipMouse.containsMouse ? "#26343c" : "transparent")
+                                border.color: isActive ? "#ffd200" : "#2f4650"
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 80 } }
+
+                                Text {
+                                    id: chipText
+                                    anchors.centerIn: parent
+                                    text: (modelData && modelData.text) ? modelData.text : ""
+                                    color: chip.isActive ? "#10242b" : "#cfe8ea"
+                                    font.pixelSize: 14
+                                    font.bold: chip.isActive
+                                }
+
+                                MouseArea {
+                                    id: chipMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (modelData && modelData.start !== undefined)
+                                            root.seekToWord(modelData.start);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Hint shown when this audio has no karaoke timings yet.
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: !(root.audioModelData && root.audioModelData.karaoke)
+            Text {
+                anchors.centerIn: parent
+                width: parent.width - 24
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                color: "#6b7a80"
+                font.pixelSize: 13
+                text: "Select a passage on the page (Select karaoke / C) to "
+                      + "align the spoken words. They will appear here and "
+                      + "highlight as the audio plays."
+            }
+        }
+
+        // Keep the word list scrolled to the active word during playback.
+        Connections {
+            target: content.pageDetails
+            function onKaraokeActiveIndexChanged() { wordsFlick.scrollToActive(); }
+        }
 
         AppButton {
             text: "Delete"

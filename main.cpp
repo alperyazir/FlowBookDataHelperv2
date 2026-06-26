@@ -12,6 +12,7 @@
 #include "clipboardhelper.h"
 #include "games/gamesparser.h"
 #include "activity/activitytracker.h"
+#include "logger.h"
 
 
 
@@ -22,6 +23,15 @@ int main(int argc, char *argv[])
     qputenv("QT_MEDIA_BACKEND", "ffmpeg");
 
     QGuiApplication app(argc, argv);
+
+    app.setApplicationName("FlowBookDataHelper");
+    app.setApplicationVersion("3.0.2");
+
+    // Route all log output to a rotating per-launch file next to the exe
+    // (keeps the last 5 sessions) so crashes / config tampering can be
+    // analysed after the fact. Must run after QGuiApplication exists.
+    Logger::init(5);
+
     QQuickStyle::setStyle("Fusion");
 
     app.setWindowIcon(QIcon(":/logo/logo.png"));

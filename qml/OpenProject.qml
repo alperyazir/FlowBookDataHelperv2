@@ -12,6 +12,10 @@ Dialog {
     anchors.centerIn: parent
     closePolicy: Popup.NoAutoClose // Prevents dialog from closing when clicking outside
 
+    // Emitted instead of loading directly, so main.qml can guard the switch
+    // with the unsaved-changes prompt before throwing away the current book.
+    signal loadRequested(string path)
+
     // Custom header
     header: Rectangle {
         color: "#1A2327"
@@ -281,9 +285,7 @@ Dialog {
     // Handle dialog result
     onAccepted: {
         if (!isNullOrWhitespace(selectedProjectPath)) {
-            config.initialize(true, selectedProjectPath);
-            gamesParser.loadFromFile(selectedProjectPath);
-            print("Project is loading", selectedProjectPath);
+            loadRequested(selectedProjectPath);
         }
     }
 }

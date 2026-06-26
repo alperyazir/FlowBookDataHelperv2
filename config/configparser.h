@@ -682,6 +682,7 @@ signals:
 struct Activity : public QObject {
     Q_OBJECT
     Q_PROPERTY(QRect coords READ coords WRITE setCoords NOTIFY coordsChanged)
+    Q_PROPERTY(QRect imageCoords READ imageCoords WRITE setImageCoords NOTIFY imageCoordsChanged)
     Q_PROPERTY(QString type READ type WRITE setType NOTIFY typeChanged)
     Q_PROPERTY(QString sectionPath READ sectionPath WRITE setSectionPath NOTIFY sectionPathChanged)
     Q_PROPERTY(QVariantList answers READ answers WRITE setAnswers NOTIFY answersChanged)
@@ -706,6 +707,7 @@ public:
         _textFontSize(0) {}
 
     QRect _coords;
+    QRect _image_coords;   // page-PNG region the cropped activity image covers
     QString _type;
     QString _section_path;
     QVector<Answer*> _answers;
@@ -725,6 +727,14 @@ public:
         if (_coords != coords) {
             _coords = coords;
             emit coordsChanged();
+        }
+    }
+
+    QRect imageCoords() const { return _image_coords; }
+    void setImageCoords(const QRect &imageCoords) {
+        if (_image_coords != imageCoords) {
+            _image_coords = imageCoords;
+            emit imageCoordsChanged();
         }
     }
 
@@ -1011,6 +1021,15 @@ public:
             activityObj["coords"] = coordsObj;
         }
 
+        if (!_image_coords.isNull() && _image_coords.isValid()) {
+            QJsonObject imageCoordsObj;
+            imageCoordsObj["x"] = _image_coords.x();
+            imageCoordsObj["y"] = _image_coords.y();
+            imageCoordsObj["w"] = _image_coords.width();
+            imageCoordsObj["h"] = _image_coords.height();
+            activityObj["image_coords"] = imageCoordsObj;
+        }
+
         if (!_answers.isEmpty()) {
             QJsonArray answersArray;
             for (const Answer *answer : _answers) {
@@ -1032,16 +1051,14 @@ public:
         }
 
         if (!_words.isEmpty()) {
-            // Drag&drop word pools ship shuffled so their saved order isn't the
-            // answer key. Shuffle a copy (not the model) at save time. Other
-            // activity types keep their authored order.
-            QVector<QString> words = _words;
-            if (_type == "dragdroppicture" || _type == "dragdroppicturegroup") {
-                for (int i = words.size() - 1; i > 0; --i)
-                    words.swapItemsAt(i, QRandomGenerator::global()->bounded(i + 1));
-            }
+            // NOTE: toJson() is deterministic on purpose — it is also the basis
+            // for unsaved-change detection (hash compare). Drag&drop word pools
+            // must ship shuffled so their saved order isn't the answer key, but
+            // that shuffle is applied only to the bytes written to disk (see
+            // BookSet::shuffleWordPoolsForDisk), never here. Otherwise every
+            // serialization would differ and the app would always look "dirty".
             QJsonArray wordsArray;
-            for (const QString &word : words) {
+            for (const QString &word : _words) {
                 wordsArray.append(word);
             }
             activityObj["words"] = wordsArray;
@@ -1072,6 +1089,7 @@ public:
 
 signals:
     void coordsChanged();
+    void imageCoordsChanged();
     void typeChanged();
     void sectionPathChanged();
     void answersChanged();
@@ -2787,7 +2805,105 @@ public:
         }
     }
 
+    // Reliable, read-only "are there unsaved edits?" check for the UI to decide
+    // whether to prompt on app close / book switch. Unlike the _isDirty flag
+    // (which depends on explicit markDirty() calls scattered across the UI),
+    // this mirrors exactly what saveToJson() does: serialize the in-memory
+    // model and compare its hash to the last saved/loaded baseline. Never
+    // touches disk. Returns false while a load is in progress or if
+    // serialization fails (i.e. err on the side of "nothing to lose").
+    Q_INVOKABLE bool hasUnsavedChanges() {
+        if (_isLoading)
+            return false;
+        QJsonObject jsonObj;
+        try {
+            jsonObj = toJson();
+        } catch (...) {
+            return false;
+        }
+        if (jsonObj.isEmpty())
+            return false;
+        QByteArray jsonData = QJsonDocument(jsonObj).toJson();
+        QByteArray newHash = QCryptographicHash::hash(jsonData, QCryptographicHash::Md5);
+        return newHash != _lastSavedHash;
+    }
+
+    // Re-anchor the "clean" baseline to the current in-memory state. Call this
+    // once a freshly loaded book has fully settled (after QML bindings run), so
+    // any non-user, load-time normalization (e.g. activities gaining default
+    // image_coords) is folded into the baseline instead of being mistaken for
+    // unsaved edits. Genuine user edits happen later and still flip the check.
+    Q_INVOKABLE void resetBaseline() {
+        if (_isLoading)
+            return;
+        QJsonObject jsonObj;
+        try {
+            jsonObj = toJson();
+        } catch (...) {
+            return;
+        }
+        if (jsonObj.isEmpty())
+            return;
+        _lastSavedHash = QCryptographicHash::hash(QJsonDocument(jsonObj).toJson(),
+                                                  QCryptographicHash::Md5);
+        if (_isDirty) {
+            _isDirty = false;
+            emit isDirtyChanged();
+        }
+    }
+
     bool initialize(const QString &config_path);
+
+    // Return a copy of the serialized book with every drag&drop activity's word
+    // pool shuffled. Applied ONLY to the bytes written to disk, so the saved
+    // file never exposes the answer order, while the in-memory toJson() used for
+    // change detection stays deterministic. Walks books→modules→pages→sections.
+    static QJsonObject shuffleWordPoolsForDisk(QJsonObject root) {
+        if (!root.contains("books"))
+            return root;
+        QJsonArray books = root["books"].toArray();
+        for (int bi = 0; bi < books.size(); ++bi) {
+            QJsonObject book = books[bi].toObject();
+            QJsonArray modules = book["modules"].toArray();
+            for (int mi = 0; mi < modules.size(); ++mi) {
+                QJsonObject mod = modules[mi].toObject();
+                QJsonArray pages = mod["pages"].toArray();
+                for (int pi = 0; pi < pages.size(); ++pi) {
+                    QJsonObject page = pages[pi].toObject();
+                    QJsonArray sections = page["sections"].toArray();
+                    for (int si = 0; si < sections.size(); ++si) {
+                        QJsonObject sec = sections[si].toObject();
+                        if (!sec.contains("activity"))
+                            continue;
+                        QJsonObject act = sec["activity"].toObject();
+                        const QString t = act["type"].toString();
+                        if ((t != "dragdroppicture" && t != "dragdroppicturegroup")
+                                || !act.contains("words"))
+                            continue;
+                        QJsonArray w = act["words"].toArray();
+                        for (int i = w.size() - 1; i > 0; --i) {
+                            int j = QRandomGenerator::global()->bounded(i + 1);
+                            QJsonValue tmp = w[i];
+                            w[i] = w[j];
+                            w[j] = tmp;
+                        }
+                        act["words"] = w;
+                        sec["activity"] = act;
+                        sections[si] = sec;
+                    }
+                    page["sections"] = sections;
+                    pages[pi] = page;
+                }
+                mod["pages"] = pages;
+                modules[mi] = mod;
+            }
+            book["modules"] = modules;
+            books[bi] = book;
+        }
+        root["books"] = books;
+        return root;
+    }
+
     Q_INVOKABLE void saveToJson(bool fromAutoSave = false) {
         try {
             static QMutex mutex;
@@ -2883,13 +2999,19 @@ public:
                 }
             }
 
+            // The on-disk bytes get drag&drop word pools shuffled (answer-key
+            // protection). Change detection above used the deterministic jsonData,
+            // so this shuffle never makes the app look dirty.
+            const QByteArray diskData =
+                QJsonDocument(shuffleWordPoolsForDisk(jsonObj)).toJson();
+
             // Atomic write of new content via QSaveFile (temp + rename under the hood)
             QSaveFile saveFile(filePath);
             if (!saveFile.open(QIODevice::WriteOnly)) {
                 qWarning("Couldn't open save file: %s", qPrintable(filePath));
                 return;
             }
-            if (saveFile.write(jsonData) != jsonData.size()) {
+            if (saveFile.write(diskData) != diskData.size()) {
                 qWarning("Failed to write complete data to save file");
                 saveFile.cancelWriting();
                 return;

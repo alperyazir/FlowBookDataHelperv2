@@ -897,6 +897,22 @@ Item {
                         currentSelectionType = "";
                     }
                 }
+
+                MenuItem {
+                    text: "Coloring\t(A → L)"
+                    onTriggered: {
+                        var adjustedX = (mainMouseArea.mouseX + flick.contentX) - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                        var adjustedY = (mainMouseArea.mouseY + flick.contentY) - (flick.contentHeight / 2 - picture.paintedHeight / 2);
+
+                        // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
+                        var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
+                        var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
+
+                        openActivitySidebar(root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "coloring"));
+                        print("Changes Are Saved MenuItem Coloring Triggered");
+                        currentSelectionType = "";
+                    }
+                }
             }
         }
     }
@@ -2309,6 +2325,14 @@ Item {
         // Store the crop rect (page-PNG px) so dragdrop zones can be
         // re-derived from the page fills after the crop is saved.
         root.cropPngRect = { x: originalX, y: originalY, w: originalW, h: originalH };
+        // Persist the same rect on the activity (image_coords) so the reader can
+        // map page-pixel karaoke word bboxes into the cropped activity image.
+        // Covers both the normal crop and the circle/markwithx redetect path
+        // (both reach here). Only activity-image crops carry an imageCoords prop.
+        if (root.cropActivity && root.cropPathProperty === "sectionPath"
+                && typeof root.cropActivity.imageCoords !== "undefined") {
+            root.cropActivity.imageCoords = Qt.rect(originalX, originalY, originalW, originalH);
+        }
 
         print("Crop: PDF=" + pdfPath + " page=" + pageIndex);
         print("Crop: PNG coords x=" + originalX + " y=" + originalY + " w=" + originalW + " h=" + originalH);

@@ -15,11 +15,17 @@ class ActivityTracker : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool active READ active NOTIFY activeChanged)
+    // Session counters (since app launch), surfaced in the heartbeat so the
+    // server can see how long this helper has been open vs. sitting idle.
+    Q_PROPERTY(int openSeconds READ openSeconds NOTIFY statsChanged)
+    Q_PROPERTY(int idleSeconds READ idleSeconds NOTIFY statsChanged)
 
 public:
     explicit ActivityTracker(QObject *parent = nullptr);
 
     bool active() const;
+    int openSeconds() const { return _openSeconds; }
+    int idleSeconds() const { return _idleSeconds; }
 
     Q_INVOKABLE void setCurrentBook(const QString &book);
 
@@ -27,6 +33,7 @@ public:
 
 signals:
     void activeChanged();
+    void statsChanged();
 
 private slots:
     void evaluateActive();
@@ -35,7 +42,7 @@ private slots:
     void scanAndUpload();
 
 private:
-    static constexpr int IDLE_THRESHOLD_MS = 60 * 1000;
+    static constexpr int IDLE_THRESHOLD_MS = 5 * 60 * 1000; // 5 min of no input => idle
     static constexpr int EVAL_INTERVAL_MS  = 5 * 1000;
     static constexpr int TICK_INTERVAL_MS  = 10 * 1000;
     static constexpr int FLUSH_INTERVAL_MS = 60 * 1000;
@@ -54,6 +61,10 @@ private:
 
     qint64 _lastActivityMs;
     bool _active;
+
+    // Cumulative session time, advanced once per tick (TICK_INTERVAL_MS).
+    int _openSeconds = 0;   // total time the app has been open this session
+    int _idleSeconds = 0;   // subset of the above spent not active (idle)
 
     QString _currentBook;
     QDate _currentDate;

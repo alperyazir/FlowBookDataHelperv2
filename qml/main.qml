@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Window
 import QtQuick.Controls
+import QtQuick.Layouts
 import QtMultimedia
 import QtQuick.Controls.Basic
 
@@ -15,6 +16,10 @@ ApplicationWindow {
     // When true the 60s saveTimer auto-saves; when false the user must
     // save manually (Save / Ctrl+S). Toggled from the Settings menu.
     property bool autoSaveEnabled: true
+
+    // Set right before Qt.quit() so the onClosing guard lets the app exit
+    // instead of re-prompting (Qt.quit re-triggers onClosing).
+    property bool forceQuit: false
 
     function save() {
         console.log("Ctrl+S shortcut activated!");
@@ -43,17 +48,67 @@ ApplicationWindow {
         }
     }
 
-    // Opens the chosen book. Mirrors OpenProject's "open from recents" flow
-    // (config.initialize + gamesParser.loadFromFile on the book directory).
+    // Reliable "is there work that would be lost?" check, backed by the C++
+    // hash compare (current model vs. last saved/loaded baseline).
+    function hasUnsavedChanges() {
+        return !!(config && config.bookSets && config.bookSets.length > 0
+                  && config.bookSets[0].hasUnsavedChanges());
+    }
+
+    // Re-anchor the unsaved-changes baseline after a load. Deferred (callLater)
+    // so it runs once the load-time QML bindings have settled — otherwise
+    // opening a book and immediately closing would falsely prompt to save.
+    function refreshBaselineAfterLoad() {
+        Qt.callLater(function() {
+            if (config && config.bookSets && config.bookSets.length > 0)
+                config.bookSets[0].resetBaseline();
+        });
+    }
+
+    // Opens the chosen book. Guarded: if the current book has unsaved edits we
+    // ask the user (Save / Discard / Cancel) before throwing them away.
     function openBook(name) {
         if (!name || name === openProject.currentProject)
+            return;
+        if (hasUnsavedChanges()) {
+            unsavedDialog.requestSwitch(name);
+            return;
+        }
+        doOpenBook(name);
+    }
+
+    // Mirrors OpenProject's "open from recents" flow
+    // (config.initialize + gamesParser.loadFromFile on the book directory).
+    function doOpenBook(name) {
+        if (!name)
             return;
         var projectDir = appPath + "books/" + name;
         openProject.currentProject = name;
         openProject.selectedProjectPath = projectDir;
         config.initialize(true, projectDir);
         gamesParser.loadFromFile(projectDir);
+        refreshBaselineAfterLoad();
         console.log("Switched book ->", projectDir);
+    }
+
+    // Guarded project load by full path (used by the OpenProject dialog), same
+    // unsaved-changes protection as openBook().
+    function openProjectPath(path) {
+        if (!path)
+            return;
+        if (hasUnsavedChanges()) {
+            unsavedDialog.requestLoadPath(path);
+            return;
+        }
+        doOpenProjectPath(path);
+    }
+    function doOpenProjectPath(path) {
+        if (!path)
+            return;
+        config.initialize(true, path);
+        gamesParser.loadFromFile(path);
+        refreshBaselineAfterLoad();
+        console.log("Project loaded ->", path);
     }
 
     // --- Quick-add shortcuts at current mouse position ---
@@ -169,6 +224,11 @@ ApplicationWindow {
         sequence: "x"
         enabled: awaitingActivityKey
         onActivated: triggerActivityCombo("markwithx")
+    }
+    Shortcut {
+        sequence: "l"
+        enabled: awaitingActivityKey
+        onActivated: triggerActivityCombo("coloring")
     }
 
     // `h`: pick the header text of the open activity (read the instruction
@@ -440,29 +500,187 @@ ApplicationWindow {
         anchors.bottom: parent.bottom
     }
 
+    // Generic "you have unsaved changes" guard, shared by app-close and
+    // book-switch. The pending action is remembered so we can run it after the
+    // user picks Save / Discard / Cancel.
+    //   Save    -> accepted()  : save(), then run pending
+    //   Discard -> discarded() : run pending without saving
+    //   Cancel  -> rejected()  : do nothing (stay where we are)
     Dialog {
-        id: confirmDialog
-        title: "Confirm Exit"
-        width: parent.width / 4
-        height: parent.height / 6
+        id: unsavedDialog
+        modal: true
+        width: 520
         anchors.centerIn: parent
-        standardButtons: Dialog.Ok | Dialog.Cancel
+        padding: 0
+        closePolicy: Popup.NoAutoClose
 
-        FlowText {
-            text: "Are you sure to exit? \n Changes will be saved!"
-            wrapMode: Text.NoWrap
+        // "exit", "switch" or "load"
+        property string pendingAction: ""
+        property string pendingBook: ""
+        property string pendingPath: ""
+
+        function requestExit() {
+            pendingAction = "exit";
+            pendingBook = "";
+            pendingPath = "";
+            open();
+        }
+        function requestSwitch(name) {
+            pendingAction = "switch";
+            pendingBook = name;
+            pendingPath = "";
+            open();
+        }
+        function requestLoadPath(path) {
+            pendingAction = "load";
+            pendingBook = "";
+            pendingPath = path;
+            open();
+        }
+        function runPending() {
+            var action = pendingAction;
+            var book = pendingBook;
+            var path = pendingPath;
+            pendingAction = "";
+            pendingBook = "";
+            pendingPath = "";
+            if (action === "exit") {
+                mainwindow.forceQuit = true;
+                Qt.quit();
+            }
+            else if (action === "switch")
+                mainwindow.doOpenBook(book);
+            else if (action === "load")
+                mainwindow.doOpenProjectPath(path);
+        }
+
+        background: Rectangle {
+            color: "#232f34"
+            border.color: "#009ca6"
+            border.width: 1
+            radius: 4
+        }
+
+        header: Rectangle {
+            color: "#1A2327"
+            height: 44
+            border.color: "#009ca6"
+            border.width: 1
+            Label {
+                text: "Unsaved Changes"
+                color: "white"
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: 14
+                font.pixelSize: 16
+                font.bold: true
+            }
+        }
+
+        contentItem: Text {
+            text: "You have unsaved changes.\nSave them before continuing?"
+            color: "white"
+            font.pixelSize: 16
+            lineHeight: 1.25
             horizontalAlignment: Text.AlignHCenter
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: parent.width
-            height: parent.height
-            color: myColors.textColor
-            font.pixelSize: 30
+            verticalAlignment: Text.AlignVCenter
+            wrapMode: Text.WordWrap
+            topPadding: 28
+            bottomPadding: 28
+            leftPadding: 24
+            rightPadding: 24
         }
-        onAccepted: {
-            save()
-            Qt.quit();
+
+        footer: Rectangle {
+            color: "#1A2327"
+            height: 64
+            border.color: "#009ca6"
+            border.width: 1
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 14
+                anchors.rightMargin: 14
+                spacing: 10
+
+                // Ghost (destructive) — leave without saving
+                Button {
+                    text: "Don't Save"
+                    Layout.preferredWidth: 120
+                    Layout.preferredHeight: 36
+                    background: Rectangle {
+                        color: parent.down ? "#3a2526" : (parent.hovered ? "#2A3337" : "transparent")
+                        border.color: "#a94442"
+                        border.width: 1
+                        radius: 6
+                        Behavior on color { ColorAnimation { duration: 90 } }
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#e0a9a7"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    onClicked: { unsavedDialog.close(); unsavedDialog.runPending(); }
+                }
+
+                Item { Layout.fillWidth: true }
+
+                // Ghost — cancel, stay where we are
+                Button {
+                    text: "Cancel"
+                    Layout.preferredWidth: 100
+                    Layout.preferredHeight: 36
+                    background: Rectangle {
+                        color: parent.down ? "#2c3e47" : (parent.hovered ? "#22323a" : "transparent")
+                        border.color: "#3a5560"
+                        border.width: 1
+                        radius: 6
+                        Behavior on color { ColorAnimation { duration: 90 } }
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#cfe8ea"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    onClicked: {
+                        unsavedDialog.pendingAction = "";
+                        unsavedDialog.pendingBook = "";
+                        unsavedDialog.pendingPath = "";
+                        unsavedDialog.close();
+                    }
+                }
+
+                // Primary — save then proceed
+                Button {
+                    text: "Save"
+                    Layout.preferredWidth: 110
+                    Layout.preferredHeight: 36
+                    background: Rectangle {
+                        color: parent.down ? "#00808a" : (parent.hovered ? "#00b3be" : "#009ca6")
+                        radius: 6
+                        Behavior on color { ColorAnimation { duration: 90 } }
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        color: "white"
+                        font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    onClicked: { unsavedDialog.close(); mainwindow.save(); unsavedDialog.runPending(); }
+                }
+            }
         }
-        onRejected: {}
+    }
+
+    // Intercept window close (the X button / Cmd+Q): if there's unsaved work,
+    // veto the close and ask first. With nothing to lose, close normally.
+    onClosing: function(closeEvent) {
+        if (!forceQuit && hasUnsavedChanges()) {
+            closeEvent.accepted = false;
+            unsavedDialog.requestExit();
+        }
     }
 
     FlowToast {
@@ -501,6 +719,7 @@ ApplicationWindow {
 
     OpenProject {
         id: openProject
+        onLoadRequested: function(path) { mainwindow.openProjectPath(path); }
     }
 
     TestDialog {
@@ -883,7 +1102,10 @@ ApplicationWindow {
                 "type": "helper",
                 "hostname": config.hostname,
                 "active_book": openProject.currentProject,
-                "active": activityTracker.active
+                "active": activityTracker.active,
+                "open_seconds": activityTracker.openSeconds,
+                "idle_seconds": activityTracker.idleSeconds,
+                "active_seconds": activityTracker.openSeconds - activityTracker.idleSeconds
             };
 
             xhr.open("POST", url);

@@ -98,6 +98,14 @@ void ActivityTracker::tick()
 {
     rolloverIfNeeded();
 
+    // Session open/idle counters advance every tick regardless of book/focus,
+    // so the heartbeat can report total uptime vs. idle time.
+    const int secs = TICK_INTERVAL_MS / 1000;
+    _openSeconds += secs;
+    if (!_active)
+        _idleSeconds += secs;
+    emit statsChanged();
+
     if (!_active || _currentBook.isEmpty())
         return;
 
