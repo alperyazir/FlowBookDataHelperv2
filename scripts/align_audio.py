@@ -72,15 +72,27 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
     ws = page.get_text("words")
     ws.sort(key=lambda w: (w[5], w[6], w[7]))  # block, line, word
     out = []
+    # Some source PDFs stack the same text layer multiple times (invisible
+    # duplicate words at identical coordinates). Left unchecked that inflates
+    # the passage with repeats and wrecks forced alignment (every word matches
+    # several audio positions). Drop a word if one with the same text AND a
+    # near-identical position was already kept; genuine repeats sit at distinct
+    # positions (different line/column) and survive.
+    seen = set()
     for w in ws:
         x0, y0, x1, y1 = w[0] * sx, w[1] * sy, w[2] * sx, w[3] * sy
         mx, my = (x0 + x1) / 2, (y0 + y1) / 2
-        if cx0 <= mx <= cx1 and cy0 <= my <= cy1:
-            out.append({
-                "text": w[4],
-                "bbox": {"x": round(x0), "y": round(y0),
-                         "w": round(x1 - x0), "h": round(y1 - y0)},
-            })
+        if not (cx0 <= mx <= cx1 and cy0 <= my <= cy1):
+            continue
+        key = (w[4], round(x0 / 3), round(y0 / 3))  # ~3px position tolerance
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({
+            "text": w[4],
+            "bbox": {"x": round(x0), "y": round(y0),
+                     "w": round(x1 - x0), "h": round(y1 - y0)},
+        })
     doc.close()
     return out
 

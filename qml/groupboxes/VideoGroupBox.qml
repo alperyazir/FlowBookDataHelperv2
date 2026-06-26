@@ -67,12 +67,24 @@ GroupBox {
         }
     }
 
+    // A seek requested before the player became seekable; applied once it is.
+    property int _pendingSeekMs: -1
+
     MediaPlayer {
         id: playRecord
         videoOutput: videoOutput
         audioOutput: AudioOutput {}
-        // Keep the slider in sync after a drag breaks the value binding.
-        onPositionChanged: if (!videoSlider.pressed) videoSlider.value = position
+        // Push the position onto the slider while the user isn't dragging.
+        onPositionChanged: function(position) {
+            if (!videoSlider.pressed) videoSlider.value = position;
+        }
+        // Apply a seek that arrived before the player was seekable.
+        onSeekableChanged: function(seekable) {
+            if (seekable && root._pendingSeekMs >= 0) {
+                setPosition(root._pendingSeekMs);
+                root._pendingSeekMs = -1;
+            }
+        }
     }
 
     ColumnLayout {
@@ -151,10 +163,23 @@ GroupBox {
             Slider {
                 id: videoSlider
                 Layout.fillWidth: true
+                // Without an explicit height the custom-styled Slider collapses
+                // to 0px tall (Rectangles have no implicit size) and can't be
+                // grabbed/dragged. Give it a real, hittable height.
+                Layout.preferredHeight: 28
                 from: 0
                 to: playRecord.duration > 0 ? playRecord.duration : 1
-                value: playRecord.position
-                onMoved: if (playRecord.seekable) playRecord.setPosition(value)
+                // No `value:` binding — it would re-assert playback position every
+                // frame and fight the drag (handle snaps back, no seek). Value is
+                // pushed imperatively from onPositionChanged while not dragging.
+                // Queue the seek if not seekable yet (applied in onSeekableChanged).
+                onMoved: {
+                    var ms = Math.max(0, Math.round(value));
+                    if (playRecord.seekable)
+                        playRecord.setPosition(ms);
+                    else
+                        root._pendingSeekMs = ms;
+                }
 
                 background: Rectangle {
                     x: videoSlider.leftPadding

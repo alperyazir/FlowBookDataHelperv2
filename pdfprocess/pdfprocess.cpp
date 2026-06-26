@@ -868,14 +868,21 @@ bool PdfProcess::launchTestFlowBook(const QString &testVersion) {
     QStringList arguments;
     arguments << "/../../";
 #ifdef Q_OS_MAC
-    arguments << flowBookPath;
-    process->start("open", arguments);
+    // Run the binary inside the bundle directly instead of via `open`. `open`
+    // launches through LaunchServices, which (a) ignores the working directory
+    // we set above (the app would start from "/") and (b) treats "/../../" as a
+    // path to open rather than passing it to FlowBook — it would only forward
+    // args placed after a literal `--args`. Both meant FlowBook never received
+    // its books path on macOS. Launching the executable directly makes macOS
+    // behave exactly like Windows: working dir = test/<version>/, argv[1] = "/../../".
+    const QString exe = flowBookPath + "/Contents/MacOS/FlowBook";
+    process->start(exe, arguments);
+    qDebug() << "Launching" << exe << arguments
+             << "cwd" << flowBookDir.absolutePath();
 #else
     // On Windows, directly execute the .exe
-
     process->start(flowBookPath, arguments);
-
-    qDebug() << "Arguments" << flowBookPath << process->arguments();;
+    qDebug() << "Arguments" << flowBookPath << process->arguments();
 #endif
 
     // Connect to error handling

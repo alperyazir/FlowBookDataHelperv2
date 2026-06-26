@@ -1123,7 +1123,14 @@ Item {
                         }
 
                         MouseArea {
-                            anchors.fill: parent
+                            // The section rect is sized from coords (much smaller
+                            // than the drawn icon), so filling it left only a tiny
+                            // hittable spot at the center. Grow the drag area to the
+                            // visible icon (matching the selected highlight) so the
+                            // whole icon can be grabbed and moved.
+                            anchors.centerIn: parent
+                            width: Math.max(parent.width, root.imageHeights + 14)
+                            height: Math.max(parent.height, root.imageHeights + 14)
                             drag.target: parent
                             onPressed: {
                                 sideBar.hideAllComponent();
@@ -1181,7 +1188,11 @@ Item {
                         }
 
                         MouseArea {
-                            anchors.fill: parent
+                            // Same as audio: grow the drag area to the visible icon
+                            // so the whole icon is grabbable, not just a tiny center.
+                            anchors.centerIn: parent
+                            width: Math.max(parent.width, root.imageHeights + 14)
+                            height: Math.max(parent.height, root.imageHeights + 14)
                             drag.target: parent
                             onPressed: {
                                 sideBar.hideAllComponent();

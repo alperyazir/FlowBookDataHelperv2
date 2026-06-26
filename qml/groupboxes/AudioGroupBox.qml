@@ -155,8 +155,8 @@ GroupBox {
         id: playRecordAudio
         audioOutput: AudioOutput {}
         onSourceChanged: play()
-        // Keep the slider in sync after a drag breaks the value binding.
-        onPositionChanged: {
+        // Push the position onto the slider while the user isn't dragging.
+        onPositionChanged: function(position) {
             if (!audioSlider.pressed)
                 audioSlider.value = position;
             // Drive the page karaoke highlight (position is ms).
@@ -167,10 +167,12 @@ GroupBox {
         onPlaybackStateChanged: if (playbackState === MediaPlayer.StoppedState)
                                     content.pageDetails.karaokeTime = -1
         // Apply a click-to-seek that arrived before the player was seekable.
-        onSeekableChanged: if (seekable && root._pendingSeekMs >= 0) {
-                               setPosition(root._pendingSeekMs);
-                               root._pendingSeekMs = -1;
-                           }
+        onSeekableChanged: function(seekable) {
+            if (seekable && root._pendingSeekMs >= 0) {
+                setPosition(root._pendingSeekMs);
+                root._pendingSeekMs = -1;
+            }
+        }
     }
 
     ColumnLayout {
@@ -248,10 +250,26 @@ GroupBox {
             Slider {
                 id: audioSlider
                 Layout.fillWidth: true
+                // The custom handle/background are plain Rectangles with no
+                // implicit size, so without an explicit height the Slider
+                // collapsed to 0px tall — visible but impossible to grab/drag.
+                Layout.preferredHeight: 28
                 from: 0
                 to: playRecordAudio.duration > 0 ? playRecordAudio.duration : 1
-                value: playRecordAudio.position
-                onMoved: if (playRecordAudio.seekable) playRecordAudio.setPosition(value)
+                // No `value:` binding on purpose — it would re-assert the playback
+                // position every frame and fight the drag, so the handle snapped
+                // back and seeking did nothing. The value is pushed imperatively
+                // from onPositionChanged while not being dragged (see MediaPlayer).
+                // Seek as the user drags. If the player isn't seekable yet (the
+                // ffmpeg backend reports that until it has buffered), queue the
+                // target and apply it from onSeekableChanged — never drop it.
+                onMoved: {
+                    var ms = Math.max(0, Math.round(value));
+                    if (playRecordAudio.seekable)
+                        playRecordAudio.setPosition(ms);
+                    else
+                        root._pendingSeekMs = ms;
+                }
 
                 background: Rectangle {
                     x: audioSlider.leftPadding

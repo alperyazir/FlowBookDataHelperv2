@@ -116,12 +116,24 @@ GroupBox {
         }
     }
 
+    // A seek requested before the player became seekable; applied once it is.
+    property int _pendingSeekMs: -1
+
     MediaPlayer {
         id: playRecordAudio
         audioOutput: AudioOutput {}
         onSourceChanged: play()
-        // Keep the slider in sync after a drag breaks the value binding.
-        onPositionChanged: if (!extraAudioSlider.pressed) extraAudioSlider.value = position
+        // Push the position onto the slider while the user isn't dragging.
+        onPositionChanged: function(position) {
+            if (!extraAudioSlider.pressed) extraAudioSlider.value = position;
+        }
+        // Apply a seek that arrived before the player was seekable.
+        onSeekableChanged: function(seekable) {
+            if (seekable && root._pendingSeekMs >= 0) {
+                setPosition(root._pendingSeekMs);
+                root._pendingSeekMs = -1;
+            }
+        }
     }
 
     ColumnLayout {
@@ -378,10 +390,21 @@ GroupBox {
                     Slider {
                         id: extraAudioSlider
                         Layout.fillWidth: true
+                        // Needs an explicit height or the custom-styled Slider
+                        // collapses to 0px and can't be grabbed/dragged.
+                        Layout.preferredHeight: 28
                         from: 0
                         to: playRecordAudio.duration > 0 ? playRecordAudio.duration : 1
-                        value: playRecordAudio.position
-                        onMoved: if (playRecordAudio.seekable) playRecordAudio.setPosition(value)
+                        // No `value:` binding — it would fight the drag (handle
+                        // snaps back, no seek). Position is pushed imperatively
+                        // from onPositionChanged while not dragging.
+                        onMoved: {
+                            var ms = Math.max(0, Math.round(value));
+                            if (playRecordAudio.seekable)
+                                playRecordAudio.setPosition(ms);
+                            else
+                                root._pendingSeekMs = ms;
+                        }
 
                         background: Rectangle {
                             x: extraAudioSlider.leftPadding
