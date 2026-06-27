@@ -22,6 +22,9 @@ GroupBox {
     // Karaoke (passage word-timing) status, driven by pdfProcess signals.
     property bool karaokeBusy: false
     property string karaokeStatus: ""
+    // True between the user pressing Stop and the cancel landing, so the
+    // completion handler shows "Canceled" rather than "Failed".
+    property bool karaokeCanceled: false
 
     function _baseName(p) { return p ? String(p).substring(String(p).lastIndexOf("/") + 1) : ""; }
     function _isThisAudio(p) { return _baseName(p) === _baseName(root.audioModelData && root.audioModelData.audioPath); }
@@ -57,15 +60,29 @@ GroupBox {
         function onPassageCropStarted(audioPath) {
             if (root._isThisAudio(audioPath)) {
                 root.karaokeBusy = true;
-                root.karaokeStatus = "Aligning…";
+                root.karaokeCanceled = false;
+                root.karaokeStatus = "Starting…";
             }
+        }
+        // Live stage messages from align_audio.py ("PROGRESS:" lines).
+        function onPassageCropProgress(audioPath, message) {
+            if (root._isThisAudio(audioPath) && root.karaokeBusy)
+                root.karaokeStatus = message;
+        }
+        function onPassageCropCanceled(audioPath) {
+            if (!root._isThisAudio(audioPath))
+                return;
+            root.karaokeBusy = false;
+            root.karaokeCanceled = false;
+            root.karaokeStatus = "Canceled";
         }
         function onPassageCropCompleted(success, audioPath, summaryJson) {
             if (!root._isThisAudio(audioPath))
                 return;
             root.karaokeBusy = false;
             if (!success) {
-                root.karaokeStatus = "Failed — try again";
+                root.karaokeStatus = root.karaokeCanceled ? "Canceled" : "Failed — try again";
+                root.karaokeCanceled = false;
                 return;
             }
             var info = {};
@@ -340,14 +357,55 @@ GroupBox {
             }
         }
 
-        // Start passage selection (same as pressing "c" with this audio open).
-        AppButton {
-            text: "Select karaoke (C)"
-            variant: "secondary"
+        // Start passage selection / stop a running align / delete existing.
+        RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 32
-            enabled: !root.karaokeBusy
-            onClicked: content.pageDetails.startPassageCropMode(root.audioModelData)
+            spacing: 8
+
+            // Same as pressing "c" with this audio open.
+            AppButton {
+                text: root.karaokeBusy ? "Analyzing…" : "Select karaoke (C)"
+                variant: "secondary"
+                Layout.fillWidth: true
+                Layout.preferredHeight: 32
+                enabled: !root.karaokeBusy
+                onClicked: content.pageDetails.startPassageCropMode(root.audioModelData)
+            }
+
+            // Cancel the in-flight alignment.
+            AppButton {
+                text: "Stop"
+                variant: "danger"
+                visible: root.karaokeBusy
+                Layout.preferredWidth: 72
+                Layout.preferredHeight: 32
+                onClicked: {
+                    root.karaokeCanceled = true;
+                    root.karaokeStatus = "Canceling…";
+                    pdfProcess.cancelPassageAudio();
+                }
+            }
+
+            // Remove the saved karaoke timings for this audio.
+            AppButton {
+                text: "Delete"
+                variant: "danger"
+                visible: !root.karaokeBusy && root.audioModelData && root.audioModelData.karaoke
+                Layout.preferredWidth: 72
+                Layout.preferredHeight: 32
+                onClicked: {
+                    var rel = root._audioJsonPath();
+                    if (rel !== "") {
+                        var path = appPath + (rel.indexOf("./") === 0 ? rel.substring(2) : rel);
+                        pdfProcess.deleteKaraoke(path, root._baseName(root.audioModelData.audioPath));
+                    }
+                    if (root.audioModelData)
+                        root.audioModelData.karaoke = false;
+                    content.pageDetails.karaokeWords = [];
+                    content.pageDetails.karaokeTime = -1;
+                    root.karaokeStatus = "";
+                }
+            }
         }
 
         // ----- Karaoke words: the aligned passage, in sync with playback -----

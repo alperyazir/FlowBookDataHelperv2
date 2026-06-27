@@ -220,6 +220,10 @@ def main():
         print(f"ERROR: Audio not found: {audio_path}", flush=True)
         sys.exit(1)
 
+    # Lines prefixed "PROGRESS:" are surfaced live in the editor's karaoke
+    # status so the author sees what stage the (multi-second) align is at,
+    # instead of a bare spinner.
+    print("PROGRESS: Reading passage text from the page…", flush=True)
     try:
         words = words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h)
     except IndexError as e:
@@ -232,13 +236,19 @@ def main():
     print(f"Passage: {len(words)} words -> "
           f"{' '.join(w['text'] for w in words)}", flush=True)
 
+    print(f"PROGRESS: Found {len(words)} words. Preparing the aligner…",
+          flush=True)
     setup_align_runtime()
+    print(f"PROGRESS: Aligning {len(words)} words to the audio… "
+          f"(first run downloads the model)", flush=True)
     aligned, dur = align(words, audio_path, lang)
     print(f"Aligned {len(aligned)} words against {dur:.2f}s audio", flush=True)
     mean_score, missing = attach_timing(words, aligned)
     needs_review = (mean_score < REVIEW_SCORE) or (missing > len(words) * 0.2)
     print(f"Mean score={mean_score}, unaligned={missing}, "
           f"needs_review={needs_review}", flush=True)
+    print(f"PROGRESS: Aligned {len(words)} words (score {mean_score}). Saving…",
+          flush=True)
 
     audio_id = os.path.basename(audio_path)
     entry = {

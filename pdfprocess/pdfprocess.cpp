@@ -15,6 +15,8 @@
 #include <QJsonArray>
 #include <QFileInfo>
 #include <QDateTime>
+#include <QSaveFile>
+#include <QSharedPointer>
 
 QString PdfProcess::scriptsDir()
 {
@@ -1279,10 +1281,41 @@ void PdfProcess::cropPassageAudio(const QString &rawDir, int pageIndex,
     process->setProcessEnvironment(env);
     process->setProcessChannelMode(QProcess::MergedChannels);
 
+    // Track this run so cancelPassageAudio() can kill it; reset the cancel flag.
+    _passageCanceled = false;
+    _passageProcess = process;
+
+    // Accumulate stdout (so the finished handler can still find SUMMARY) while
+    // streaming the script's "PROGRESS:" stage lines live to the panel.
+    auto buffer = QSharedPointer<QString>::create();
+    connect(process, &QProcess::readyReadStandardOutput, this,
+            [this, process, audioPath, buffer]() {
+                const QString chunk = QString::fromUtf8(process->readAllStandardOutput());
+                *buffer += chunk;
+                const QStringList lines = chunk.split('\n', Qt::SkipEmptyParts);
+                for (const QString &raw : lines) {
+                    const QString t = raw.trimmed();
+                    if (t.startsWith(QStringLiteral("PROGRESS:")))
+                        emit passageCropProgress(audioPath, t.mid(9).trimmed());
+                }
+            });
+
     connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            [this, process, audioPath](int exitCode, QProcess::ExitStatus exitStatus) {
-                QString output = QString::fromUtf8(process->readAllStandardOutput()).trimmed();
+            [this, process, audioPath, buffer](int exitCode, QProcess::ExitStatus exitStatus) {
+                // finished and errorOccurred can both fire (e.g. on kill); the
+                // first to run owns the cleanup, the second bails here.
+                if (_passageProcess != process) { process->deleteLater(); return; }
+                _passageProcess = nullptr;
+
+                const QString output = buffer->trimmed();
                 qDebug() << "Karaoke script output:" << output;
+
+                if (_passageCanceled) {
+                    _passageCanceled = false;
+                    emit passageCropCanceled(audioPath);
+                    process->deleteLater();
+                    return;
+                }
 
                 QString summaryJson;
                 bool ok = (exitStatus == QProcess::NormalExit && exitCode == 0
@@ -1303,7 +1336,15 @@ void PdfProcess::cropPassageAudio(const QString &rawDir, int pageIndex,
             });
 
     connect(process, &QProcess::errorOccurred, [this, process, audioPath](QProcess::ProcessError error) {
+        if (_passageProcess != process) { process->deleteLater(); return; }
+        _passageProcess = nullptr;
         qDebug() << "Karaoke process error:" << error << process->errorString();
+        if (_passageCanceled) {
+            _passageCanceled = false;
+            emit passageCropCanceled(audioPath);
+            process->deleteLater();
+            return;
+        }
         emit scriptError(QStringLiteral("Karaoke could not start: ") + process->errorString());
         emit passageCropCompleted(false, audioPath, QString());
         process->deleteLater();
@@ -1329,6 +1370,46 @@ void PdfProcess::cropPassageAudio(const QString &rawDir, int pageIndex,
 
     process->start(pythonExecutable(), arguments);
     qDebug() << "Karaoke process started";
+}
+
+void PdfProcess::cancelPassageAudio()
+{
+    if (_passageProcess && _passageProcess->state() != QProcess::NotRunning) {
+        qDebug() << "Canceling passage karaoke align";
+        _passageCanceled = true;
+        _passageProcess->kill();   // finished/errorOccurred emits passageCropCanceled
+    }
+}
+
+bool PdfProcess::deleteKaraoke(const QString &audioJsonPath, const QString &audioId)
+{
+    QFile f(audioJsonPath);
+    if (!f.exists())
+        return true;   // nothing on disk => already "deleted"
+    if (!f.open(QIODevice::ReadOnly)) {
+        qDebug() << "deleteKaraoke: cannot open" << audioJsonPath;
+        return false;
+    }
+    QJsonParseError err;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+    f.close();
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+        qDebug() << "deleteKaraoke: bad json" << err.errorString();
+        return false;
+    }
+    QJsonObject obj = doc.object();
+    if (!obj.contains(audioId))
+        return true;   // already gone
+    obj.remove(audioId);
+
+    // Atomic rewrite so a crash can't leave a half-written audio.json.
+    QSaveFile out(audioJsonPath);
+    if (!out.open(QIODevice::WriteOnly)) {
+        qDebug() << "deleteKaraoke: cannot write" << audioJsonPath;
+        return false;
+    }
+    out.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
+    return out.commit();
 }
 
 QVariantList PdfProcess::loadKaraokeWords(const QString &audioJsonPath,

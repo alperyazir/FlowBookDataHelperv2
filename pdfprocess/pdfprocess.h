@@ -5,6 +5,8 @@
 #include <QStringList>
 #include <QVariantMap>
 
+class QProcess;
+
 
 class PdfProcess: public QObject {
     Q_OBJECT
@@ -54,6 +56,13 @@ public:
     // without QML's file:// XHR quirks.
     Q_INVOKABLE QVariantList loadKaraokeWords(const QString &audioJsonPath,
                                               const QString &audioId);
+    // Cancel an in-flight cropPassageAudio() run (kills the python process).
+    // Safe to call when nothing is running.
+    Q_INVOKABLE void cancelPassageAudio();
+    // Remove one audio id's karaoke entry from audio/audio.json. Returns true
+    // if the file ends up without that entry (including when it was missing).
+    Q_INVOKABLE bool deleteKaraoke(const QString &audioJsonPath,
+                                   const QString &audioId);
     // Help ▸ Dependencies. checkDependencies() reports status (async, via
     // dependenciesChecked); installDependencies() pip-installs the given pip
     // package names (async, via dependenciesInstalled; progress on logMessage).
@@ -104,6 +113,11 @@ signals:
     // the audio panel can show a busy state; completed carries success plus a
     // compact summary JSON ({audio_id, words, mean_score, needs_review}).
     void passageCropStarted(const QString &audioPath);
+    // A human-readable stage message (the script's "PROGRESS:" lines) streamed
+    // live while the align runs, so the panel can show more than a spinner.
+    void passageCropProgress(const QString &audioPath, const QString &message);
+    // Emitted (instead of completed) when the user cancels the running align.
+    void passageCropCanceled(const QString &audioPath);
     void passageCropCompleted(bool success, const QString &audioPath,
                               const QString &summaryJson);
     void dependenciesChecked(bool ok, const QString &json);
@@ -126,6 +140,11 @@ private:
     // Python scripts ship inside the binary (scripts.qrc) and are
     // extracted to a writable dir once per run; returns that dir.
     static QString scriptsDir();
+
+    // The currently-running passage-align process (nullptr when idle) and a
+    // flag so the finished handler can tell a user cancel from a real failure.
+    QProcess *_passageProcess = nullptr;
+    bool _passageCanceled = false;
 
     bool package(const QStringList &platforms, const QStringList &bookNames);
     // The original (non-answered) PDF in a book's raw/ dir, or "" if none.
