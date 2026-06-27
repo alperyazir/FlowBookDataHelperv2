@@ -797,7 +797,7 @@ ApplicationWindow {
 
         Text {
             id: versionText
-            text: "v3.0.2"
+            text: "v3.1.0"
             color: "#009ca6"
             anchors.centerIn: parent
             font.pixelSize: 14
