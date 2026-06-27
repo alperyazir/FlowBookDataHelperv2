@@ -131,6 +131,24 @@ def setup_align_runtime():
         pass
 
 
+def _model_cache_status():
+    """Inspect the torch-hub checkpoint cache (where the wav2vec align model
+    lives). Returns (present, dir, size_mb). Same location on every OS: the
+    torch cache, i.e. %USERPROFILE%/.cache/torch/hub on Windows, unless
+    TORCH_HOME / XDG_CACHE_HOME override it. Lets the editor show — and the log
+    record — whether a run downloads the model or just loads it from cache."""
+    try:
+        import torch
+        ckpt = os.path.join(torch.hub.get_dir(), "checkpoints")
+        names = os.listdir(ckpt) if os.path.isdir(ckpt) else []
+        if names:
+            mb = sum(os.path.getsize(os.path.join(ckpt, n)) for n in names) / (1024 * 1024)
+            return True, ckpt, mb
+        return False, ckpt, 0.0
+    except Exception:
+        return None, "", 0.0
+
+
 def align(words, audio_path, lang):
     """Forced-align the known passage text to audio. Returns (aligned, dur)."""
     import whisperx
@@ -138,7 +156,25 @@ def align(words, audio_path, lang):
     text = " ".join(w["text"] for w in words)
     audio = whisperx.load_audio(audio_path)
     dur = len(audio) / 16000.0
+    # The ~370MB wav2vec model is downloaded only once (it lives in the torch
+    # cache); every run still has to load it into memory, which is the slow
+    # part here (~15s on CPU) since each align runs in a fresh process. Report
+    # the cache state so "is it downloading again?" is answerable from the UI/log.
+    present, ckpt_dir, mb = _model_cache_status()
+    if present:
+        print(f"PROGRESS: Loading the speech model from cache ({mb:.0f}MB)… ~15s, "
+              f"not re-downloaded", flush=True)
+        print(f"CACHE: torch model cache present at {ckpt_dir} ({mb:.0f}MB)", flush=True)
+    elif present is False:
+        print(f"PROGRESS: Speech model NOT cached — downloading ~370MB once now…",
+              flush=True)
+        print(f"CACHE: torch model cache EMPTY at {ckpt_dir} — downloading this run",
+              flush=True)
+    else:
+        print("PROGRESS: Loading the speech model… ~15s", flush=True)
     model_a, meta = whisperx.load_align_model(language_code=lang, device=device)
+    print(f"PROGRESS: Aligning {len(words)} words to {dur:.0f}s of audio…",
+          flush=True)
     segs = [{"text": text, "start": 0.0, "end": dur}]
     res = whisperx.align(segs, model_a, meta, audio, device,
                          return_char_alignments=False)
@@ -239,8 +275,7 @@ def main():
     print(f"PROGRESS: Found {len(words)} words. Preparing the aligner…",
           flush=True)
     setup_align_runtime()
-    print(f"PROGRESS: Aligning {len(words)} words to the audio… "
-          f"(first run downloads the model)", flush=True)
+    # align() emits its own "Loading model…" / "Aligning…" progress lines.
     aligned, dur = align(words, audio_path, lang)
     print(f"Aligned {len(aligned)} words against {dur:.2f}s audio", flush=True)
     mean_score, missing = attach_timing(words, aligned)
