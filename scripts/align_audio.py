@@ -24,6 +24,15 @@ import json
 import re
 import difflib
 
+# Force UTF-8 on stdout/stderr. On Windows the console/pipe default is cp1252,
+# which can't encode passage characters like '⁴' (superscript 4) and would
+# crash the whole run with a UnicodeEncodeError mid-print.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _bootstrap import ensure_runtime_deps, ensure_align_deps
 
@@ -220,14 +229,14 @@ def merge_into_audio_json(path, audio_id, entry):
     data = {}
     if os.path.exists(path):
         try:
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
         except Exception:
             data = {}
     data[audio_id] = entry
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
-    with open(tmp, "w") as f:
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     os.replace(tmp, path)
 
