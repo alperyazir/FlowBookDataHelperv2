@@ -1071,9 +1071,9 @@ Item {
                     property real sy: picture.paintedHeight / picture.sourceSize.height
                     visible: root.karaokeTime >= 0 && index === root.karaokeActiveIndex
                     x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.bbox.x * sx
-                    y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + (modelData.bbox.y + modelData.bbox.h * 0.08) * sy
+                    y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + (modelData.bbox.y + modelData.bbox.h * 0.15) * sy
                     width: modelData.bbox.w * sx
-                    height: modelData.bbox.h * 0.60 * sy
+                    height: modelData.bbox.h * 0.70 * sy
                     radius: 3
                     z: 50
                     color: "#4dffd200"
