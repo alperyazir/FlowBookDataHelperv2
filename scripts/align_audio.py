@@ -69,10 +69,23 @@ def find_original_pdf(raw_dir):
     return os.path.join(raw_dir, pdfs[0])
 
 
+# Highlight box vertical extent, as fractions of the font size measured from
+# the text baseline. fitz word rects span the font's full ascender→descender
+# (the ascender is often ~0.9·size, well above the actual caps at ~0.70·size),
+# so drawing them raw makes the highlight sit noticeably high and miss the
+# bottom of the glyphs. Anchoring on the real baseline + font size instead hugs
+# the word identically in every font and size (validated on a script and a sans
+# book). x stays glyph-tight (from the character boxes), which was already good.
+_HL_CAP = 0.78     # top above caps/ascenders (cap height ≈ 0.70)
+_HL_DESC = 0.25    # bottom below the baseline to cover descenders (g, y, p)
+
+
 def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
     """Words whose center falls inside the crop rect, in reading order.
 
-    Returns [{text, bbox:{x,y,w,h}}] with bbox in PNG pixel space.
+    Returns [{text, bbox:{x,y,w,h}}] with bbox in PNG pixel space. The box is
+    baseline-anchored (see _HL_CAP/_HL_DESC) so the karaoke highlight hugs the
+    word rather than floating above it.
     """
     doc = fitz.open(pdf_path)
     if page_idx < 0 or page_idx >= len(doc):
@@ -82,8 +95,6 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
     sx, sy = png_w / page.rect.width, png_h / page.rect.height
     cx0, cy0, cw, ch = rect_px
     cx1, cy1 = cx0 + cw, cy0 + ch
-    ws = page.get_text("words")
-    ws.sort(key=lambda w: (w[5], w[6], w[7]))  # block, line, word
     out = []
     # Some source PDFs stack the same text layer multiple times (invisible
     # duplicate words at identical coordinates). Left unchecked that inflates
@@ -92,20 +103,59 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
     # near-identical position was already kept; genuine repeats sit at distinct
     # positions (different line/column) and survive.
     seen = set()
-    for w in ws:
-        x0, y0, x1, y1 = w[0] * sx, w[1] * sy, w[2] * sx, w[3] * sy
+
+    def emit(run, size):
+        if not run:
+            return
+        text = "".join(c["c"] for c in run)
+        x0 = min(c["bbox"][0] for c in run) * sx
+        x1 = max(c["bbox"][2] for c in run) * sx
+        if size > 0:
+            baseline = run[0]["origin"][1]
+            y0 = (baseline - _HL_CAP * size) * sy
+            y1 = (baseline + _HL_DESC * size) * sy
+        else:  # size unavailable — fall back to the raw glyph-cell extent
+            y0 = min(c["bbox"][1] for c in run) * sy
+            y1 = max(c["bbox"][3] for c in run) * sy
         mx, my = (x0 + x1) / 2, (y0 + y1) / 2
         if not (cx0 <= mx <= cx1 and cy0 <= my <= cy1):
-            continue
-        key = (w[4], round(x0 / 3), round(y0 / 3))  # ~3px position tolerance
+            return
+        key = (text, round(x0 / 3), round(y0 / 3))  # ~3px position tolerance
         if key in seen:
-            continue
+            return
         seen.add(key)
         out.append({
-            "text": w[4],
+            "text": text,
             "bbox": {"x": round(x0), "y": round(y0),
                      "w": round(x1 - x0), "h": round(y1 - y0)},
         })
+
+    # rawdict yields blocks→lines→spans→chars in reading order; split each span
+    # into words on whitespace. Each span carries the font size, and every char
+    # its baseline origin, which is what the baseline-anchored box needs.
+    rd = page.get_text("rawdict")
+    for block in rd.get("blocks", []):
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                size = span.get("size", 0) or 0
+                run = []
+                prev_x1 = None
+                for c in span.get("chars", []):
+                    if c["c"].isspace():
+                        emit(run, size)
+                        run, prev_x1 = [], None
+                        continue
+                    # Some PDFs separate words by position with no space glyph;
+                    # break on a wide gap too so a whole line doesn't collapse
+                    # into one "word" (well above intra-word letter spacing).
+                    x0c = c["bbox"][0]
+                    if (prev_x1 is not None and size > 0
+                            and x0c - prev_x1 > 0.3 * size):
+                        emit(run, size)
+                        run = []
+                    run.append(c)
+                    prev_x1 = c["bbox"][2]
+                emit(run, size)
     doc.close()
     return out
 
