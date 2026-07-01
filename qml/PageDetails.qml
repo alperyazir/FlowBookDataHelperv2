@@ -1065,15 +1065,16 @@ Item {
                 id: karaokeOverlay
                 model: root.karaokeWords
                 Rectangle {
-                    // Word bbox from fitz is line-height tall; inset vertically
-                    // and keep the fill light so the text stays readable.
+                    // bbox is baseline-anchored by align_audio.py to hug the
+                    // word, so draw it raw (same as the reader); keep the fill
+                    // light so the text stays readable.
                     property real sx: picture.paintedWidth / picture.sourceSize.width
                     property real sy: picture.paintedHeight / picture.sourceSize.height
                     visible: root.karaokeTime >= 0 && index === root.karaokeActiveIndex
                     x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.bbox.x * sx
-                    y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + (modelData.bbox.y + modelData.bbox.h * 0.08) * sy
+                    y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.bbox.y * sy
                     width: modelData.bbox.w * sx
-                    height: modelData.bbox.h * 0.60 * sy
+                    height: modelData.bbox.h * sy
                     radius: 3
                     z: 50
                     color: "#4dffd200"

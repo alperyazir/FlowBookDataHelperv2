@@ -42,7 +42,11 @@ ensure_align_deps()     # whisperx (+ torch)
 import fitz
 
 _NORM = re.compile(r"[^a-z0-9']")
-norm = lambda s: _NORM.sub("", s.lower())
+# Fold typographic apostrophes/quotes to ASCII so PDF text ("I’m" with U+2019)
+# matches ASR output ("I'm") — otherwise contractions never line up.
+_APOS = str.maketrans({"’": "'", "‘": "'", "ʼ": "'",
+                       "′": "'", "´": "'", "`": "'"})
+norm = lambda s: _NORM.sub("", s.lower().translate(_APOS))
 
 # Below this mean alignment confidence we flag the passage for human review.
 REVIEW_SCORE = 0.30
@@ -65,10 +69,23 @@ def find_original_pdf(raw_dir):
     return os.path.join(raw_dir, pdfs[0])
 
 
+# Highlight box vertical extent, as fractions of the font size measured from
+# the text baseline. fitz word rects span the font's full ascender→descender
+# (the ascender is often ~0.9·size, well above the actual caps at ~0.70·size),
+# so drawing them raw makes the highlight sit noticeably high and miss the
+# bottom of the glyphs. Anchoring on the real baseline + font size instead hugs
+# the word identically in every font and size (validated on a script and a sans
+# book). x stays glyph-tight (from the character boxes), which was already good.
+_HL_CAP = 0.78     # top above caps/ascenders (cap height ≈ 0.70)
+_HL_DESC = 0.25    # bottom below the baseline to cover descenders (g, y, p)
+
+
 def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
     """Words whose center falls inside the crop rect, in reading order.
 
-    Returns [{text, bbox:{x,y,w,h}}] with bbox in PNG pixel space.
+    Returns [{text, bbox:{x,y,w,h}}] with bbox in PNG pixel space. The box is
+    baseline-anchored (see _HL_CAP/_HL_DESC) so the karaoke highlight hugs the
+    word rather than floating above it.
     """
     doc = fitz.open(pdf_path)
     if page_idx < 0 or page_idx >= len(doc):
@@ -78,8 +95,6 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
     sx, sy = png_w / page.rect.width, png_h / page.rect.height
     cx0, cy0, cw, ch = rect_px
     cx1, cy1 = cx0 + cw, cy0 + ch
-    ws = page.get_text("words")
-    ws.sort(key=lambda w: (w[5], w[6], w[7]))  # block, line, word
     out = []
     # Some source PDFs stack the same text layer multiple times (invisible
     # duplicate words at identical coordinates). Left unchecked that inflates
@@ -88,20 +103,59 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
     # near-identical position was already kept; genuine repeats sit at distinct
     # positions (different line/column) and survive.
     seen = set()
-    for w in ws:
-        x0, y0, x1, y1 = w[0] * sx, w[1] * sy, w[2] * sx, w[3] * sy
+
+    def emit(run, size):
+        if not run:
+            return
+        text = "".join(c["c"] for c in run)
+        x0 = min(c["bbox"][0] for c in run) * sx
+        x1 = max(c["bbox"][2] for c in run) * sx
+        if size > 0:
+            baseline = run[0]["origin"][1]
+            y0 = (baseline - _HL_CAP * size) * sy
+            y1 = (baseline + _HL_DESC * size) * sy
+        else:  # size unavailable — fall back to the raw glyph-cell extent
+            y0 = min(c["bbox"][1] for c in run) * sy
+            y1 = max(c["bbox"][3] for c in run) * sy
         mx, my = (x0 + x1) / 2, (y0 + y1) / 2
         if not (cx0 <= mx <= cx1 and cy0 <= my <= cy1):
-            continue
-        key = (w[4], round(x0 / 3), round(y0 / 3))  # ~3px position tolerance
+            return
+        key = (text, round(x0 / 3), round(y0 / 3))  # ~3px position tolerance
         if key in seen:
-            continue
+            return
         seen.add(key)
         out.append({
-            "text": w[4],
+            "text": text,
             "bbox": {"x": round(x0), "y": round(y0),
                      "w": round(x1 - x0), "h": round(y1 - y0)},
         })
+
+    # rawdict yields blocks→lines→spans→chars in reading order; split each span
+    # into words on whitespace. Each span carries the font size, and every char
+    # its baseline origin, which is what the baseline-anchored box needs.
+    rd = page.get_text("rawdict")
+    for block in rd.get("blocks", []):
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                size = span.get("size", 0) or 0
+                run = []
+                prev_x1 = None
+                for c in span.get("chars", []):
+                    if c["c"].isspace():
+                        emit(run, size)
+                        run, prev_x1 = [], None
+                        continue
+                    # Some PDFs separate words by position with no space glyph;
+                    # break on a wide gap too so a whole line doesn't collapse
+                    # into one "word" (well above intra-word letter spacing).
+                    x0c = c["bbox"][0]
+                    if (prev_x1 is not None and size > 0
+                            and x0c - prev_x1 > 0.3 * size):
+                        emit(run, size)
+                        run = []
+                    run.append(c)
+                    prev_x1 = c["bbox"][2]
+                emit(run, size)
     doc.close()
     return out
 
@@ -158,8 +212,86 @@ def _model_cache_status():
         return None, "", 0.0
 
 
+# How much audio to keep on each side of the located passage window, in
+# seconds — a little lead-in/out so forced alignment has room at the edges.
+_WINDOW_PAD = 0.5
+
+
+def _asr_word_timeline(audio, model_a, meta, lang):
+    """Transcribe the WHOLE clip and return a word-level timeline
+    [{w, start, end}] (w normalized). Used ONLY to locate where the passage
+    begins — many clips open with a spoken instruction ("Revision 1. Page 6…
+    Then listen and check.") that isn't in the passage crop, and forced-aligning
+    the passage across the whole clip leaks its first words onto that intro.
+    Timing precision here is irrelevant; the real timestamps still come from the
+    forced pass. Returns [] if ASR is unavailable so the caller falls back to a
+    whole-clip align."""
+    import whisperx
+    try:
+        model = whisperx.load_model("base", device="cpu", compute_type="int8",
+                                    language=lang)
+        res = model.transcribe(audio, batch_size=8)
+        ali = whisperx.align(res["segments"], model_a, meta, audio, "cpu",
+                             return_char_alignments=False)
+    except Exception as e:
+        print(f"PROGRESS: Intro detection unavailable ({e}); aligning whole clip",
+              flush=True)
+        return []
+    out = []
+    for seg in ali["segments"]:
+        for w in seg.get("words", []):
+            if w.get("start") is not None:
+                out.append({"w": norm(w["word"]),
+                            "start": w["start"], "end": w["end"]})
+    return out
+
+
+def _locate_passage_window(words, asr, dur):
+    """Find the [t0, t1] audio window the passage actually occupies by matching
+    the passage tokens against the ASR timeline. Returns (t0, t1) padded, or
+    (0.0, dur) if the passage can't be located confidently (then we just align
+    the whole clip, i.e. the old behaviour)."""
+    if not asr:
+        return 0.0, dur
+    a = [norm(w["text"]) for w in words]
+    a = [t for t in a if t]                      # drop blanks (e.g. "____")
+    b = [x["w"] for x in asr]
+    if not a:
+        return 0.0, dur
+    sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
+    blocks = [bl for bl in sm.get_matching_blocks() if bl.size > 0]
+    matched = sum(bl.size for bl in blocks)
+    if not blocks or matched < max(3, 0.3 * len(a)):
+        return 0.0, dur                          # too weak -> whole clip
+    # difflib maximizes total matches, so the passage's long contiguous run wins
+    # over any stray single-word coincidence in the intro: the first block marks
+    # where the passage begins in the ASR timeline, the last where it ends.
+    j_start = blocks[0].b
+    j_end = min(len(asr) - 1, blocks[-1].b + blocks[-1].size - 1)
+    # Start the window at the END of the last intro word (the ASR word right
+    # before the passage), not at the passage word's own ASR start. ASR timing
+    # on that first passage word is jittery and often lands late; anchoring on
+    # its start can clip the word's true onset, so forced align crams it against
+    # the next word and it only flashes for a frame. The gap between the intro
+    # and the passage is inter-content silence, so reaching back to the intro's
+    # end is safe — it captures the full first word without grabbing intro
+    # speech.
+    if j_start > 0:
+        t0 = min(asr[j_start - 1]["end"], asr[j_start]["start"] - _WINDOW_PAD)
+        t0 = max(0.0, t0)
+    else:
+        t0 = max(0.0, asr[j_start]["start"] - _WINDOW_PAD)
+    t1 = min(dur, asr[j_end]["end"] + _WINDOW_PAD)
+    return t0, t1
+
+
 def align(words, audio_path, lang):
-    """Forced-align the known passage text to audio. Returns (aligned, dur)."""
+    """Forced-align the known passage text to audio. Returns (aligned, dur).
+
+    First transcribes the clip to find where the passage begins (skipping any
+    spoken intro/instruction that isn't in the crop), then forced-aligns the
+    passage text only within that window — so leading words are timed to when
+    they are actually spoken, not leaked onto the intro."""
     import whisperx
     device = "cpu"
     text = " ".join(w["text"] for w in words)
@@ -182,14 +314,30 @@ def align(words, audio_path, lang):
     else:
         print("PROGRESS: Loading the speech model… ~15s", flush=True)
     model_a, meta = whisperx.load_align_model(language_code=lang, device=device)
-    print(f"PROGRESS: Aligning {len(words)} words to {dur:.0f}s of audio…",
-          flush=True)
-    segs = [{"text": text, "start": 0.0, "end": dur}]
-    res = whisperx.align(segs, model_a, meta, audio, device,
+
+    # Locate the passage in the clip and align only that window.
+    print("PROGRESS: Finding where the passage begins in the audio…", flush=True)
+    asr = _asr_word_timeline(audio, model_a, meta, lang)
+    t0, t1 = _locate_passage_window(words, asr, dur)
+    i0, i1 = int(t0 * 16000), int(t1 * 16000)
+    clip = audio[i0:i1] if (t0 > 0.0 or t1 < dur) else audio
+    if t0 > 0.0 or t1 < dur:
+        print(f"PROGRESS: Passage runs {t0:.1f}s–{t1:.1f}s; skipping "
+              f"{t0:.0f}s of intro before it", flush=True)
+
+    print(f"PROGRESS: Aligning {len(words)} words to {(len(clip)/16000.0):.0f}s "
+          f"of audio…", flush=True)
+    segs = [{"text": text, "start": 0.0, "end": len(clip) / 16000.0}]
+    res = whisperx.align(segs, model_a, meta, clip, device,
                          return_char_alignments=False)
     aligned = []
     for seg in res["segments"]:
-        aligned.extend(seg.get("words", []))
+        for w in seg.get("words", []):
+            # Shift window-relative timestamps back onto the full-clip timeline.
+            if w.get("start") is not None:
+                w["start"] += t0
+                w["end"] += t0
+            aligned.append(w)
     return aligned, dur
 
 
