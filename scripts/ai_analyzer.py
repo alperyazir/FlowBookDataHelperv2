@@ -23,8 +23,8 @@ try:
     from proto_match import build_match_sections
     from proto_puzzle import build_puzzle_sections
     from proto_dragdrop import build_dragdrop_sections
-    from proto_snap import snap_page
-    from proto_inventory import page_drawings
+    from stage_fill import detect_fills
+    from proto_inventory import page_drawings, registration_unreliable
     HAVE_DIFF = True
 except ImportError:
     HAVE_DIFF = False
@@ -834,6 +834,15 @@ def run_analysis(config_path, settings_path):
     answered_pdf_path = find_answered_pdf(config_path)
     print(f"Answered PDF: {answered_pdf_path}", flush=True)
 
+    # Render cache for the raster-fusion fill pipeline. One-time per
+    # book (~1-2 min via poppler/gs), instant no-op when fresh; skipped
+    # gracefully when no fast rasterizer exists.
+    try:
+        from proto_prep import ensure_prepped
+        ensure_prepped(config_path)
+    except Exception as e:
+        print(f"prep hook failed: {e}", flush=True)
+
     # 3. Create temp directory
     print("PROGRESS:10%", flush=True)
     temp_dir = os.path.join(config_dir, "temp")
@@ -848,9 +857,11 @@ def run_analysis(config_path, settings_path):
     # 4b. Find and open original PDF (for high-quality section crops)
     original_pdf_path = find_original_pdf(config_path)
     original_doc = None
+    original_page_count = 0
     if original_pdf_path:
         original_doc = fitz.open(original_pdf_path)
-        print(f"Original PDF: {original_pdf_path} ({len(original_doc)} pages)", flush=True)
+        original_page_count = len(original_doc)
+        print(f"Original PDF: {original_pdf_path} ({original_page_count} pages)", flush=True)
     else:
         print("Original PDF not found — will crop from answered PDF", flush=True)
 
@@ -906,19 +917,28 @@ def run_analysis(config_path, settings_path):
         png_height = original_pix.height
         original_pix = None
 
-        # Get PDF page and compute scale factors
+        # Get PDF page. Load the original page here too (reused below for
+        # detection so the cdrawings cost is paid once) — but only when the
+        # original actually has this page, else a longer answered/key PDF
+        # would crash load_page mid-book.
         pdf_page = answered_doc.load_page(pdf_page_idx)
-        scale_x = png_width / pdf_page.rect.width
-        scale_y = png_height / pdf_page.rect.height
-
-        print(f"  PNG: {png_width}x{png_height}, PDF page: {pdf_page.rect.width:.0f}x{pdf_page.rect.height:.0f}, Scale: {scale_x:.3f}x{scale_y:.3f}", flush=True)
-
-        # Complexity guard up front: pathologically heavy pages (1M+
-        # drawings) are deferred to AI. Load the original page once here
-        # and reuse it for detection so the cdrawings cost is paid once.
         original_page = None
-        if HAVE_DIFF and original_doc is not None:
+        if HAVE_DIFF and original_doc is not None and pdf_page_idx < original_page_count:
             original_page = original_doc.load_page(pdf_page_idx)
+
+        # PNGs are rendered from the ORIGINAL PDF and the fill pipeline now
+        # returns coords in ORIGINAL page space, so px scale must use the
+        # original page rect; fall back to the answered rect only when there
+        # is no original page (rects are equal in the common case).
+        scale_ref = original_page if original_page is not None else pdf_page
+        scale_x = png_width / scale_ref.rect.width
+        scale_y = png_height / scale_ref.rect.height
+
+        print(f"  PNG: {png_width}x{png_height}, PDF page: {scale_ref.rect.width:.0f}x{scale_ref.rect.height:.0f}, Scale: {scale_x:.3f}x{scale_y:.3f}", flush=True)
+
+        # Complexity guard: pathologically heavy pages (1M+ drawings) are
+        # deferred to AI.
+        if original_page is not None:
             try:
                 n_draw = len(page_drawings(original_page))
             except Exception:
@@ -972,19 +992,28 @@ def run_analysis(config_path, settings_path):
                     print(f"  {name} detection FAILED on page {page_num}: {e}",
                           flush=True)
                     return default
+            # Page-level registration verdict: a re-laid-out page's diff is
+            # all phantom, so EVERY deterministic diff detector defers to AI
+            # (audio/video are icon-based, not diff-based — they still run).
+            unreliable = safe("registration", lambda: registration_unreliable(
+                original_page, pdf_page), False)
+            if unreliable:
+                print(f"  page {page_num}: registration unreliable — "
+                      f"diff detectors deferred to AI", flush=True)
             # Dragdrop activities AND fills both carry the pool-blank
             # answers: the page view shows them as fills, the activity
             # window shows them as drop zones (Alper, 2026-06-11).
-            dd_cfg, _dd_zones = safe("dragdrop", lambda: build_dragdrop_sections(
-                original_page, pdf_page, page_num, images_dir,
-                section_path_prefix, scale_x, scale_y, start_idx=1,
-                group_mode=(page_num in dd_group_pages)), ([], []))
+            dd_cfg, _dd_zones = ([], []) if unreliable else safe(
+                "dragdrop", lambda: build_dragdrop_sections(
+                    original_page, pdf_page, page_num, images_dir,
+                    section_path_prefix, scale_x, scale_y, start_idx=1,
+                    group_mode=(page_num in dd_group_pages)), ([], []))
             fill_cfg = []
-            if page_num not in skip_fill_pages:
-                fill_cfg, fill_stats = safe("fill", lambda: snap_page(
-                    original_page, pdf_page, scale_x, scale_y), ([], {}))
-                if fill_stats:
-                    print(f"  Fill snap: {fill_stats}", flush=True)
+            if not unreliable and page_num not in skip_fill_pages:
+                # New fill pipeline: per-page registration + raster-fusion
+                # phantom guards + echo/prose rescue + checkmark recovery.
+                fill_cfg = safe("fill", lambda: detect_fills(
+                    original_page, pdf_page, scale_x, scale_y), [])
             # File-anchored audio/video FALLBACK: with no cropped icon we
             # still place a (needs_review) button per media file so Analyze
             # never loses media — even "blind", every audio/video page gets a
@@ -999,25 +1028,38 @@ def run_analysis(config_path, settings_path):
             video_dirname = next((d for d in ("video", "videos")
                                   if os.path.isdir(os.path.join(config_dir, d))),
                                  "videos")
-            video = safe("video", lambda: build_video_section(
-                original_page, scale_x, scale_y, next_video_no,
-                videos_dir=os.path.join(config_dir, video_dirname),
-                video_prefix=f"{book_prefix}/{video_dirname}/"), None)
+            videos_dir = os.path.join(config_dir, video_dirname)
+            # No video assets in the book -> no video buttons. "Watch ..."
+            # instruction lines alone otherwise plant empty buttons in
+            # video-less books; re-run Analyze after adding the files.
+            has_videos = os.path.isdir(videos_dir) and safe(
+                "video-scan",
+                lambda: any(f.lower().endswith((".mp4", ".m4v", ".mov", ".webm"))
+                            for f in os.listdir(videos_dir)), False)
+            video = None
+            if has_videos:
+                video = safe("video", lambda: build_video_section(
+                    original_page, scale_x, scale_y, next_video_no,
+                    videos_dir=videos_dir,
+                    video_prefix=f"{book_prefix}/{video_dirname}/"), None)
             if video is not None:
                 audio_cfg = audio_cfg + [video]
                 next_video_no += 1
-            circle_cfg = safe("circle", lambda: build_circle_sections(
-                original_page, pdf_page, page_num, images_dir,
-                section_path_prefix, scale_x, scale_y,
-                start_idx=len(dd_cfg) + 1), [])
-            markx_cfg = safe("markwithx", lambda: build_markwithx_sections(
-                original_page, pdf_page, page_num, images_dir,
-                section_path_prefix, scale_x, scale_y,
-                start_idx=len(dd_cfg) + len(circle_cfg) + 1), [])
+            circle_cfg = [] if unreliable else safe(
+                "circle", lambda: build_circle_sections(
+                    original_page, pdf_page, page_num, images_dir,
+                    section_path_prefix, scale_x, scale_y,
+                    start_idx=len(dd_cfg) + 1), [])
+            markx_cfg = [] if unreliable else safe(
+                "markwithx", lambda: build_markwithx_sections(
+                    original_page, pdf_page, page_num, images_dir,
+                    section_path_prefix, scale_x, scale_y,
+                    start_idx=len(dd_cfg) + len(circle_cfg) + 1), [])
             if markx_cfg:
                 print(f"  MarkWithX: {len(markx_cfg)}", flush=True)
-            puzzle_cfg = safe("puzzle", lambda: build_puzzle_sections(
-                original_page, pdf_page, page_num, scale_x, scale_y), [])
+            puzzle_cfg = [] if unreliable else safe(
+                "puzzle", lambda: build_puzzle_sections(
+                    original_page, pdf_page, page_num, scale_x, scale_y), [])
             if puzzle_cfg:
                 print(f"  PuzzleFindWords: {len(puzzle_cfg)} "
                       f"({len(puzzle_cfg[0]['activity']['words'])} words)",

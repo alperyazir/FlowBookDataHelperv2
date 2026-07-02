@@ -144,14 +144,26 @@ def printed_candidates(page, grid_bbox):
     return cands           # (display, search_key, y, x)
 
 
-def marked_words(po, pa, grid):
+def marked_words(po, pa, grid, grid_page):
     """Letter sequences under elongated key drawings over the grid —
-    the rings the key drew around found words."""
+    the rings the key drew around found words.
+
+    diff_answer_drawings bboxes are mapped into ORIGINAL page space by the
+    registration layer. When the grid letters are read from the ANSWERED
+    page (key filled an empty original grid), lift the rings into answered
+    space by the page offset, or on a shifted book the ±2pt letter hit test
+    misses (Rise Up: constant -8.5pt) and words garble."""
     gx0, gy0, gx1, gy1 = grid["bbox"]
     letters = [l for r in grid["rows"] for l in r]
+    dx = dy = 0.0
+    if grid_page is pa:
+        from proto_inventory import page_offset
+        off = page_offset(po, pa)
+        dx, dy = off["dx"], off["dy"]
     out = []
     for d in diff_answer_drawings(po, pa):
         x0, y0, x1, y1 = d["bbox"]
+        x0 += dx; x1 += dx; y0 += dy; y1 += dy
         if x1 < gx0 - 10 or x0 > gx1 + 10 or y1 < gy0 - 10 or y0 > gy1 + 10:
             continue
         w, h = x1 - x0, y1 - y0
@@ -189,7 +201,7 @@ def detect_puzzle(po, pa):
             # vs "RECYCLE") only when both match; keep both entries —
             # the human list does too.
             found.append(disp)
-    for w in marked_words(po, pa, grid):
+    for w in marked_words(po, pa, grid, src):
         if w not in seen and word_in_grid(mat, w):
             seen.add(w)
             found.append(w)

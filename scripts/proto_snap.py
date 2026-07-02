@@ -37,6 +37,19 @@ try:
     HAVE_CV = True
 except ImportError:
     HAVE_CV = False
+try:
+    # Optional raster-diff channel (needs OpenCV + the proto_prep render
+    # cache). Provides the strongest phantom test we have: a text-diff
+    # "answer" whose bbox contains no changed pixels on the aligned
+    # render pair is invisible ink — a re-typeset/span-splitting echo,
+    # never a real answer. Real typed answers measure >=10% changed
+    # pixels; echoes measure ~0 (calibrated on Amazing + Rise Up).
+    from proto_raster import support_fraction
+    HAVE_RASTER_DIFF = True
+except ImportError:
+    HAVE_RASTER_DIFF = False
+
+RASTER_SUPPORT_MIN = 0.02
 
 # Snap tolerances (PDF points)
 DY_MAX = 10.0                 # blank baseline below answer bottom
@@ -210,7 +223,82 @@ def separate_clickables(clickables):
     return clickables
 
 
-def snap_page(po, pa, sx, sy, skip_rects=None, use_cv=True):
+_WS_NORM = re.compile(r"\s+")
+
+
+def _norm_text(t):
+    return _WS_NORM.sub("", t).lower()
+
+
+# Re-typeset echo detection. Some publishers re-export the answered PDF with
+# the whole page re-typeset at a constant horizontal offset (Rise Up: dx is
+# constant, dy reflows per block). The position diff then flags every printed
+# span as a "new" answer — flooding content pages with phantom fills, even
+# ones that snap to a box (e.g. re-typeset slot numbers "1".."12"). A real
+# answer sits at its own position and does NOT match the page's dominant
+# offset. So: find the dominant horizontal displacement (dx) among diff spans
+# whose text also exists in the original, and drop the spans that match it.
+RETYPE_MIN_VOTES = 4       # dominant dx must have at least this many spans
+RETYPE_DX_TOL = 3.0        # ... within this many points to count as the echo
+RETYPE_RESCUE_SUPPORT = 0.03   # raster support above this = real answer
+
+
+def _retypeset_echo_ids(po, pa, answers):
+    orig = get_spans(po)
+    by_text = {}
+    for s in orig:
+        by_text.setdefault(_norm_text(s["text"]), []).append(s["bbox"])
+    cands = []                              # (answer, dx, dy) vs nearest twin
+    for a in answers:
+        if a.get("is_checkmark"):
+            continue                        # a tick is never printed text
+        k = _norm_text(a["text"])
+        if not k:
+            continue
+        twins = by_text.get(k)
+        if not twins:
+            continue
+        ax, ay = a["bbox"][0], a["bbox"][1]
+        b = min(twins, key=lambda c: (ax - c[0]) ** 2 + (ay - c[1]) ** 2)
+        cands.append((a, ax - b[0], ay - b[1]))
+    if len(cands) < RETYPE_MIN_VOTES:
+        return set()
+    from collections import Counter
+    dom_dx, votes = Counter(round(dx) for _, dx, _ in cands).most_common(1)[0]
+    if votes < RETYPE_MIN_VOTES:
+        return set()
+    echo = {id(a): a for a, dx, _ in cands if abs(dx - dom_dx) <= RETYPE_DX_TOL}
+    # The dominant-dx vote also captures REAL answers written in a fixed
+    # column whose texts are printed on the page (option letters copied
+    # into boxes: every 'a'..'k' sits at a constant dx from its label —
+    # Amazing p14/p25). Only the raster channel can tell them apart: on a
+    # coherently registered page a true echo renders identically (no ink at
+    # its position), a real answer leaves ink.
+    #
+    # Fail-safe: DROP an echo only when the raster channel POSITIVELY
+    # confirms it as a phantom (coherent registration + support below the
+    # ink threshold). Without that proof — no render cache on this host, or
+    # a page we can't register confidently — rescue the span. Deleting a
+    # real fixed-column answer is unrecoverable; keeping a phantom is not.
+    if not echo:
+        return set()
+    from proto_inventory import page_offset
+    off = page_offset(po, pa)
+    coherent = (off["method"] == "text" and off["conf"] >= 0.9) or \
+               (off["method"] == "raster" and off["conf"] >= 0.7)
+    for aid, a in list(echo.items()):
+        confirmed_phantom = False
+        if HAVE_RASTER_DIFF and coherent:
+            sup = support_fraction(po, pa, a["bbox"])
+            if sup is not None and sup < RETYPE_RESCUE_SUPPORT:
+                confirmed_phantom = True
+        if not confirmed_phantom:
+            del echo[aid]
+    return set(echo)
+
+
+def snap_page(po, pa, sx, sy, skip_rects=None, use_cv=True,
+              drop_offset_echoes=False):
     """Full fill pipeline for one page: diff -> snap -> optional CV
     fallback -> editor-format fill sections (PNG-pixel coords).
 
@@ -220,10 +308,26 @@ def snap_page(po, pa, sx, sy, skip_rects=None, use_cv=True):
     no blank/tick box. On free-label artwork (label-the-picture pages)
     the flood-fill grabs big illustration regions and merges neighbours
     into one block — the re-check path passes use_cv=False so unmatched
-    answers keep their tight text bbox instead."""
+    answers keep their tight text bbox instead.
+    drop_offset_echoes: remove re-typeset echoes (spans matching the page's
+    dominant offset) before snapping — kills phantom fills on re-exported
+    content pages regardless of whether they snap to a box."""
     answers = diff_answer_spans(po, pa)
     if not answers:
         return [], {}
+    # Registration-reliability guard: the render cache exists but the
+    # pages neither share text anchors nor correlate as images — the
+    # answered page is re-laid-out (front matter, re-arranged art).
+    # Every "diff" on such a page is noise; defer to the AI layer.
+    from proto_inventory import registration_unreliable
+    if registration_unreliable(po, pa):
+        return [], {"registration_unreliable": len(answers)}
+    if drop_offset_echoes:
+        echo_ids = _retypeset_echo_ids(po, pa, answers)
+        if echo_ids:
+            answers = [a for a in answers if id(a) not in echo_ids]
+            if not answers:
+                return [], {"retypeset_echoes": len(echo_ids)}
     # Diff-reliability guard. On pages where the student book stores its
     # printed text as outlines/raster (Trace pages, fully illustrated
     # pages) the original has NO text layer, so the answered page's
@@ -304,10 +408,24 @@ def snap_page(po, pa, sx, sy, skip_rects=None, use_cv=True):
         return (c["snap"] == "none" and t in page_text
                 and bool(SHORT_PHANTOM_RE.match(t)))
     clickables = [c for c in clickables if not phantom(c)]
+    # Raster fusion guard: no ink on the aligned render pair = phantom,
+    # snapped or not. Skipped silently when the render cache is absent.
+    dropped_raster = 0
+    if HAVE_RASTER_DIFF:
+        kept = []
+        for c in clickables:
+            sup = support_fraction(po, pa, c["answer"]["bbox"])
+            if sup is not None and sup < RASTER_SUPPORT_MIN:
+                dropped_raster += 1
+            else:
+                kept.append(c)
+        clickables = kept
     separate_clickables(clickables)
     stats = {}
     for c in clickables:
         stats[c["snap"]] = stats.get(c["snap"], 0) + 1
+    if dropped_raster:
+        stats["raster_phantom"] = dropped_raster
     return sections_from_clickables(clickables, sx, sy), stats
 
 

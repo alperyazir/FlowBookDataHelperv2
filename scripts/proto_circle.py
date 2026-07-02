@@ -954,12 +954,15 @@ def redetect(raw_dir, page_no, rect_px, png_size, out_path, kind="circle"):
     # page-PNG pixels (fills overlay the page directly). The editor deletes
     # the existing fills in the band and inserts these.
     if kind == "fill":
-        from proto_snap import snap_page
+        # Use the SAME pipeline as Analyze (detect_fills): registration +
+        # echo/phantom guards + prose/echo rescue + graphic-checkmark
+        # recovery. The bare snap_page here used to re-insert exactly the
+        # phantoms Analyze had filtered (and lose recovered ✓ marks) when
+        # the user adjusted a band and hit re-check.
+        from stage_fill import detect_fills
         snap_sx = png_size[0] / po.rect.width
         snap_sy = png_size[1] / po.rect.height
-        # use_cv=False: keep tight text bboxes for free-label answers
-        # instead of the CV fallback that grabs/merges artwork regions.
-        secs, _stats = snap_page(po, pa, snap_sx, snap_sy, use_cv=False)
+        secs = detect_fills(po, pa, snap_sx, snap_sy)
         out = []
         for sec in secs:
             for a in sec.get("answer", []):
@@ -968,7 +971,8 @@ def redetect(raw_dir, page_no, rect_px, png_size, out_path, kind="circle"):
                 cy = c["y"] + c["h"] / 2.0
                 if x <= cx <= x + w and y <= cy <= y + h:
                     out.append({"coords": c, "text": a.get("text", ""),
-                                "isTextBold": bool(a.get("is_text_bold", True))})
+                                "isTextBold": bool(a.get("is_text_bold", True)),
+                                "needs_review": bool(a.get("needs_review", False))})
         print(json.dumps({"fill": True, "answer": out}, ensure_ascii=False))
         orig.close(); ans.close()
         return 0

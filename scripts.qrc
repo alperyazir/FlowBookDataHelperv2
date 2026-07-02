@@ -2,6 +2,7 @@
     <qresource prefix="/">
         <file>scripts/_bootstrap.py</file>
         <file>scripts/ai_analyzer.py</file>
+        <file>scripts/stage_fill.py</file>
         <file>scripts/align_audio.py</file>
         <file>scripts/compress_pdf.py</file>
         <file>scripts/crop_section.py</file>
@@ -17,7 +18,9 @@
         <file>scripts/proto_icon_match.py</file>
         <file>scripts/proto_inventory.py</file>
         <file>scripts/proto_match.py</file>
+        <file>scripts/proto_prep.py</file>
         <file>scripts/proto_puzzle.py</file>
+        <file>scripts/proto_raster.py</file>
         <file>scripts/proto_snap.py</file>
         <file>scripts/smartdatahelper.py</file>
     </qresource>
