@@ -2660,6 +2660,11 @@ Item {
             // Editor layout: LEFT = matchWord (the items, word + optional
             // picture); RIGHT = sentences. Entries may carry an image_path.
             if (res.entries && String(act.type || "") === "matchTheWords") {
+                if (res.entries.length === 0) {
+                    // A mis-crop (empty rect) must not wipe the existing side.
+                    print("Match column (" + res.side + "): nothing found, kept as is");
+                    return;
+                }
                 var toRel = function(p) {
                     if (!p) return "";
                     return (p.indexOf(appPath) === 0)

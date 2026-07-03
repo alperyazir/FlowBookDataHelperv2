@@ -484,9 +484,14 @@ def order_answers(answers, page_width_px=0):
             return (b[0] + b[2]) / 2.0
         straddles = any(b[0] < mid - margin and b[2] > mid + margin
                         for b in boxes)
-        has_left = any(center(b) < mid and b[2] <= mid + margin for b in boxes)
-        has_right = any(center(b) > mid and b[0] >= mid - margin for b in boxes)
-        if has_left and has_right and not straddles:
+        # Clean two-column only when the midline is an EMPTY gutter: every box
+        # sits clearly left or clearly right, none straddling or centered near
+        # the middle. A box centered near mid means a 3-column grid or jittery
+        # single column, where plain (y,x) row-major is the correct order.
+        near_mid = any(mid - margin <= center(b) <= mid + margin for b in boxes)
+        has_left = any(center(b) < mid - margin for b in boxes)
+        has_right = any(center(b) > mid + margin for b in boxes)
+        if has_left and has_right and not straddles and not near_mid:
             order = sorted(range(len(answers)),
                            key=lambda i: (0 if center(boxes[i]) < mid else 1,
                                           boxes[i][1], boxes[i][0]))
