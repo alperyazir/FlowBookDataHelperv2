@@ -11,6 +11,7 @@
 #include <QQmlContext>
 
 #include <QHostInfo>
+#include <QStandardPaths>
 
 bool BookSet::initialize(const QString &config_path)
 {
@@ -451,6 +452,9 @@ QVector<Subtitles *> BookSet::getSubtitles(QString videoPath)
 
 ConfigParser::ConfigParser(QObject *parent) : QObject(parent) {
     _hostname = QHostInfo::localHostName();
+    // Restore the last known lock state so a server-locked install stays
+    // locked across restarts, even offline, until a heartbeat frees it.
+    _is_locked = readEncryptedJsonFromFile()["locked"].toBool(false);
     refreshRecentProjects();
 }
 
@@ -519,6 +523,16 @@ QString ConfigParser::getInformation(BookSet *bset)
     QString res = jsonDoc.toJson(QJsonDocument::Compact);
     return res;
 }
+// Stable per-user location for the encrypted identity/lock file, so a locked
+// state survives restarts regardless of the launch working directory (the
+// bare "fbinf" relative path did not).
+static QString fbinfPath() {
+    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (!dir.isEmpty())
+        QDir().mkpath(dir);
+    return (dir.isEmpty() ? QString("fbinf") : dir + "/fbinf");
+}
+
 void ConfigParser::saveEncryptedJsonToFile(const QString& jsonString) {
     QByteArray byteArray = jsonString.toUtf8();
 
@@ -527,7 +541,7 @@ void ConfigParser::saveEncryptedJsonToFile(const QString& jsonString) {
         byteArray[i] = byteArray[i] ^ key[i % key.size()];
     }
 
-    QFile file("fbinf");
+    QFile file(fbinfPath());
     if (file.open(QIODevice::WriteOnly)) {
         file.write(byteArray);
         file.close();
@@ -579,7 +593,7 @@ QString ConfigParser::decryptData(const QByteArray& byteArray, const QByteArray&
 }
 
 QJsonObject ConfigParser::readEncryptedJsonFromFile() {
-    QFile file("fbinf");
+    QFile file(fbinfPath());
     if (file.open(QIODevice::ReadOnly)) {
         QByteArray byteArray = file.readAll();
         file.close();
@@ -596,4 +610,16 @@ QJsonObject ConfigParser::readEncryptedJsonFromFile() {
         qWarning("Dosya açılamadı.");
     }
     return QJsonObject();
+}
+
+void ConfigParser::updateLockStatus(bool locked) {
+    _is_locked = locked;
+    // Merge into the existing record so hostname/first_run_date survive.
+    QJsonObject j = readEncryptedJsonFromFile();
+    j["locked"] = locked;
+    if (!j.contains("hostname"))
+        j["hostname"] = _hostname;
+    QJsonDocument doc(j);
+    saveEncryptedJsonToFile(QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
+    emit isLockedChanged();
 }

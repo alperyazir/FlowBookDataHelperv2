@@ -3262,6 +3262,10 @@ struct ConfigParser : public QObject {
     Q_PROPERTY(QString publisherName READ publisherName WRITE setPublisherName NOTIFY publisherNameChanged)
     Q_PROPERTY(QString bookTitle READ bookTitle WRITE setBookTitle NOTIFY bookTitleChanged)
     Q_PROPERTY(QString firstRunDate READ firstRunDate WRITE setFirstRunDate NOTIFY firstRunDateChanged)
+    // Remote kill switch: set by the /api/helpers heartbeat response and
+    // persisted, so a server can lock this editor install. READ-only from QML;
+    // change it via updateLockStatus().
+    Q_PROPERTY(bool isLocked READ isLocked NOTIFY isLockedChanged)
     Q_PROPERTY(QStringList recentProject READ recentProject WRITE setRecentProject NOTIFY recentProjectChanged FINAL)
 
 
@@ -3335,6 +3339,9 @@ public:
     QJsonObject readEncryptedJsonFromFile();
     QString decryptData(const QByteArray &byteArray, const QByteArray &key);
     void saveEncryptedJsonToFile(const QString &jsonString);
+    // Apply a lock state from the heartbeat: persist it and notify QML. The
+    // server is authoritative — locked:true covers the app, locked:false frees it.
+    Q_INVOKABLE void updateLockStatus(bool locked);
 
 
 private:
@@ -3342,6 +3349,7 @@ private:
     QString _publisher_name;
     QString _book_title;
     QString _first_run_date;
+    bool _is_locked = false;
     QStringList _recentProject;
     QString _currentProjectPath;
 
@@ -3377,6 +3385,8 @@ private:
         }
     }
 
+    bool isLocked() const { return _is_locked; }
+
 public:
     void setEngine(QQmlApplicationEngine *engine) { m_engine = engine; }
 
@@ -3392,6 +3402,7 @@ signals:
     void publisherNameChanged();
     void bookTitleChanged();
     void firstRunDateChanged();
+    void isLockedChanged();
 
     void recentProjectChanged();
 

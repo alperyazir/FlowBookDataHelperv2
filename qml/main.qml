@@ -1133,11 +1133,34 @@ ApplicationWindow {
             var jsonData = {
                 "type": "helper",
                 "hostname": config.hostname,
+                "os_info": Qt.platform.os,
+                "version": Qt.application.version,
+                "locked": config.isLocked,
                 "active_book": openProject.currentProject,
                 "active": activityTracker.active,
                 "open_seconds": activityTracker.openSeconds,
                 "idle_seconds": activityTracker.idleSeconds,
                 "active_seconds": activityTracker.openSeconds - activityTracker.idleSeconds
+            };
+
+            // Remote kill switch: the server answers with this host's lock
+            // state; apply it. A failed/non-200 request changes nothing
+            // (fail-open), so the last state simply sticks.
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        if (res.hostname === undefined || res.hostname === config.hostname) {
+                            if (res.locked !== undefined) {
+                                var lock = (res.locked === true || res.locked === 1
+                                            || res.locked === "1" || res.locked === "true");
+                                config.updateLockStatus(lock);
+                            }
+                        }
+                    } catch (e) {
+                        console.log("heartbeat: bad response", e);
+                    }
+                }
             };
 
             xhr.open("POST", url);
@@ -1162,5 +1185,14 @@ ApplicationWindow {
                 config.bookSets[0].saveToJson(true);
             }
         }
+    }
+
+    // Remote lock overlay — declared LAST and given a very high z so it paints
+    // on top of the whole UI and swallows input. Its visibility strictly
+    // follows the server-driven config.isLocked.
+    LockScreen {
+        anchors.fill: parent
+        z: 100000
+        visible: config.isLocked
     }
 }

@@ -1,6 +1,7 @@
 <RCC>
     <qresource prefix="/">
         <file>qml/main.qml</file>
+        <file>qml/LockScreen.qml</file>
         <file>qml/Content.qml</file>
         <file>qml/FlowToolBar.qml</file>
         <file>qml/PageDetails.qml</file>
