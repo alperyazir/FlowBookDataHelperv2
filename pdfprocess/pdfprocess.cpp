@@ -1556,7 +1556,8 @@ void PdfProcess::redetectCircleOptions(const QString &rawDir, int pageNumber,
 
     // matchTheWords has its own detector script; circle/markwithx
     // share proto_circle's --redetect (which takes a kind argument).
-    QString scriptPath = scriptsDir() + (kind == "match"
+    // "matchleft"/"matchright" are the single-column match crops (l/r keys).
+    QString scriptPath = scriptsDir() + (kind.startsWith("match")
                                    ? "/proto_match.py"
                                    : "/proto_circle.py");
 
@@ -1571,8 +1572,12 @@ void PdfProcess::redetectCircleOptions(const QString &rawDir, int pageNumber,
               << QString::number(pngWidth, 'f', 2)
               << QString::number(pngHeight, 'f', 2)
               << outputPath;
-    if (kind != "match")
-        arguments << kind;
+    if (!kind.startsWith("match"))
+        arguments << kind;                 // proto_circle: circle/markwithx
+    else if (kind == "matchleft")
+        arguments << "left";               // proto_match single-column mode
+    else if (kind == "matchright")
+        arguments << "right";
 
     qDebug() << "REDETECT SCRIPT ARGS:" << arguments;
     process->start(pythonExecutable(), arguments);

@@ -108,6 +108,10 @@ Rectangle {
         pageDetails.startCropMode(targetObj, pathProperty);
     }
 
+    function startMatchColumnCrop(targetObj, side) {
+        pageDetails.startMatchColumnCrop(targetObj, side);
+    }
+
     function startRedetectMode(targetObj) {
         pageDetails.startRedetectMode(targetObj);
     }

@@ -37,8 +37,11 @@ from proto_inventory import (diff_answer_drawings, diff_answer_spans,
 from proto_circle import find_exercise_bands, find_pdf_pair, place_button
 
 WORD_RE = re.compile(r"^(\d{1,2})[.)]?\s+\S")
-ITEM_RE = re.compile(r"^([a-h])[.)](\s|$)")
-BARE_LETTER_RE = re.compile(r"^[a-h]\.?$")
+# Item labels can be ANY letter, upper or lower, and non-sequential: some
+# books spell a secret phrase with them (D, E, G, L, ...), so [a-h] is far
+# too narrow. Keys are normalized to lowercase everywhere below.
+ITEM_RE = re.compile(r"^([A-Za-z])[.)](\s|$)")
+BARE_LETTER_RE = re.compile(r"^[A-Za-z]\.?$")
 MIN_WORDS = 3
 MIN_PAIRS = 2
 IMG_MIN_PT = 24.0          # smaller pictures are bullets/decor
@@ -83,9 +86,15 @@ def _rows(page, rect):
     return out
 
 
-def detect_match(po, pa, rect):
+def detect_match(po, pa, rect, lenient=False):
     """Returns {"match_words": [{word, bbox}], "items": [{letter,
-    sentence, bbox, image (bbox|None), word}]} or None."""
+    sentence, bbox, image (bbox|None), word}]} or None.
+
+    lenient=True (used by the editor's explicit crop) returns the extracted
+    number/letter lists even when the answer-key pairing can't be read, so a
+    user who deliberately framed a match still gets its two sides populated;
+    the strict path (auto-detection) keeps requiring MIN_PAIRS to avoid
+    false positives."""
     rows = _rows(po, rect)
     words, items = [], []
     for r in rows:
@@ -103,7 +112,7 @@ def detect_match(po, pa, rect):
         if m and ".." not in r["text"]:
             # An answer-slot column may merge into the row: "a. long 1."
             sent = re.sub(r"\s+\d{1,2}[.)]?$", "", r["text"]).strip()
-            items.append({"letter": m.group(1), "sentence": sent,
+            items.append({"letter": m.group(1).lower(), "sentence": sent,
                           "bbox": r["bbox"], "image": None, "word": ""})
 
     # Picture-label variant: items are LONE letters ("a", "b") next to
@@ -162,8 +171,8 @@ def detect_match(po, pa, rect):
         t = w[4].strip().rstrip(".")
         if re.fullmatch(r"\d{1,2}", t):
             slot_nums.append((t, list(w[:4])))
-        elif re.fullmatch(r"[a-h]", t):
-            slot_letters.append((t, list(w[:4])))
+        elif re.fullmatch(r"[A-Za-z]", t):
+            slot_letters.append((t.lower(), list(w[:4])))
 
     def left_slot(b, slots):
         """The printed slot token sitting just left on the same row."""
@@ -199,7 +208,7 @@ def detect_match(po, pa, rect):
                 it = best if bd < 200 else None
             if it is not None and not it["word"]:
                 it["word"] = by_no[t]["word"]
-        elif re.fullmatch(r"[a-h]", t.lower()):
+        elif re.fullmatch(r"[A-Za-z]", t):
             # written LETTER: pairs the slot's word number with that
             # item ("3. (a)" -> word 3 matches item a).
             sl = left_slot(b, slot_nums)
@@ -262,7 +271,7 @@ def detect_match(po, pa, rect):
             it["word"] = wd["word"]
             used_words.add(id(wd))
 
-    if sum(1 for it in items if it["word"]) < MIN_PAIRS:
+    if not lenient and sum(1 for it in items if it["word"]) < MIN_PAIRS:
         return None
     return {"match_words": words, "items": items}
 
@@ -344,7 +353,7 @@ def redetect_match(raw_dir, page_no, rect_px, png_size, out_base):
     sy = po.rect.height / png_size[1]
     x, y, w, h = rect_px
     rect = (x * sx, y * sy, (x + w) * sx, (y + h) * sy)
-    res = detect_match(po, pa, rect)
+    res = detect_match(po, pa, rect, lenient=True)
     if not res:
         print(json.dumps({"match_words": [], "sentences": []}))
         return 0
@@ -355,16 +364,68 @@ def redetect_match(raw_dir, page_no, rect_px, png_size, out_base):
     return 0
 
 
+def redetect_match_column(raw_dir, page_no, rect_px, png_size, side, out_base):
+    """Single-column crop (the editor's l/r keys): the user framed exactly
+    one column and told us which side it is, so just return what's in the
+    rect — printed rows (labels kept) AND pictures — in reading order. No
+    number/letter classification and no pairing (that guesswork is what the
+    combined crop got wrong on scattered/duplicate labels). Picture items get
+    a saved crop; entries are {"text", "image_path"?}."""
+    import json
+    original_path, answered_path = find_pdf_pair(raw_dir)
+    if not original_path or not answered_path:
+        print(json.dumps({"error": "pdf pair not found in raw dir"}))
+        return 1
+    orig, ans = fitz.open(original_path), fitz.open(answered_path)
+    po = orig[page_no - 1]
+    sx = po.rect.width / png_size[0]
+    sy = po.rect.height / png_size[1]
+    x, y, w, h = rect_px
+    rx0, ry0, rx1, ry1 = (x * sx, y * sy, (x + w) * sx, (y + h) * sy)
+    # Text rows and pictures under the rect, merged top-to-bottom by y.
+    parts = [(r["bbox"][1], "text", r["text"])
+             for r in _rows(po, (rx0, ry0, rx1, ry1)) if r["text"].strip()]
+    for img in find_image_rects(po):
+        b = img["bbox"]
+        if b[2] - b[0] < IMG_MIN_PT or b[3] - b[1] < IMG_MIN_PT:
+            continue
+        cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+        if rx0 <= cx <= rx1 and ry0 <= cy <= ry1:
+            parts.append((b[1], "img", list(b)))
+    parts.sort(key=lambda p: p[0])
+    out_dir = os.path.dirname(out_base) or "."
+    base = os.path.splitext(os.path.basename(out_base))[0]
+    entries, k = [], 0
+    for _, typ, val in parts:
+        if typ == "text":
+            entries.append({"text": val})
+        else:
+            k += 1
+            r = fitz.Rect(val[0] - 2, val[1] - 2, val[2] + 2, val[3] + 2)
+            pix = po.get_pixmap(matrix=fitz.Matrix(CROP_SCALE, CROP_SCALE),
+                                clip=r)
+            p = os.path.join(out_dir, f"{base}_col{k}.jpg")
+            pix.save(p)
+            entries.append({"text": "", "image_path": p})
+    print(json.dumps({"side": side, "entries": entries}, ensure_ascii=False))
+    orig.close()
+    ans.close()
+    return 0
+
+
 def main():
     if len(sys.argv) >= 2 and sys.argv[1] == "--redetect":
         a = sys.argv[2:]
-        if len(a) != 9:
+        if len(a) not in (9, 10):
             print("usage: --redetect <raw_dir> <page> <x> <y> <w> <h> "
-                  "<png_w> <png_h> <out_base>")
+                  "<png_w> <png_h> <out_base> [left|right]")
             sys.exit(1)
-        sys.exit(redetect_match(a[0], int(a[1]),
-                                tuple(float(v) for v in a[2:6]),
-                                (float(a[6]), float(a[7])), a[8]))
+        rect = tuple(float(v) for v in a[2:6])
+        png = (float(a[6]), float(a[7]))
+        if len(a) == 10 and a[9] in ("left", "right"):
+            sys.exit(redetect_match_column(a[0], int(a[1]), rect, png,
+                                           a[9], a[8]))
+        sys.exit(redetect_match(a[0], int(a[1]), rect, png, a[8]))
     print(__doc__)
 
 

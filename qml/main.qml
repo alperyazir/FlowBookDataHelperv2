@@ -239,10 +239,21 @@ ApplicationWindow {
         enabled: awaitingActivityKey
         onActivated: triggerActivityCombo("markwithx")
     }
+    // `l`: completes the a→l "add coloring" combo, OR — when a matchTheWords
+    // activity is open — crops its LEFT column (the items: word + optional
+    // picture) into matchWord.
     Shortcut {
         sequence: "l"
         enabled: awaitingActivityKey
-        onActivated: triggerActivityCombo("coloring")
+                 || (sideBar.activityVisible && !typingInField
+                     && sideBar.activityModelData
+                     && String(sideBar.activityModelData.type || "") === "matchTheWords")
+        onActivated: {
+            if (awaitingActivityKey)
+                triggerActivityCombo("coloring");
+            else
+                content.startMatchColumnCrop(sideBar.activityModelData, "left");
+        }
     }
 
     // `h`: pick the header text of the open activity (read the instruction
@@ -253,11 +264,18 @@ ApplicationWindow {
         onActivated: content.startHeaderPickMode(sideBar.activityModelData)
     }
 
-    // `r`: toggle the fill-select (rubber-band) tool on the page.
+    // `r`: for a matchTheWords activity, crop its RIGHT column (the
+    // sentences); otherwise toggle the fill-select (rubber-band) tool.
     Shortcut {
         sequence: "r"
         enabled: !typingInField && !awaitingActivityKey && !activityDialog.visible
-        onActivated: content.pageDetails.fillSelectMode = !content.pageDetails.fillSelectMode
+        onActivated: {
+            if (sideBar.activityVisible && sideBar.activityModelData
+                    && String(sideBar.activityModelData.type || "") === "matchTheWords")
+                content.startMatchColumnCrop(sideBar.activityModelData, "right");
+            else
+                content.pageDetails.fillSelectMode = !content.pageDetails.fillSelectMode;
+        }
     }
 
     // Left arrow: align the selected fills to the leftmost one.
