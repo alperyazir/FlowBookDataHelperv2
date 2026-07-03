@@ -97,6 +97,97 @@ def normalize_sections(raw_sections):
     return [normalize_section(s) for s in raw_sections if s]
 
 
+def section_top_y(section):
+    """Reading-order sort key (top-y, then left-x) for a config section,
+    in the config's image-pixel space.
+
+    Detectors emit sections grouped by TYPE (all fills, then all audio,
+    then dragdrop, ...), but a reader walks a page top-to-bottom, so the
+    page's sections must be ordered by where each activity actually sits.
+    Every section type exposes a page-space anchor:
+      - circle / markwithx / dragdrop / puzzle: `activity.coords` (the
+        header/button that marks where the activity starts)
+      - audio / video: top-level `coords`
+      - fill: no header, so the topmost answer blank
+    (dragdrop answer coords are crop-local and must NOT be used here.)"""
+    act = section.get("activity")
+    if isinstance(act, dict):
+        c = act.get("coords")
+        if isinstance(c, dict) and ("x" in c or "y" in c):
+            return (c.get("y", 0), c.get("x", 0))
+    c = section.get("coords")
+    if isinstance(c, dict) and ("x" in c or "y" in c):
+        return (c.get("y", 0), c.get("x", 0))
+    coords = [a["coords"] for a in section.get("answer", [])
+              if isinstance(a, dict) and isinstance(a.get("coords"), dict)]
+    if coords:
+        return (min(c.get("y", 0) for c in coords),
+                min(c.get("x", 0) for c in coords))
+    return (0, 0)
+
+
+def section_box(section):
+    """(x0, y0, x1, y1) page-space footprint of a section, in the config's
+    image-pixel space. Uses the same per-type anchor as section_top_y —
+    dragdrop answer coords are crop-local, so only `fill` descends into
+    its answers. Returns None if the section carries no usable coords."""
+    act = section.get("activity")
+    if isinstance(act, dict) and isinstance(act.get("coords"), dict):
+        c = act["coords"]
+    elif isinstance(section.get("coords"), dict):
+        c = section["coords"]
+    else:
+        xs, ys = [], []
+        for a in section.get("answer", []):
+            if isinstance(a, dict) and isinstance(a.get("coords"), dict):
+                cc = a["coords"]
+                xs += [cc.get("x", 0), cc.get("x", 0) + cc.get("w", 0)]
+                ys += [cc.get("y", 0), cc.get("y", 0) + cc.get("h", 0)]
+        if not xs:
+            return None
+        return (min(xs), min(ys), max(xs), max(ys))
+    return (c.get("x", 0), c.get("y", 0),
+            c.get("x", 0) + c.get("w", 0), c.get("y", 0) + c.get("h", 0))
+
+
+def order_page_sections(sections, page_width_px=0):
+    """Order a page's sections the way a reader walks them.
+
+    Default (single column, or unknown width): straight top-to-bottom,
+    then left-to-right — `section_top_y`.
+
+    Two-column pages: left column top-to-bottom, THEN right column
+    top-to-bottom. A page is treated as two-column only when its sections
+    split CLEANLY across a center gutter — at least one sits entirely
+    left of center, at least one entirely right, and none straddle the
+    middle. Anything ambiguous (a full-width activity, a single column,
+    unknown page width) falls back to the plain top-to-bottom order, so a
+    page we can't confidently read as two-column is never reordered wrong.
+
+    Center is the page midline (page_width_px / 2), matching the width/2
+    column convention the circle/question detectors already use. A small
+    dead-zone around the midline absorbs boxes that barely cross it."""
+    if len(sections) < 2:
+        return list(sections)
+    boxes = [section_box(s) for s in sections]
+    if page_width_px and all(b is not None for b in boxes):
+        mid = page_width_px / 2.0
+        margin = page_width_px * 0.06          # dead-zone around the gutter
+        def center(b):
+            return (b[0] + b[2]) / 2.0
+        straddles = any(b[0] < mid - margin and b[2] > mid + margin
+                        for b in boxes)
+        has_left = any(center(b) < mid and b[2] <= mid + margin for b in boxes)
+        has_right = any(center(b) > mid and b[0] >= mid - margin for b in boxes)
+        if has_left and has_right and not straddles:
+            order = sorted(
+                zip(sections, boxes),
+                key=lambda sb: (0 if center(sb[1]) < mid else 1,
+                                sb[1][1], sb[1][0]))
+            return [s for s, _ in order]
+    return sorted(sections, key=section_top_y)
+
+
 # ---------------------------------------------------------------------------
 # Config / settings helpers
 # ---------------------------------------------------------------------------
@@ -385,6 +476,14 @@ def analyze_page_pdf(page, answer_rgb, scale_x, scale_y):
 
     sections = []
     if fills:
+        # Reading order (left column top-to-bottom, then right) so the
+        # reader opens the blanks in sequence. Guarded: the legacy path
+        # also runs when the diff modules are unavailable.
+        try:
+            from proto_snap import order_answers
+            fills = order_answers(fills, page.rect.width * scale_x)
+        except Exception:
+            pass
         sections.append({"type": "fill", "answers": fills})
 
     return sections
@@ -890,6 +989,16 @@ def run_analysis(config_path, settings_path):
         print(f"PROGRESS:{progress}%", flush=True)
         print(f"Analyzing page {page_num} ({module_name}) [{i+1}/{total_pages}]...", flush=True)
 
+        # A reviewer hand-ordered this page's activities in the editor
+        # (manual_order). A full re-Analyze rebuilds every section from
+        # scratch and would discard that order, so leave the page exactly
+        # as the human left it.
+        if page_info["page_ref"].get("manual_order"):
+            print(f"  Page {page_num}: manual_order set — keeping the reviewer's "
+                  f"sections and order, skipping detection", flush=True)
+            skipped_count += 1
+            continue
+
         # Resolve original image path (need dimensions for coordinate transform)
         parts = image_path.replace("\\", "/").split("/")
         try:
@@ -1091,6 +1200,10 @@ def run_analysis(config_path, settings_path):
 
         if sections or cfg_sections:
             normalized = normalize_sections(sections) + cfg_sections
+            # Reader walks the page in reading order, not grouped by detector
+            # type: top-to-bottom, and left-column-then-right on two-column
+            # pages. (png_width is the page's image-pixel width.)
+            normalized = order_page_sections(normalized, png_width)
             page_info["page_ref"]["sections"] = normalized
             analyzed_count += 1
 

@@ -47,6 +47,68 @@ MIN_KEEP = 0.45            # collect peaks above this, then threshold filters
 SCALE_TARGETS = list(range(24, 92, 6))
 
 
+# Reading-order helpers — mirror of ai_analyzer.{section_top_y,section_box,
+# order_page_sections}, kept local so this standalone tool needs no heavy
+# detector import. See ai_analyzer for the full rationale.
+def section_top_y(section):
+    act = section.get("activity")
+    if isinstance(act, dict):
+        c = act.get("coords")
+        if isinstance(c, dict) and ("x" in c or "y" in c):
+            return (c.get("y", 0), c.get("x", 0))
+    c = section.get("coords")
+    if isinstance(c, dict) and ("x" in c or "y" in c):
+        return (c.get("y", 0), c.get("x", 0))
+    coords = [a["coords"] for a in section.get("answer", [])
+              if isinstance(a, dict) and isinstance(a.get("coords"), dict)]
+    if coords:
+        return (min(c.get("y", 0) for c in coords),
+                min(c.get("x", 0) for c in coords))
+    return (0, 0)
+
+
+def section_box(section):
+    act = section.get("activity")
+    if isinstance(act, dict) and isinstance(act.get("coords"), dict):
+        c = act["coords"]
+    elif isinstance(section.get("coords"), dict):
+        c = section["coords"]
+    else:
+        xs, ys = [], []
+        for a in section.get("answer", []):
+            if isinstance(a, dict) and isinstance(a.get("coords"), dict):
+                cc = a["coords"]
+                xs += [cc.get("x", 0), cc.get("x", 0) + cc.get("w", 0)]
+                ys += [cc.get("y", 0), cc.get("y", 0) + cc.get("h", 0)]
+        if not xs:
+            return None
+        return (min(xs), min(ys), max(xs), max(ys))
+    return (c.get("x", 0), c.get("y", 0),
+            c.get("x", 0) + c.get("w", 0), c.get("y", 0) + c.get("h", 0))
+
+
+def order_page_sections(sections, page_width_px=0):
+    if len(sections) < 2:
+        return list(sections)
+    boxes = [section_box(s) for s in sections]
+    if page_width_px and all(b is not None for b in boxes):
+        mid = page_width_px / 2.0
+        margin = page_width_px * 0.06
+        def center(b):
+            return (b[0] + b[2]) / 2.0
+        straddles = any(b[0] < mid - margin and b[2] > mid + margin
+                        for b in boxes)
+        has_left = any(center(b) < mid and b[2] <= mid + margin for b in boxes)
+        has_right = any(center(b) > mid and b[0] >= mid - margin for b in boxes)
+        if has_left and has_right and not straddles:
+            order = sorted(
+                zip(sections, boxes),
+                key=lambda sb: (0 if center(sb[1]) < mid else 1,
+                                sb[1][1], sb[1][0]))
+            return [s for s, _ in order]
+    return sorted(sections, key=section_top_y)
+
+
 def load_template(path):
     if not path or not os.path.exists(path):
         return None
@@ -218,6 +280,7 @@ def main():
         g = cv2.imread(png, cv2.IMREAD_GRAYSCALE) if os.path.exists(png) else None
         if g is None:
             continue
+        pg["_img_w"] = int(g.shape[1])   # image-pixel width, for reordering
         keep_other = [s for s in pg.get("sections", [])
                       if s.get("type") not in clear_types]
         new_av = []
@@ -241,6 +304,7 @@ def main():
                 pg["_vfound"] = vfound
 
         pg["sections"] = keep_other + new_av
+        pg["_reorder"] = True
 
     # book-order audio pairing (sequential file names like 1.mp3, 2.mp3)
     if a_tmpl is not None and not audio_page_encoded and seq_audio_found:
@@ -260,6 +324,7 @@ def main():
             files = [it[1] for it in items if it[1]]
             pg["sections"] = ([s for s in pg["sections"] if s.get("type") != "audio"]
                               + build_sections(found, files, a_prefix, "audio"))
+            pg["_reorder"] = True
 
     # book-order video pairing
     if v_tmpl is not None:
@@ -279,6 +344,15 @@ def main():
                 vi += 1
                 stats["video_icons"] += 1
             pg["sections"] = pg.get("sections", []) + secs
+            pg["_reorder"] = True
+
+    # Icon matching re-appends audio/video to the end of a page; restore
+    # reading order (left column top-to-bottom, then right) for the pages
+    # we touched. Untouched pages keep the order Analyze already gave them.
+    for pg in pages:
+        w = pg.pop("_img_w", 0)
+        if pg.pop("_reorder", False) and pg.get("sections"):
+            pg["sections"] = order_page_sections(pg["sections"], w)
 
     if not a.no_backup:
         shutil.copy(a.config, a.config + ".bak.iconmatch")

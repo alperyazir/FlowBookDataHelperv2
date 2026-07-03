@@ -36,7 +36,7 @@ import fitz
 from ai_analyzer import (
     load_settings, parse_hex_color, load_config,
     find_answered_pdf, find_original_pdf, get_all_pages,
-    MONSTER_DRAW_CAP,
+    order_page_sections, MONSTER_DRAW_CAP,
 )
 from proto_inventory import page_drawings
 
@@ -51,14 +51,21 @@ def section_type(sec):
     return sec.get("activity", {}).get("type", "")
 
 
-def merge_page_sections(page_ref, new_sections, owned_types):
+def merge_page_sections(page_ref, new_sections, owned_types, page_width_px=0):
     """Replace only the OWNED section types on the page; keep the rest.
 
     Runs before re-adding so a stage re-run is idempotent and never
     duplicates or wipes another stage's work."""
     kept = [s for s in page_ref.get("sections", [])
             if section_type(s) not in owned_types]
-    page_ref["sections"] = kept + list(new_sections)
+    merged = kept + list(new_sections)
+    # Keep the page in reading order (left column top-to-bottom, then
+    # right) so the reader steps through activities the way they appear —
+    # unless a reviewer hand-ordered this page, in which case their order
+    # is authoritative and must not be auto-reshuffled.
+    if not page_ref.get("manual_order"):
+        merged = order_page_sections(merged, page_width_px)
+    page_ref["sections"] = merged
 
 
 def safe(name, page_num, fn, default):
@@ -218,7 +225,7 @@ def run_stages(config_path, settings_path, stages):
         ctx = PageCtx(
             page_num=page_num, page_ref=page_ref,
             original_page=original_page, pdf_page=pdf_page,
-            scale_x=scale_x, scale_y=scale_y, heavy=heavy,
+            scale_x=scale_x, scale_y=scale_y, png_w=png_w, heavy=heavy,
             images_dir=images_dir, section_path_prefix=section_path_prefix,
             book_prefix=section_path_prefix.split("/images/")[0],
             config_dir=config_dir, overrides=bk["overrides"],
@@ -228,7 +235,7 @@ def run_stages(config_path, settings_path, stages):
         produced = 0
         for stage in stages:
             secs = safe(stage.name, page_num, lambda: stage.detect(ctx, state), [])
-            merge_page_sections(page_ref, secs, stage.owned_types)
+            merge_page_sections(page_ref, secs, stage.owned_types, png_w)
             produced += len(secs)
 
         if produced:

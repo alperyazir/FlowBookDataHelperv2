@@ -17,7 +17,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from proto_snap import snap_page, px_coords
+from proto_snap import snap_page, px_coords, order_answers
 from proto_inventory import get_spans
 try:
     from proto_raster import support_fraction, tick_candidates
@@ -150,6 +150,15 @@ def detect_fills(original_page, pdf_page, scale_x, scale_y):
                 secs = [{"type": "fill",
                          "activity": {"circleCount": 0, "markCount": 0},
                          "answer": answers, "audio_extra": {}}]
+    # The reader opens the blanks in array order, but a fill activity's
+    # answers were only ever globally (y,x)-sorted (proto_snap) and the
+    # raster ticks above were appended out of place — reorder each activity
+    # into reading order (left column top-to-bottom, then right).
+    page_w_px = int(round(original_page.rect.width * scale_x)) \
+        if original_page is not None else 0
+    for sec in secs:
+        if sec.get("answer"):
+            sec["answer"] = order_answers(sec["answer"], page_w_px)
     return secs
 
 

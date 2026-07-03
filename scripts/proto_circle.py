@@ -973,6 +973,9 @@ def redetect(raw_dir, page_no, rect_px, png_size, out_path, kind="circle"):
                     out.append({"coords": c, "text": a.get("text", ""),
                                 "isTextBold": bool(a.get("is_text_bold", True)),
                                 "needs_review": bool(a.get("needs_review", False))})
+        # detect_fills already emits the blanks in the page's reading order;
+        # keep that (walking it here filtered by band preserves it) so the
+        # re-checked band matches the page exactly.
         print(json.dumps({"fill": True, "answer": out}, ensure_ascii=False))
         orig.close(); ans.close()
         return 0
@@ -1013,6 +1016,9 @@ def redetect(raw_dir, page_no, rect_px, png_size, out_path, kind="circle"):
                 if o["isCorrect"]:
                     entry["isCorrect"] = True
                 answers.append(entry)
+    # Options come out of detect_*_exercises already in the same order the
+    # main page uses (the (y,x) sort at build time), so leave them as-is to
+    # match what the page shows.
     print(json.dumps({"answer": answers, "circleCount": circle_count,
                       "markCount": mark_count,
                       "crop": out_path}, ensure_ascii=False))

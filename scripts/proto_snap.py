@@ -460,6 +460,42 @@ def sections_from_clickables(clickables, sx, sy):
     }]
 
 
+def order_answers(answers, page_width_px=0):
+    """Order a fill activity's answer[] the way a reader fills them in.
+
+    Default: top-to-bottom, left-to-right. Two-column exercises: left
+    column top-to-bottom, THEN right column. A clean center gutter is
+    required to switch to column mode (some answers entirely left, some
+    entirely right, none straddling the middle) — anything ambiguous
+    falls back to plain (y, x), so we never reorder a layout we misread.
+    Mirror of ai_analyzer.order_page_sections, keyed on each answer's own
+    `coords` (page-space image-pixel space)."""
+    if len(answers) < 2:
+        return list(answers)
+    def box(a):
+        c = a.get("coords") or {}
+        x, y = c.get("x", 0), c.get("y", 0)
+        return (x, y, x + c.get("w", 0), y + c.get("h", 0))
+    boxes = [box(a) for a in answers]
+    if page_width_px:
+        mid = page_width_px / 2.0
+        margin = page_width_px * 0.06
+        def center(b):
+            return (b[0] + b[2]) / 2.0
+        straddles = any(b[0] < mid - margin and b[2] > mid + margin
+                        for b in boxes)
+        has_left = any(center(b) < mid and b[2] <= mid + margin for b in boxes)
+        has_right = any(center(b) > mid and b[0] >= mid - margin for b in boxes)
+        if has_left and has_right and not straddles:
+            order = sorted(range(len(answers)),
+                           key=lambda i: (0 if center(boxes[i]) < mid else 1,
+                                          boxes[i][1], boxes[i][0]))
+            return [answers[i] for i in order]
+    order = sorted(range(len(answers)),
+                   key=lambda i: (boxes[i][1], boxes[i][0]))
+    return [answers[i] for i in order]
+
+
 def merge_same_region(clickables):
     """Multi-line labels on one banner snap to the same CV region;
     they are one clickable, not several."""
