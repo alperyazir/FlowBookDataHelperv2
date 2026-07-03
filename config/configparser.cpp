@@ -188,6 +188,7 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
             Page *page = new Page(module);
             page->_page_number = cObj["page_number"].toInt();
             page->_image_path = cObj["image_path"].toString();
+            page->_manual_order = cObj["manual_order"].toBool(false);
 
             auto sctns = cObj["sections"].toArray();
 

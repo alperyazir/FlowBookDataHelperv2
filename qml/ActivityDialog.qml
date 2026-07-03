@@ -21,6 +21,34 @@ Dialog {
     // Rubber-band ("Select") mode for the answer zones (the 'r' tool).
     property bool selectMode: false
     property var currentActivity: null   // the activity component on screen
+
+    // Sequential answer review. reviewIndex -1 = show every answer (normal
+    // editing); 0..N-1 steps through, revealing one more answer at a time so a
+    // reviewer can verify each in reading order. Pushed into the on-screen
+    // activity component's revealCount.
+    property int reviewIndex: -1
+    // Answer-based activities count their answers; match counts its sentences.
+    property int answerCount: {
+        if (!activityModelData) return 0;
+        if (activityModelData.answers && activityModelData.answers.length)
+            return activityModelData.answers.length;
+        if (activityModelData.sentences && activityModelData.sentences.length)
+            return activityModelData.sentences.length;
+        return 0;
+    }
+    property bool canReview: currentActivity !== null && answerCount > 1
+
+    function pushReveal() {
+        if (currentActivity && currentActivity.revealCount !== undefined)
+            currentActivity.revealCount = reviewIndex;
+    }
+    function startReview() { reviewIndex = 0; }
+    function showAllAnswers() { reviewIndex = -1; }
+    function nextAnswer() { if (reviewIndex < answerCount - 1) reviewIndex = reviewIndex + 1; }
+    function prevAnswer() { if (reviewIndex > 0) reviewIndex = reviewIndex - 1; }
+    onReviewIndexChanged: pushReveal()
+    onCurrentActivityChanged: pushReveal()
+
     onClosed: selectMode = false
 
     Shortcut {
@@ -109,6 +137,19 @@ Dialog {
     }
 
 
+    // Step through revealed answers during review. PgDown/PgUp avoid the
+    // arrow-key alignment shortcuts and normal text-field navigation.
+    Shortcut {
+        sequence: "PgDown"
+        enabled: root.visible && root.reviewIndex >= 0
+        onActivated: root.nextAnswer()
+    }
+    Shortcut {
+        sequence: "PgUp"
+        enabled: root.visible && root.reviewIndex >= 0
+        onActivated: root.prevAnswer()
+    }
+
     // Custom header
     header: Rectangle {
         color: "#1A2327"
@@ -155,6 +196,84 @@ Dialog {
         height: 60
         border.color: "#009ca6"
         border.width: 1
+
+        // Sequential answer-review stepper (only for activities with answers).
+        RowLayout {
+            anchors.left: parent.left
+            anchors.leftMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 8
+            visible: root.canReview
+
+            Button {
+                text: root.reviewIndex < 0 ? "Review answers ▸" : "Show all"
+                Layout.preferredWidth: 130
+                Layout.preferredHeight: 32
+                background: Rectangle {
+                    color: parent.hovered ? "#2A3337" : "#11343a"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 2
+                }
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                onClicked: root.reviewIndex < 0 ? root.startReview() : root.showAllAnswers()
+            }
+            Button {
+                text: "◀"
+                visible: root.reviewIndex >= 0
+                enabled: root.reviewIndex > 0
+                Layout.preferredWidth: 40
+                Layout.preferredHeight: 32
+                background: Rectangle {
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 2
+                }
+                contentItem: Text {
+                    text: parent.text
+                    color: parent.enabled ? "white" : "#557"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                onClicked: root.prevAnswer()
+            }
+            Label {
+                visible: root.reviewIndex >= 0
+                text: (root.reviewIndex + 1) + " / " + root.answerCount
+                color: "#4fd2dc"
+                font.bold: true
+                font.pixelSize: 14
+                Layout.preferredWidth: 54
+                horizontalAlignment: Text.AlignHCenter
+            }
+            Button {
+                text: "▶"
+                visible: root.reviewIndex >= 0
+                enabled: root.reviewIndex < root.answerCount - 1
+                Layout.preferredWidth: 40
+                Layout.preferredHeight: 32
+                background: Rectangle {
+                    color: parent.hovered ? "#2A3337" : "#1A2327"
+                    border.color: "#009ca6"
+                    border.width: 1
+                    radius: 2
+                }
+                contentItem: Text {
+                    text: parent.text
+                    color: parent.enabled ? "white" : "#557"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                onClicked: root.nextAnswer()
+            }
+        }
+
         RowLayout {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
@@ -218,6 +337,7 @@ Dialog {
         activityMatch.headerText = root.activityModelData.headerText
         activityMatch.shuffledWords= root.activityModelData.matchWord
         activityMatch.sentences = root.activityModelData.sentences
+        root.currentActivity = activityMatch
         // content.enableRightClick(false)
 
         // activityMatch.onVisibleChanged.connect(function(visible) {
@@ -338,6 +458,7 @@ Dialog {
 
 
     function clearMainContainer() {
+        root.reviewIndex = -1;
         root.currentActivity = null;
         for (var i = mainContainer.children.length - 1; i >= 0; i--) {
             var child = mainContainer.children[i];

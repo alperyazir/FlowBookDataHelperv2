@@ -4,9 +4,13 @@ import QtQuick.Controls
 import QtQuick.Shapes
 
 import "../"
+import "../newComponents"
 
 Rectangle {
     property var sentences: []
+    // Sequential-review reveal count: -1 shows every pair (normal); 0..N-1
+    // reveals one more sentence/match at a time for a reviewer to check.
+    property int revealCount: -1
     property var shuffledWords: []
     property string headerText
     property string dash: "  ........................  "
@@ -292,11 +296,25 @@ Rectangle {
                         Row {
                             width: parent.width
                             height: activityCoverRect.tileHeight
+                            // Sequential review: hidden until revealed.
+                            visible: root.revealCount < 0 || index <= root.revealCount
                             Item {
                                 id: dropRect
                                 width: height
                                 height: parent.height/2
                                 anchors.verticalCenter: parent.verticalCenter
+
+                                // Reading-order number for this match item (shown,
+                                // not reorderable — match order is the sentence order).
+                                OrderBadge {
+                                    number: index + 1
+                                    total: root.sentences ? root.sentences.length : 0
+                                    diameter: Math.max(16, dropRect.height * 0.7)
+                                    pillColor: "#E65100"
+                                    editable: false
+                                    anchors.horizontalCenter: parent.left
+                                    anchors.verticalCenter: parent.top
+                                }
 
                                 Rectangle {
                                     id: dropRect1

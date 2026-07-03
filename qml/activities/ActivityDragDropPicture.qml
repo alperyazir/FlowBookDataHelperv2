@@ -9,6 +9,9 @@ Rectangle {
     property string imageSource
     property var shuffledWords: []
     property var answers
+    // Sequential-review reveal count: -1 shows every answer (normal editing);
+    // 0..N-1 shows only answers[0..revealCount] so a reviewer can step through.
+    property int revealCount: -1
     property string audio_path
     signal closed
     property var dragMap: []
@@ -408,6 +411,23 @@ Rectangle {
                             model: activityModelData.answers
                             Item {
                                 id: answerRect
+                                // Sequential review: hidden until revealed.
+                                visible: root.revealCount < 0 || index <= root.revealCount
+
+                                // Reading-order number for this answer zone
+                                // (same badges as the page's fill blanks).
+                                OrderBadge {
+                                    number: index + 1
+                                    total: activityModelData.answers ? activityModelData.answers.length : 0
+                                    diameter: Math.max(16, Math.min(answerRect.width, answerRect.height) * 0.6)
+                                    pillColor: "#E65100"
+                                    anchors.horizontalCenter: parent.left
+                                    anchors.verticalCenter: parent.top
+                                    onReorderRequested: (oneBased) => {
+                                        activityModelData.moveAnswer(index, oneBased - 1);
+                                        config.bookSets[0].saveToJson();
+                                    }
+                                }
                                 property real xScale: activityImage.paintedWidth / activityImage.sourceSize.width
                                 property real yScale: activityImage.paintedHeight / activityImage.sourceSize.height
                                 property real originalWidth: modelData.coords.width

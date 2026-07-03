@@ -803,6 +803,16 @@ public:
         }
     }
 
+    // Reorder an answer zone WITHIN this activity, so a reviewer can fix the
+    // order the reader reveals them in. Mirror of Page/Section moveAnswer.
+    Q_INVOKABLE void moveAnswer(int from, int to) {
+        if (from < 0 || from >= _answers.size()) return;
+        if (to < 0 || to >= _answers.size()) return;
+        if (from == to) return;
+        Answer *a = _answers.takeAt(from);
+        _answers.insert(to, a);
+        emit answersChanged();
+    }
 
     Q_INVOKABLE void addNewWord(const QString &word = "") {
         _words.push_back(word);
@@ -1743,12 +1753,17 @@ struct Page : public QObject {
     Q_PROPERTY(int page_number READ pageNumber WRITE setPageNumber NOTIFY pageNumberChanged)
     Q_PROPERTY(QString image_path READ imagePath WRITE setImagePath NOTIFY imagePathChanged)
     Q_PROPERTY(QVariantList sections READ sections WRITE setSections NOTIFY sectionsChanged)
+    // Set once a human reorders this page's activities in the editor, so a
+    // re-Analyze knows the section order is human-owned and must not be
+    // auto-reordered over.
+    Q_PROPERTY(bool manual_order READ manualOrder WRITE setManualOrder NOTIFY manualOrderChanged)
 
 public:
     explicit Page(QObject *parent = nullptr) : QObject(parent), _page_number(0) {}
     int _page_number;
     QString _image_path;
     QVector<Section*> _sections;
+    bool _manual_order = false;
 
     int pageNumber() const { return _page_number; }
     void setPageNumber(int pageNumber) {
@@ -1784,11 +1799,23 @@ public:
         emit sectionsChanged();
     }
 
+    bool manualOrder() const { return _manual_order; }
+    void setManualOrder(bool manualOrder) {
+        if (_manual_order != manualOrder) {
+            _manual_order = manualOrder;
+            emit manualOrderChanged();
+        }
+    }
+
     QJsonObject toJson() const {
         QJsonObject pageObj;
-        
+
         if (_page_number != 0) {
             pageObj["page_number"] = _page_number;
+        }
+
+        if (_manual_order) {
+            pageObj["manual_order"] = true;
         }
         
         if (!_image_path.isEmpty()) {
@@ -1876,11 +1903,43 @@ public:
         }
     }
 
+    // Move the activity at `from` to sit at 1-based reading position `to`
+    // (both taken as array indices). Reordering the sections vector is the
+    // whole feature: the array order IS the reader's activity sequence and
+    // the badge number. Flags the page manual_order so re-Analyze won't
+    // clobber the human's choice.
+    Q_INVOKABLE void moveSection(int from, int to) {
+        if (from < 0 || from >= _sections.size()) return;
+        if (to < 0 || to >= _sections.size()) return;
+        if (from == to) return;
+        Section *s = _sections.takeAt(from);
+        _sections.insert(to, s);
+        setManualOrder(true);
+        emit sectionsChanged();
+    }
+
+    // Move a fill blank (answer) to a new position WITHIN its section, so a
+    // reviewer can fix the order the reader opens the blanks in. Same idea as
+    // moveSection but one level down, on the section's answer array.
+    Q_INVOKABLE void moveAnswer(int sectionIndex, int from, int to) {
+        if (sectionIndex < 0 || sectionIndex >= _sections.size()) return;
+        Section *s = _sections[sectionIndex];
+        if (!s) return;
+        if (from < 0 || from >= s->_answers.size()) return;
+        if (to < 0 || to >= s->_answers.size()) return;
+        if (from == to) return;
+        Answer *a = s->_answers.takeAt(from);
+        s->_answers.insert(to, a);
+        setManualOrder(true);
+        emit s->answersChanged();
+    }
+
 
 signals:
     void pageNumberChanged();
     void imagePathChanged();
     void sectionsChanged();
+    void manualOrderChanged();
 };
 
 struct QuizGameQuestion : public QObject {

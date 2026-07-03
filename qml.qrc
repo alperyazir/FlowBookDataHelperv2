@@ -77,6 +77,7 @@
         <file>qml/DependencyDialog.qml</file>
         <file>qml/groupboxes/AudioGroupBox.qml</file>
         <file>qml/groupboxes/VideoGroupBox.qml</file>
+        <file>qml/newComponents/OrderBadge.qml</file>
         <file>qml/newComponents/AppButton.qml</file>
         <file>qml/newComponents/AppTextField.qml</file>
         <file>qml/newComponents/AppCheckBox.qml</file>

@@ -11,6 +11,36 @@ Item {
     property string currentSelectionType: ""
     property size lastSize: Qt.size(60, 30)
 
+    // Reading-order badge numbering. Real activities (those with an activity
+    // type — circle, dragdrop, ...) and fill blanks are numbered as two
+    // independent 1-based streams; audio/video carry no badge and don't count.
+    function isActivity(sec) {
+        return sec.activity && sec.activity.type !== "";
+    }
+    function activityRank(sectionIdx) {
+        if (!page) return 1;
+        var secs = page.sections, n = 0;
+        for (var i = 0; i <= sectionIdx && i < secs.length; i++)
+            if (isActivity(secs[i])) n++;
+        return n;
+    }
+    function activityTotal() {
+        if (!page) return 0;
+        var secs = page.sections, n = 0;
+        for (var i = 0; i < secs.length; i++)
+            if (isActivity(secs[i])) n++;
+        return n;
+    }
+    // Array index of the k-th activity (1-based) — maps a typed badge number
+    // back to a moveSection target, skipping non-activity sections.
+    function nthActivityIndex(k) {
+        if (!page) return 0;
+        var secs = page.sections, n = 0;
+        for (var i = 0; i < secs.length; i++)
+            if (isActivity(secs[i])) { n++; if (n === k) return i; }
+        return secs.length - 1;
+    }
+
     property bool fillingModeEnabled: false
     property var activeFillRectangle
     property var fillList: []
@@ -32,6 +62,7 @@ Item {
     property var cropFillSectionRef: null  // fill section to update (survives endCropMode)
     property var cropFillBand: null        // re-check rect in page-PNG px (kept for the result)
     property string cropIconKind: ""       // rect crops an icon template ("audio"/"video")
+    property string cropMatchSide: ""      // "left"/"right": single-column match crop (l/r keys)
     property bool cropPassage: false       // rect picks the passage text to karaoke-align
     property var cropPassageAudioRef: null // audio section to flag karaoke on (survives endCropMode)
     // Karaoke preview: word boxes (with start/end) for the selected audio, lit
@@ -1154,6 +1185,7 @@ Item {
                                 //print("Changes Are Saved Page Detail Audio On Released Triggered");
                             }
                         }
+
                     }
                     //video
                     Rectangle {
@@ -1215,6 +1247,7 @@ Item {
                                 //print("Changes Are Saved Page Detail vide On Released Triggered");
                             }
                         }
+
                     }
                     // fill
                     Repeater {
@@ -1230,6 +1263,23 @@ Item {
                             width: originalWidth * (picture.paintedWidth / picture.sourceSize.width)
                             height: originalHeight * (picture.paintedHeight / picture.sourceSize.height)
                             visible: sectionType === "fill"
+
+                            // Every fill blank carries its own badge, numbered
+                            // within the fill (blanks are their own stream);
+                            // click to reorder just this blank.
+                            OrderBadge {
+                                visible: sectionType === "fill"
+                                number: index + 1
+                                total: sectionItem.sectionAnswers ? sectionItem.sectionAnswers.length : 0
+                                diameter: root.imageHeights * 0.85
+                                pillColor: "#E65100"          // fills: orange
+                                anchors.horizontalCenter: parent.left
+                                anchors.verticalCenter: parent.top
+                                onReorderRequested: (oneBased) => {
+                                    page.moveAnswer(sectionItem.sectionIndex, index, oneBased - 1);
+                                    config.bookSets[0].saveToJson();
+                                }
+                            }
 
                             // Re-sync the live size when the model coords change
                             // (e.g. group resize), so this fill follows along even
@@ -2003,6 +2053,21 @@ Item {
                                 print("Changes Are Saved Page Detail set activity");
                             }
                         }
+
+                        // Reading-order badge: this activity's position among
+                        // the page's activities; click to renumber.
+                        OrderBadge {
+                            number: root.activityRank(sectionItem.sectionIndex)
+                            total: root.activityTotal()
+                            diameter: root.imageHeights * 0.85
+                            pillColor: "#1565C0"          // activities: blue
+                            anchors.horizontalCenter: activityImg.left
+                            anchors.verticalCenter: activityImg.top
+                            onReorderRequested: (oneBased) => {
+                                page.moveSection(sectionItem.sectionIndex, root.nthActivityIndex(oneBased));
+                                config.bookSets[0].saveToJson();
+                            }
+                        }
                     }
                 }
             }
@@ -2122,9 +2187,19 @@ Item {
         root.cropPngRect = null;
         root.cropHeaderPick = false;
         root.cropDrawing = false;
+        root.cropMatchSide = "";
         mainMouseArea.cursorShape = Qt.CrossCursor;
         var currentPath = targetObj[root.cropPathProperty] || "";
         print("Crop mode started for property: " + root.cropPathProperty + " = " + currentPath);
+    }
+
+    // Single-column match crop (l/r keys): draw a rect over ONE column of a
+    // matchTheWords activity; the rows in it fill that side (left = the items /
+    // sentences, right = the draggable word pool), no auto number/letter split.
+    function startMatchColumnCrop(targetObj, side) {
+        startCropMode(targetObj);
+        root.cropMatchSide = side;
+        print("Match column crop started: " + side);
     }
 
     // Crop mode that re-runs circle option detection inside the drawn
@@ -2200,6 +2275,7 @@ Item {
         root.cropHeaderPick = false;
         root.cropFillRedetect = false;   // cropFillSectionRef/Band survive for the result
         root.cropIconKind = "";
+        root.cropMatchSide = "";
         root.cropPassage = false;        // cropPassageAudioRef survives for the result
         root.cropActivity = null;
         root.cropDrawing = false;
@@ -2355,6 +2431,19 @@ Item {
         // the activity type is known, so find the options / marks /
         // word-item pairs under the drawn area too.
         var cropActType = root.cropActivity ? String(root.cropActivity.type || "") : "";
+
+        // Single-column match crop (l/r): detect just the rows in this rect
+        // and fill one side of the match, no combined split.
+        if (root.cropMatchSide !== "" && cropActType === "matchTheWords") {
+            pdfProcess.redetectCircleOptions(
+                pdfPath, page.page_number,
+                originalX, originalY, originalW, originalH,
+                picture.sourceSize.width, picture.sourceSize.height,
+                outputPath, "match" + root.cropMatchSide);   // matchleft / matchright
+            endCropMode();
+            return;
+        }
+
         if (!root.cropRedetect
                 && (cropActType === "circle" || cropActType === "markwithx"
                     || cropActType === "matchTheWords")) {
@@ -2441,7 +2530,9 @@ Item {
             print("Zone sync: no fills inside the crop, answers kept");
             return;
         }
-        zones.sort(function(a, b) { return (a.y - b.y) || (a.x - b.x); });
+        // Keep the page's own fill order (the answers were collected by
+        // walking page.sections in order): the activity must match exactly
+        // what the page shows, so DON'T re-sort here.
 
         // Word pool = the fill texts under the crop, reading order.
         var words = [];
@@ -2562,6 +2653,35 @@ Item {
             // freshly detected ones. Targets the fill section, not an activity.
             if (res.fill) {
                 root.applyFillRedetect(res);
+                return;
+            }
+
+            // Single-column match crop (l/r): entries for one side only.
+            // Editor layout: LEFT = matchWord (the items, word + optional
+            // picture); RIGHT = sentences. Entries may carry an image_path.
+            if (res.entries && String(act.type || "") === "matchTheWords") {
+                var toRel = function(p) {
+                    if (!p) return "";
+                    return (p.indexOf(appPath) === 0)
+                            ? "./" + p.substring(appPath.length) : p;
+                };
+                if (res.side === "left") {
+                    while (act.matchWord.length > 0)
+                        act.removeMatchWord(0);
+                    for (var ei = 0; ei < res.entries.length; ei++) {
+                        var e = res.entries[ei];
+                        act.createMatchWord(e.text || "", toRel(e.image_path));
+                    }
+                } else {
+                    while (act.sentences.length > 0)
+                        act.removeSentences(0);
+                    for (var ej = 0; ej < res.entries.length; ej++) {
+                        var s = res.entries[ej];
+                        act.createSentences("", s.text || "", toRel(s.image_path));
+                    }
+                }
+                print("Match column (" + res.side + ") applied: "
+                      + res.entries.length + " entries");
                 return;
             }
 
