@@ -38,7 +38,9 @@ ColumnLayout {
         Layout.fillWidth: true
         activityModelData: root.activityModelData
         showPath: false
-        showCrop: true
+        // Match is built with the l / r single-column crops now, so the
+        // combined Crop button is removed to avoid confusion.
+        showCrop: false
         headerPlaceholder: "Match the words."
     }
 
@@ -77,7 +79,7 @@ ColumnLayout {
                         id: wordsRepeater
                         spacing: 5
                         boundsBehavior: Flickable.StopAtBounds
-                        model: root.activityModelData.matchWord
+                        model: root.activityModelData ? root.activityModelData.matchWord : []
 
                         delegate: RowLayout {
                             width: ListView.view ? ListView.view.width : 0
@@ -190,7 +192,7 @@ ColumnLayout {
                         id: sentencesRepeater
                         spacing: 5
                         boundsBehavior: Flickable.StopAtBounds
-                        model: root.activityModelData.sentences
+                        model: root.activityModelData ? root.activityModelData.sentences : []
 
                         delegate: RowLayout {
                             width: ListView.view ? ListView.view.width : 0
@@ -270,6 +272,7 @@ ColumnLayout {
     }
 
     function getMathcedIndex(sentence) {
+        if (!root.activityModelData) return "";
         for (var i = 0; i < root.activityModelData.matchWord.length; i++) {
             if (root.activityModelData.matchWord[i].word === sentence)
                 return i;
@@ -278,6 +281,7 @@ ColumnLayout {
     }
 
     function updateData() {
+        if (!root.activityModelData) return;
         for (var i = 0; i < wordsRepeater.count; i++) {
             var item = wordsRepeater.itemAtIndex(i);
             if (item !== null) {

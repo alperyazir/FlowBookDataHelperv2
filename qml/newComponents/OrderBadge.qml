@@ -53,8 +53,9 @@ Item {
             anchors.fill: parent
             enabled: badge.editable
             cursorShape: badge.editable ? Qt.PointingHandCursor : Qt.ArrowCursor
-            // Stop the click from bubbling to the icon's move/drag MouseArea.
-            preventStealing: badge.editable
+            // A plain click still registers inside a Flickable; do NOT
+            // preventStealing — holding the grab here can strand the canvas's
+            // mouse handling after an activity drag.
             onClicked: {
                 input.text = badge.number;
                 input.visible = true;

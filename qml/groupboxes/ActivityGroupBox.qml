@@ -204,56 +204,56 @@ GroupBox {
         // ----- Activity-specific editor (only the matching one is shown) -----
         DragDropPicture {
             id: ddpicture
-            visible: root.activityModelData.type === "dragdroppicture"
+            visible: (root.activityModelData ? root.activityModelData.type : "") ==="dragdroppicture"
             enabled: visible
             Layout.fillWidth: true
             Layout.fillHeight: true
         }
         MatchTheWords {
             id: matchthewords
-            visible: root.activityModelData.type === "matchTheWords"
+            visible: (root.activityModelData ? root.activityModelData.type : "") ==="matchTheWords"
             enabled: visible
             Layout.fillWidth: true
             Layout.fillHeight: true
         }
         DragDropPictureGroup {
             id: ddppicturegroup
-            visible: root.activityModelData.type === "dragdroppicturegroup"
+            visible: (root.activityModelData ? root.activityModelData.type : "") ==="dragdroppicturegroup"
             enabled: visible
             Layout.fillWidth: true
             Layout.fillHeight: true
         }
         FillPicture {
             id: fillpicture
-            visible: root.activityModelData.type === "fillpicture"
+            visible: (root.activityModelData ? root.activityModelData.type : "") ==="fillpicture"
             enabled: visible
             Layout.fillWidth: true
             Layout.fillHeight: true
         }
         PuzzleFindWords {
             id: findPuzzle
-            visible: root.activityModelData.type === "puzzleFindWords"
+            visible: (root.activityModelData ? root.activityModelData.type : "") ==="puzzleFindWords"
             enabled: visible
             Layout.fillWidth: true
             Layout.fillHeight: true
         }
         Circle {
             id: activityCircle
-            visible: root.activityModelData.type === "circle"
+            visible: (root.activityModelData ? root.activityModelData.type : "") ==="circle"
             enabled: visible
             Layout.fillWidth: true
             Layout.fillHeight: true
         }
         MarkWithX {
             id: activityMarkWithX
-            visible: root.activityModelData.type === "markwithx"
+            visible: (root.activityModelData ? root.activityModelData.type : "") ==="markwithx"
             enabled: visible
             Layout.fillWidth: true
             Layout.fillHeight: true
         }
         Coloring {
             id: coloring
-            visible: root.activityModelData.type === "coloring"
+            visible: (root.activityModelData ? root.activityModelData.type : "") ==="coloring"
             enabled: visible
             Layout.fillWidth: true
             Layout.fillHeight: true

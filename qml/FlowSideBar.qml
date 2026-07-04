@@ -81,8 +81,14 @@ Rectangle {
         height: parent.height / 5 * 4.5
 
         onRemoveSection: {
+            // Drop the sidebar's reference to this activity BEFORE deleting it,
+            // so the still-open activity panel never keeps binding to a
+            // now-deleted object — that dangling bind froze the canvas (no page
+            // nav, no re-selecting another activity) after a delete.
+            root.activityVisible = false;
+            root.activityModelData = null;
+            root.sectionModelData = null;
             page.removeSection(sectionIndex);
-
         }
     }
 

@@ -59,7 +59,7 @@ ColumnLayout {
                 ListView {
                     id: wordsRepeater
                     spacing: 5
-                    model: wl.activityModelData.words
+                    model: wl.activityModelData ? wl.activityModelData.words : []
                     boundsBehavior: Flickable.StopAtBounds
 
                     delegate: RowLayout {

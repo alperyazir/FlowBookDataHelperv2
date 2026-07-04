@@ -2061,6 +2061,9 @@ Item {
                             total: root.activityTotal()
                             diameter: root.imageHeights * 0.85
                             pillColor: "#1565C0"          // activities: blue
+                            // Sit on the icon's top-left corner (half-overlap),
+                            // the usual badge spot. The freeze was the sidebar
+                            // dangling-ref, not this — so no need to push it off.
                             anchors.horizontalCenter: activityImg.left
                             anchors.verticalCenter: activityImg.top
                             onReorderRequested: (oneBased) => {

@@ -216,7 +216,10 @@ ApplicationWindow {
         onActivated: {
             if (awaitingActivityKey)
                 triggerActivityCombo("circle");
-            else if (sideBar.activityVisible)
+            else if (sideBar.activityVisible
+                     && String((sideBar.activityModelData
+                                && sideBar.activityModelData.type) || "") !== "matchTheWords")
+                // Match uses the l / r single-column crops; 'c' does nothing for it.
                 content.startCropMode(sideBar.activityModelData);
             else if (sideBar.fillVisible)
                 content.pageDetails.startFillRedetectMode();
@@ -815,7 +818,7 @@ ApplicationWindow {
 
         Text {
             id: versionText
-            text: "v3.1.1"
+            text: "v3.2.1"
             color: "#009ca6"
             anchors.centerIn: parent
             font.pixelSize: 14
