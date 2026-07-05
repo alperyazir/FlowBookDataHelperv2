@@ -87,6 +87,7 @@
         <file>qml/newComponents/PanelHeader.qml</file>
         <file>qml/newComponents/ConfirmDelete.qml</file>
         <file>qml/newComponents/MediaPicker.qml</file>
+        <file>qml/newComponents/ClippedImage.qml</file>
         <file>qml/newComponents/RubberBandSelector.qml</file>
         <file>qml/newComponents/MenuButton.qml</file>
         <file>qml/newComponents/AppMenu.qml</file>

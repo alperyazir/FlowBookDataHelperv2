@@ -172,6 +172,9 @@ struct Answer : public QObject {
     Q_PROPERTY(QPoint lineEnd READ lineEnd WRITE setLineEnd NOTIFY lineEndChanged)
     Q_PROPERTY(QString textColor READ textColor WRITE setTextColor NOTIFY textColorChanged)
     Q_PROPERTY(bool isTextBold READ isTextBold WRITE setIsTextBold NOTIFY isTextBoldChanged)
+    // Fill-with-color: optional image shown clipped inside the shape
+    // (rect/round) instead of the flat color fill.
+    Q_PROPERTY(QString imagePath READ imagePath WRITE setImagePath NOTIFY imagePathChanged)
 
 public:
     explicit Answer(QObject *parent = nullptr) :
@@ -204,6 +207,7 @@ public:
     QPoint _lineEnd;
     QString _textColor;
     bool _isTextBold;
+    QString _imagePath;
 
     // Mevcut getter/setter'lar...
     int no() const { return _no; }
@@ -404,6 +408,14 @@ public:
         }
     }
 
+    QString imagePath() const { return _imagePath; }
+    void setImagePath(const QString &imagePath) {
+        if (_imagePath != imagePath) {
+            _imagePath = imagePath;
+            emit imagePathChanged();
+        }
+    }
+
     QJsonObject toJson() const {
         QJsonObject answerObj;
 
@@ -527,6 +539,10 @@ public:
             answerObj["is_text_bold"] = _isTextBold;
         }
 
+        if (!_imagePath.isEmpty()) {
+            answerObj["image_path"] = _imagePath;
+        }
+
 
         return answerObj;
     }
@@ -556,6 +572,7 @@ signals:
     void lineEndChanged();
     void textColorChanged();
     void isTextBoldChanged();
+    void imagePathChanged();
 };
 
 struct MatchWord : public QObject {

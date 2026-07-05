@@ -1581,12 +1581,27 @@ Item {
 
                             Rectangle {
                                 id: answerColor
-                                color: modelData.color !== "" ? modelData.color : myColors.darkBorderColor
+                                // An image (if set) replaces the flat color fill,
+                                // clipped to this shape (rect corners or full round).
+                                readonly property bool hasImage:
+                                    modelData.imagePath !== undefined
+                                    && modelData.imagePath !== ""
+                                color: hasImage
+                                       ? "transparent"
+                                       : (modelData.color !== "" ? modelData.color : myColors.darkBorderColor)
                                 rotation: modelData.rotation
                                 height: parent.height
                                 width: modelData.isRound ? height : parent.width
                                 radius: modelData.isRound ? height / 2 : 2
                                 opacity: modelData.opacity ? modelData.opacity : 0.5
+
+                                ClippedImage {
+                                    anchors.fill: parent
+                                    visible: answerColor.hasImage
+                                    cornerRadius: answerColor.radius
+                                    source: answerColor.hasImage
+                                            ? "file:" + appPath + modelData.imagePath : ""
+                                }
                             }
 
                             // Highlight when this block is the open answer.

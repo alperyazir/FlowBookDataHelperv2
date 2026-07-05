@@ -348,6 +348,7 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
                     answer->_lineEnd = QPoint(cObj["x"].toInt(), cObj["y"].toInt());
                     answer->_textColor = aObj["text_color"].toString();
                     answer->_isTextBold = aObj["is_text_bold"].toBool();
+                    answer->_imagePath = aObj["image_path"].toString();
                     section->_answers.push_back(answer);
                 }
 
