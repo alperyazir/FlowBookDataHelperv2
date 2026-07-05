@@ -20,7 +20,7 @@
 ; ============================================================================
 
 #define MyAppName "FlowBook Helper"
-#define MyAppVersion "3.0.2"
+#define MyAppVersion "3.0.3"
 #define MyAppExe "FlowBookDataHelper2.exe"
 ; Assembled program folder. IMPORTANT layout — it must be shaped exactly like the
 ; installed {app} tree, because the app derives programRoot() as the exe's PARENT

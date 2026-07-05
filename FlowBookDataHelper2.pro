@@ -2,7 +2,7 @@ QT += quick concurrent quickcontrols2 network
 
 # Single source of truth for the app version. main.cpp feeds it to
 # setApplicationVersion(); the heartbeat and the updater both read it back.
-APP_VERSION = 3.0.2
+APP_VERSION = 3.0.3
 DEFINES += APP_VERSION=\\\"$${APP_VERSION}\\\"
 
 # You can make your code fail to compile if it uses deprecated APIs.
