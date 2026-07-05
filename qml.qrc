@@ -117,6 +117,7 @@
         <file>qml/activities/ActivityMarkWithX.qml</file>
         <file>qml/groupboxes/activities/MarkWithX.qml</file>
         <file>qml/groupboxes/activities/Coloring.qml</file>
+        <file>qml/groupboxes/activities/Ordering.qml</file>
         <file>qml/groupboxes/FillWithColorGroupBox.qml</file>
         <file>qml/groupboxes/DrawMatchedLineGroupBox.qml</file>
         <file>qml/qtquickcontrols2.conf</file>

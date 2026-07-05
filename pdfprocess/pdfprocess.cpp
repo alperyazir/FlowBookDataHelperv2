@@ -1646,6 +1646,70 @@ void PdfProcess::detectHeaderText(const QString &rawDir, int pageNumber,
     process->start(pythonExecutable(), arguments);
 }
 
+void PdfProcess::extractOrderingSentences(const QString &rawDir, int pageNumber,
+                                          double x, double y, double w, double h,
+                                          double pngWidth, double pngHeight)
+{
+    qDebug() << "Extracting ordering sentences:" << rawDir << "page:" << pageNumber
+             << "rect:" << x << y << w << h;
+
+    QProcess *process = new QProcess(this);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    process->setProcessEnvironment(env);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+                QString output = QString::fromUtf8(process->readAllStandardOutput());
+                qDebug() << "Ordering script output:" << output;
+
+                QString sentencesJson = "[]";
+                bool ok = false;
+                // Scan bottom-up for the result JSON object the script prints.
+                const QStringList lines = output.split('\n', Qt::SkipEmptyParts);
+                for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
+                    QString t = it->trimmed();
+                    if (t.startsWith('{') && t.endsWith('}')) {
+                        QJsonDocument doc = QJsonDocument::fromJson(t.toUtf8());
+                        if (doc.isObject() && doc.object().contains("sentences")) {
+                            QJsonArray arr = doc.object().value("sentences").toArray();
+                            sentencesJson = QString::fromUtf8(
+                                QJsonDocument(arr).toJson(QJsonDocument::Compact));
+                            ok = exitStatus == QProcess::NormalExit && exitCode == 0;
+                        }
+                        break;
+                    }
+                }
+                if (exitStatus != QProcess::NormalExit || exitCode != 0)
+                    emit scriptError(extractScriptError(output, exitCode));
+                emit orderingSentencesDetected(ok, sentencesJson);
+                process->deleteLater();
+            });
+
+    connect(process, &QProcess::errorOccurred, [this, process](QProcess::ProcessError error) {
+        qDebug() << "Ordering process error:" << error << process->errorString();
+        emit scriptError(QStringLiteral("Ordering extract could not start: ") + process->errorString());
+        emit orderingSentencesDetected(false, QStringLiteral("[]"));
+        process->deleteLater();
+    });
+
+    QString scriptPath = scriptsDir() + "/proto_circle.py";
+
+    QStringList arguments;
+    arguments << "-u" << scriptPath << "--ordering"
+              << rawDir
+              << QString::number(pageNumber)
+              << QString::number(x, 'f', 2)
+              << QString::number(y, 'f', 2)
+              << QString::number(w, 'f', 2)
+              << QString::number(h, 'f', 2)
+              << QString::number(pngWidth, 'f', 2)
+              << QString::number(pngHeight, 'f', 2);
+
+    process->start(pythonExecutable(), arguments);
+}
+
 bool PdfProcess::packageForPlatforms(const QStringList &platforms, const QStringList &bookNames) {
     // Don't allow a second packaging run to start while one is in flight
     // (overlapping threads would interleave their progress/log output).

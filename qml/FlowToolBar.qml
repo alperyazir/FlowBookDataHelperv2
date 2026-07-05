@@ -748,7 +748,8 @@ Rectangle {
                     { k: "A C", d: "Circle activity" },
                     { k: "A M", d: "Match the words" },
                     { k: "A P", d: "Puzzle / find words" },
-                    { k: "A X", d: "Mark with X" }
+                    { k: "A X", d: "Mark with X" },
+                    { k: "A O", d: "Ordering (put the words in the correct order)" }
                 ]
             },
             {

@@ -242,6 +242,11 @@ ApplicationWindow {
         enabled: awaitingActivityKey
         onActivated: triggerActivityCombo("markwithx")
     }
+    Shortcut {
+        sequence: "o"
+        enabled: awaitingActivityKey
+        onActivated: triggerActivityCombo("ordering")
+    }
     // `l`: completes the a→l "add coloring" combo, OR — when a matchTheWords
     // activity is open — crops its LEFT column (the items: word + optional
     // picture) into matchWord.

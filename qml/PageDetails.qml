@@ -944,6 +944,22 @@ Item {
                         currentSelectionType = "";
                     }
                 }
+
+                MenuItem {
+                    text: "Ordering\t(A → O)"
+                    onTriggered: {
+                        var adjustedX = (mainMouseArea.mouseX + flick.contentX) - (flick.contentWidth / 2 - picture.paintedWidth / 2);
+                        var adjustedY = (mainMouseArea.mouseY + flick.contentY) - (flick.contentHeight / 2 - picture.paintedHeight / 2);
+
+                        // Zoom yapılmış görüntüde tıklanan noktayı orijinal görüntüye çevirme
+                        var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
+                        var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
+
+                        openActivitySidebar(root.page.createNewActivity(originalX, originalY, root.imageHeights, root.imageHeights, "ordering"));
+                        print("Changes Are Saved MenuItem Ordering Triggered");
+                        currentSelectionType = "";
+                    }
+                }
             }
         }
     }
@@ -2430,6 +2446,19 @@ Item {
             return;
         }
 
+        // Ordering needs no section image: the crop only reads the correct-order
+        // answer sentences from the answered PDF in the rect and drops them into
+        // the model's word list (onOrderingSentencesDetected). No image crop.
+        if (cropActType === "ordering") {
+            pdfProcess.extractOrderingSentences(
+                pdfPath, page.page_number,
+                originalX, originalY, originalW, originalH,
+                picture.sourceSize.width, picture.sourceSize.height
+            );
+            endCropMode();
+            return;
+        }
+
         pdfProcess.cropSectionFromPdf(
             pdfPath, pageIndex,
             originalX, originalY, originalW, originalH,
@@ -2597,6 +2626,30 @@ Item {
             }
             root.cropActivityRef.headerText = text;
             print("Header set: " + text);
+        }
+
+        // Ordering crop: the correct-order sentences read from the answered PDF.
+        // Each becomes one entry in the model's word list (the reader shuffles
+        // the words of each sentence). Kept only on a non-empty result so a miss
+        // doesn't wipe sentences the author typed.
+        function onOrderingSentencesDetected(success, sentencesJson) {
+            if (!success || !root.cropActivityRef) {
+                print("Ordering extract failed or no target");
+                return;
+            }
+            var sentences = [];
+            try {
+                sentences = JSON.parse(sentencesJson) || [];
+            } catch (e) {
+                print("Ordering extract: bad JSON: " + e);
+                return;
+            }
+            if (sentences.length === 0) {
+                print("Ordering extract: no answer sentences in rect, list kept");
+                return;
+            }
+            root.cropActivityRef.words = sentences;
+            print("Ordering: " + sentences.length + " correct sentences set");
         }
 
         function onCircleRedetectCompleted(success, resultJson, outputPath) {

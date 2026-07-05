@@ -591,6 +591,109 @@ def headertext(raw_dir, page_no, rect_px, png_size):
     return 0
 
 
+def _span_rgb(span):
+    """(r,g,b) 0-255 of a fitz span's sRGB int colour."""
+    c = int(span.get("color", 0))
+    return ((c >> 16) & 255, (c >> 8) & 255, c & 255)
+
+
+def _is_answer_colour(rgb):
+    """True for a saturated non-black colour (the red/blue/green answer key),
+    False for black/gray body text (the shuffled prompts + the header)."""
+    r, g, b = rgb
+    return max(r, g, b) > 90 and (max(r, g, b) - min(r, g, b)) > 40
+
+
+def ordering_answer_lines(page, rect_pt):
+    """The correct-order answer sentences printed inside the rect: reading-order
+    text of each line, grouped per row. The shuffled prompt lines (they carry
+    "/" separators, body colour) and the exercise header are dropped; only the
+    coloured answer-key lines survive. Returns a list of strings, top-to-bottom."""
+    x0, y0, x1, y1 = rect_pt
+    rows = {}
+    for b in page_dict(page)["blocks"]:
+        if b["type"] != 0:
+            continue
+        for l in b["lines"]:
+            spans = [s for s in l["spans"] if s["text"].strip()]
+            if not spans:
+                continue
+            cx = sum((s["bbox"][0] + s["bbox"][2]) / 2 for s in spans) / len(spans)
+            cy = sum((s["bbox"][1] + s["bbox"][3]) / 2 for s in spans) / len(spans)
+            if not (x0 <= cx <= x1 and y0 <= cy <= y1):
+                continue
+            ly0 = min(s["bbox"][1] for s in spans)
+            key = next((k for k in rows if abs(k - ly0) < 4), ly0)
+            rows.setdefault(key, []).extend(spans)
+
+    lines = []
+    for key in sorted(rows):
+        seen, row = set(), []
+        coloured = 0
+        for s in sorted(rows[key], key=lambda s: s["bbox"][0]):
+            txt = s["text"].strip()
+            k = (txt, int(s["bbox"][0] / 3))
+            if k in seen:
+                continue
+            seen.add(k)
+            row.append(txt)
+            if _is_answer_colour(_span_rgb(s)):
+                coloured += 1
+        text = re.sub(r"\s+", " ", " ".join(row)).strip()
+        text = re.sub(r"\b(\S+)( \1)+\b", r"\1", text).strip()
+        if text:
+            lines.append((text, coloured, len(row)))
+
+    def _clean(t):
+        # The answer is written over the printed blank line, so the row text
+        # picks up its underscores (and the trailing "." of the blank). Drop
+        # every run of underscores and the leading punctuation left behind.
+        t = re.sub(r"_+", " ", t)
+        t = re.sub(r"^[\s._-]+", "", t)
+        # Drop a leading item number ("1 The atmosphere..." -> "The atmosphere...").
+        t = re.sub(r"^\d{1,2}\s*[.)]?\s+", "", t)
+        return re.sub(r"\s+", " ", t).strip()
+
+    # Primary: keep the coloured answer lines (most spans coloured, no "/").
+    answers = [_clean(t) for (t, col, n) in lines
+               if col >= max(1, n // 2) and "/" not in t]
+    if answers:
+        return answers
+
+    # Fallback (no colour info, e.g. flattened PDF): the lines without a "/"
+    # that read like a sentence, minus the instruction header.
+    for (t, col, n) in lines:
+        c = _clean(t)
+        if "/" in c or len(c.split()) < 2:
+            continue
+        if re.search(r"correct order|put the words", c, re.I):
+            continue
+        answers.append(c)
+    return answers
+
+
+def ordering(raw_dir, page_no, rect_px, png_size):
+    """CLI back-end for the editor's ordering crop: read the correct-order
+    answer sentences from the ANSWERED PDF inside the page-PNG rect and print
+    {"sentences": [...]}."""
+    import json
+    _, answered_path = find_pdf_pair(raw_dir)
+    if not answered_path:
+        print(json.dumps({"error": "answered pdf not found in raw dir",
+                          "sentences": []}))
+        return 1
+    doc = fitz.open(answered_path)
+    pa = doc[page_no - 1]
+    sx = pa.rect.width / png_size[0]
+    sy = pa.rect.height / png_size[1]
+    x, y, w, h = rect_px
+    sents = ordering_answer_lines(pa, (x * sx, y * sy,
+                                       (x + w) * sx, (y + h) * sy))
+    print(json.dumps({"sentences": sents}, ensure_ascii=False))
+    doc.close()
+    return 0
+
+
 def crop_band(po, band, options, out_path):
     """Crop the exercise area from the original PDF; returns (rect, scale).
 
@@ -1037,6 +1140,15 @@ def main():
         sys.exit(headertext(a[0], int(a[1]),
                             tuple(float(v) for v in a[2:6]),
                             (float(a[6]), float(a[7]))))
+    if len(sys.argv) >= 2 and sys.argv[1] == "--ordering":
+        a = sys.argv[2:]
+        if len(a) != 8:
+            print("usage: --ordering <raw_dir> <page> "
+                  "<x> <y> <w> <h> <png_w> <png_h>")
+            sys.exit(1)
+        sys.exit(ordering(a[0], int(a[1]),
+                          tuple(float(v) for v in a[2:6]),
+                          (float(a[6]), float(a[7]))))
     if len(sys.argv) >= 2 and sys.argv[1] == "--redetect":
         a = sys.argv[2:]
         if len(a) not in (9, 10):

@@ -41,6 +41,14 @@ public:
     Q_INVOKABLE void detectHeaderText(const QString &rawDir, int pageNumber,
                                       double x, double y, double w, double h,
                                       double pngWidth, double pngHeight);
+    // Ordering activity: read the correct-order answer sentences (the coloured
+    // answer-key lines) inside the rect from the ANSWERED PDF. The shuffled
+    // prompt lines (they carry "/" separators and are the body colour) are
+    // dropped; only the coloured answer lines survive. Result comes back via
+    // orderingSentencesDetected as a JSON array of strings.
+    Q_INVOKABLE void extractOrderingSentences(const QString &rawDir, int pageNumber,
+                                              double x, double y, double w, double h,
+                                              double pngWidth, double pngHeight);
     // Forced-align the text under the rect to the audio and write word-level
     // karaoke timing into <book>/audio/audio.json (keyed by the audio file
     // name). rawDir is <book>/raw; pageIndex is 0-based.
@@ -109,6 +117,9 @@ signals:
     void circleRedetectCompleted(bool success, const QString &resultJson,
                                  const QString &outputPath);
     void headerTextDetected(bool success, const QString &text);
+    // Ordering activity: success + a JSON array of the correct-order sentences
+    // read from the answered PDF inside the crop rect (empty array on a miss).
+    void orderingSentencesDetected(bool success, const QString &sentencesJson);
     // Passage karaoke alignment lifecycle. started carries the audio path so
     // the audio panel can show a busy state; completed carries success plus a
     // compact summary JSON ({audio_id, words, mean_score, needs_review}).

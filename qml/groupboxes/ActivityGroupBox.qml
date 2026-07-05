@@ -45,14 +45,18 @@ GroupBox {
         fillpicture.updateData();
         findPuzzle.updateData();
         coloring.updateData();
+        ordering.updateData();
     }
 
     // Open the activity preview/editor dialog for the current activity.
     // Used by the "Activity" button and the Space shortcut.
     function openActivityDialog() {
         // Coloring is authored entirely on the page (crop the outline); it has no
-        // interactive preview dialog, so don't pop an empty one.
-        if (root.activityModelData.type === "coloring")
+        // interactive preview dialog, so don't pop an empty one. Ordering is
+        // authored as a plain sentence list (the reader builds the shuffled
+        // chips itself), so it has no editor-side preview either.
+        if (root.activityModelData.type === "coloring"
+                || root.activityModelData.type === "ordering")
             return;
 
         activityDialog.wordLists = root.activityModelData.words;
@@ -254,6 +258,13 @@ GroupBox {
         Coloring {
             id: coloring
             visible: (root.activityModelData ? root.activityModelData.type : "") ==="coloring"
+            enabled: visible
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+        }
+        Ordering {
+            id: ordering
+            visible: (root.activityModelData ? root.activityModelData.type : "") ==="ordering"
             enabled: visible
             Layout.fillWidth: true
             Layout.fillHeight: true
