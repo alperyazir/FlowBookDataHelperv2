@@ -17,6 +17,7 @@
 #include <QDateTime>
 #include <QSaveFile>
 #include <QSharedPointer>
+#include "config/configparser.h"
 
 QString PdfProcess::scriptsDir()
 {
@@ -543,14 +544,8 @@ QStringList PdfProcess::getTestVersions() const {
     QStringList versions;
     
 
-    // Construct the path to the Python script
-    QString appDir = QGuiApplication::applicationDirPath();
-#ifdef Q_OS_MAC
-    appDir += "/../../../";
-#else
-    appDir += "/../";
-#endif
-    QDir currentDir(appDir);
+    // Bundled test FlowBook builds ship with the app → program root.
+    QDir currentDir(ConfigParser::programRoot());
     // Check if "test" directory exists
     if (currentDir.cd("test")) {
         // Get all directories in the test folder
@@ -573,16 +568,13 @@ void PdfProcess::copyBookToTestVersion(const QString &testVersion, const QString
         setProgress(0);
         setLogMessages("Starting to copy book files...");
 
-        // Get application directory
-        QString appDir = QGuiApplication::applicationDirPath();
-#ifdef Q_OS_MAC
-        appDir += "/../../../";
-#else
-        appDir += "/../";
-#endif
+        // Source book comes from the user's workspace; the test build it is
+        // copied into ships with the app (program root).
+        QString wsDir = ConfigParser::instance()->workspaceRoot();
+        QString progDir = ConfigParser::programRoot();
 
         // Source directory (books/XXX)
-        QDir sourceDir(appDir + "books/" + currentBookName);
+        QDir sourceDir(wsDir + "books/" + currentBookName);
         if (!sourceDir.exists()) {
             setLogMessages("Error: Source book directory not found");
             emit copyCompleted(false);
@@ -591,9 +583,9 @@ void PdfProcess::copyBookToTestVersion(const QString &testVersion, const QString
 
         setProgress(15);
         setLogMessages("Checking target directory...");
-        
+
         // Target directory (test/version/data/books)
-        QDir targetDir(appDir + "test/" + testVersion + "/books");
+        QDir targetDir(progDir + "test/" + testVersion + "/books");
         qDebug() <<"sourceDir" << sourceDir<<"  targetDir: " << targetDir << " " <<currentBookName;
         
         // Create target directory if it doesn't exist
@@ -760,13 +752,8 @@ QString PdfProcess::findOriginalPdf(const QString &rawDir) const {
 }
 
 QString PdfProcess::booksDir() const {
-    QString appDir = QGuiApplication::applicationDirPath();
-#ifdef Q_OS_MAC
-    appDir += "/../../../";
-#else
-    appDir += "/../";
-#endif
-    return appDir + "books/";
+    // User content lives under the workspace root, not next to the exe.
+    return ConfigParser::instance()->workspaceRoot() + "books/";
 }
 
 QString PdfProcess::originalPdfStatus(const QString &book) {
@@ -833,13 +820,8 @@ void PdfProcess::optimizeOriginalPdf(const QString &book, bool force) {
 }
 
 bool PdfProcess::launchTestFlowBook(const QString &testVersion) {
-    // Get application directory
-    QString appDir = QGuiApplication::applicationDirPath();
-#ifdef Q_OS_MAC
-    appDir += "/../../../";
-#else
-    appDir += "/../";
-#endif
+    // The test FlowBook ships with the app → program root.
+    QString appDir = ConfigParser::programRoot();
 
     // Construct path to FlowBook executable based on platform
     QString flowBookPath;
@@ -946,17 +928,15 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
                        .arg(bookNames.size()).arg(bookNames.size() == 1 ? "" : "s")
                        .arg(platforms.size()).arg(platforms.size() == 1 ? "" : "s"));
 
-    // Get application directory
-    QString appDir = QGuiApplication::applicationDirPath();
-#ifdef Q_OS_MAC
-    appDir += "/../../../";
-#else
-    appDir += "/../";
-#endif
+    // Packaging reads user content (books/) and writes output (release/) under
+    // the workspace root, but pulls the reader builds (package/) from the app's
+    // program root.
+    QString wsDir = ConfigParser::instance()->workspaceRoot();
+    QString progDir = ConfigParser::programRoot();
 
     // Create/Clean release directory for the book
     setProgress(5);
-    QString releaseBookPath = appDir + "release/" + packageName;
+    QString releaseBookPath = wsDir + "release/" + packageName;
     QDir releaseDir(releaseBookPath);
 
     setLogMessages("🧹  Preparing output folder…");
@@ -977,9 +957,9 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
     setProgress(10);
     setLogMessages("📚  Verifying books…");
     for (const QString &book : bookNames) {
-        if (!QDir(appDir + "books/" + book).exists()) {
+        if (!QDir(wsDir + "books/" + book).exists()) {
             setLogMessages("✖  Book not found: " + book);
-            qDebug() << "Source book not found:" << (appDir + "books/" + book);
+            qDebug() << "Source book not found:" << (wsDir + "books/" + book);
             return false;
         }
     }
@@ -1011,7 +991,7 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
 
         // FlowBook version bulma
         setProgress(baseProgress + progressPerPlatform * 0.2); // %20
-        QString packagePath = appDir + "package/" + platformFolder;
+        QString packagePath = progDir + "package/" + platformFolder;
         QString flowBookVersion = getLatestFlowBookVersion(packagePath);
 
         if (flowBookVersion.isEmpty()) {
@@ -1045,7 +1025,7 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
         setLogMessages(QString("    %1 · adding books…").arg(platformName));
         bool bookCopyOk = true;
         for (const QString &book : bookNames) {
-            QString srcBook = appDir + "books/" + book;
+            QString srcBook = wsDir + "books/" + book;
             QString dstBook = targetPath + "/data/books/" + book;
             qDebug() << "copying book" << srcBook << "->" << dstBook;
             if (!copyDir(srcBook, dstBook, true)) {

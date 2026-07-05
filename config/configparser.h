@@ -3285,6 +3285,10 @@ struct ConfigParser : public QObject {
     // change it via updateLockStatus().
     Q_PROPERTY(bool isLocked READ isLocked NOTIFY isLockedChanged)
     Q_PROPERTY(QStringList recentProject READ recentProject WRITE setRecentProject NOTIFY recentProjectChanged FINAL)
+    // Where the user's mutable data (books/, release/) lives. Chosen at install
+    // time, persisted in the encrypted identity file. Falls back to programRoot()
+    // so existing side-by-side dev layouts keep working. See programRoot() below.
+    Q_PROPERTY(QString workspaceRoot READ workspaceRoot NOTIFY workspaceRootChanged)
 
 
 public:
@@ -3361,6 +3365,22 @@ public:
     // server is authoritative — locked:true covers the app, locked:false frees it.
     Q_INVOKABLE void updateLockStatus(bool locked);
 
+    // --- Filesystem roots: workspace (user data) vs program (shipped runtime) --
+    // programRoot(): where the exe and its bundled runtime live — package/ (the
+    //   per-platform FlowBook reader builds), test/, bundled python. Resolved
+    //   from applicationDirPath with the same platform climb as the old appPath.
+    // workspaceRoot(): where the user's mutable data lives — books/, release/.
+    //   Read from the persisted install-time choice; empty => programRoot(), so
+    //   the classic "books next to the exe" dev layout still works untouched.
+    // Both return an absolute path ending in '/'.
+    static QString programRoot();
+    QString workspaceRoot();
+    Q_INVOKABLE void setWorkspaceRoot(const QString &path);
+    // First-run handoff: the installer records the user-chosen workspace as a
+    // plain "workspace.txt" beside the exe (programRoot). On startup, if no
+    // workspace is persisted yet, adopt that path and persist it. No-op once set.
+    void adoptWorkspaceFromInstallerIfUnset();
+
 
 private:
     QString _hostname;
@@ -3423,6 +3443,8 @@ signals:
     void isLockedChanged();
 
     void recentProjectChanged();
+
+    void workspaceRootChanged();
 
 
 private:

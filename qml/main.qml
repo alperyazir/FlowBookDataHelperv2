@@ -1164,6 +1164,13 @@ ApplicationWindow {
                                             || res.locked === "1" || res.locked === "true");
                                 config.updateLockStatus(lock);
                             }
+                            // Remote update: the server piggy-backs a manifest on
+                            // the heartbeat. applyManifest() is a no-op while busy
+                            // and skips artifacts already current, so calling it
+                            // every 5s is safe.
+                            if (res.update !== undefined && res.update !== null) {
+                                updater.applyManifest(res.update);
+                            }
                         }
                     } catch (e) {
                         console.log("heartbeat: bad response", e);
@@ -1203,4 +1210,8 @@ ApplicationWindow {
         z: 100000
         visible: config.isLocked
     }
+
+    // Non-blocking toast for remote updates (reader sync progress + the
+    // "update the editor now" prompt). Driven by the `updater` context property.
+    UpdateBanner {}
 }

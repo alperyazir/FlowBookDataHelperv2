@@ -13,6 +13,7 @@
 #include "games/gamesparser.h"
 #include "activity/activitytracker.h"
 #include "logger.h"
+#include "update/updater.h"
 
 
 
@@ -25,7 +26,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
 
     app.setApplicationName("FlowBookDataHelper");
-    app.setApplicationVersion("3.0.2");
+    app.setApplicationVersion(APP_VERSION);
 
     // Route all log output to a rotating per-launch file next to the exe
     // (keeps the last 5 sessions) so crashes / config tampering can be
@@ -53,18 +54,21 @@ int main(int argc, char *argv[])
 
 
     ClipboardHelper clipboardHelper;
+    Updater *updater = new Updater(&app);
 
 
-    QString appPath;
+    // Two filesystem roots after the workspace/program split:
+    //  - appPath      = workspace root (books/, release/) — kept under the name
+    //                   "appPath" so existing QML joins keep working unchanged.
+    //  - programPath  = shipped runtime root (package/, test/, bundled python).
+    // With no persisted workspace both resolve to the same place, so the classic
+    // dev layout is unaffected.
+    // Pick up the workspace the installer recorded (if this is a first run),
+    // before we read workspaceRoot() below.
+    config->adoptWorkspaceFromInstallerIfUnset();
 
-
-
-#ifdef Q_OS_MAC // MacOS için özel kod
-    appPath = QGuiApplication::applicationDirPath() + "/../../../";
-#else
-    appPath = QGuiApplication::applicationDirPath() + "/../";
-#endif
-
+    QString programPath = ConfigParser::programRoot();
+    QString appPath = config->workspaceRoot();
 
 
     ActivityTracker *activityTracker = new ActivityTracker(&app);
@@ -73,10 +77,12 @@ int main(int argc, char *argv[])
     QQmlContext *rootContext = engine.rootContext();
     rootContext->setContextProperty("config", config);
     rootContext->setContextProperty("appPath", appPath);
+    rootContext->setContextProperty("programPath", programPath);
     rootContext->setContextProperty("pdfProcess", pdfProcess);
     rootContext->setContextProperty("clipboardHelper", &clipboardHelper);
     rootContext->setContextProperty("gamesParser", new GamesParser());
     rootContext->setContextProperty("activityTracker", activityTracker);
+    rootContext->setContextProperty("updater", updater);
 
     const QUrl url(u"qrc:/qml/main.qml"_qs);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreated,

@@ -12,6 +12,9 @@
 
 #include <QHostInfo>
 #include <QStandardPaths>
+#include <QJsonDocument>
+#include <QUrl>
+#include <QGuiApplication>
 
 bool BookSet::initialize(const QString &config_path)
 {
@@ -462,14 +465,7 @@ ConfigParser::ConfigParser(QObject *parent) : QObject(parent) {
 bool ConfigParser::initialize(bool isFromFileSystem, const QString &path)
 {
     if(!isFromFileSystem) {
-        QString appDir = QGuiApplication::applicationDirPath();
-#ifdef Q_OS_MAC
-        appDir += "/../../../books/";
-#else
-        appDir += "/books/";
-#endif
-
-        QDir directory = appDir;
+        QDir directory = workspaceRoot() + "books/";
         directory.setFilter(QDir::Dirs | QDir::NoDotAndDotDot);
         auto dirList = directory.entryList();
         bool result = true;
@@ -534,6 +530,57 @@ static QString fbinfPath() {
     return (dir.isEmpty() ? QString("fbinf") : dir + "/fbinf");
 }
 
+// Where the shipped runtime lives (exe + package/ + test/ + bundled python).
+// Same platform climb the old single `appPath` used, so nothing shifts for the
+// program-side files.
+QString ConfigParser::programRoot() {
+    QString dir = QGuiApplication::applicationDirPath();
+#ifdef Q_OS_MAC
+    dir += "/../../../";
+#else
+    dir += "/../";
+#endif
+    return dir;
+}
+
+// Where the user's mutable data lives (books/, release/). Read from the
+// install-time choice persisted in the encrypted identity file; if unset, fall
+// back to programRoot() so the classic "books next to the exe" dev layout keeps
+// working. Always returns a path ending in '/'.
+QString ConfigParser::workspaceRoot() {
+    QString ws = readEncryptedJsonFromFile()["workspace_dir"].toString();
+    if (ws.isEmpty())
+        return programRoot();
+    if (!ws.endsWith('/'))
+        ws += '/';
+    return ws;
+}
+
+// Persist the chosen workspace directory and re-scan books from the new root.
+void ConfigParser::setWorkspaceRoot(const QString &path) {
+    QString clean = path;
+    if (clean.startsWith(QLatin1String("file:")))
+        clean = QUrl(clean).toLocalFile();
+    QJsonObject j = readEncryptedJsonFromFile();
+    j["workspace_dir"] = clean;
+    saveEncryptedJsonToFile(QString::fromUtf8(QJsonDocument(j).toJson(QJsonDocument::Compact)));
+    emit workspaceRootChanged();
+    refreshRecentProjects();
+    emit bookSetsChanged();
+}
+
+void ConfigParser::adoptWorkspaceFromInstallerIfUnset() {
+    if (!readEncryptedJsonFromFile()["workspace_dir"].toString().isEmpty())
+        return; // already chosen on a previous run
+    QFile f(programRoot() + "workspace.txt");
+    if (!f.open(QIODevice::ReadOnly))
+        return; // no installer handoff → keep the dev fallback (books next to exe)
+    const QString path = QString::fromUtf8(f.readAll()).trimmed();
+    f.close();
+    if (!path.isEmpty() && QDir(path).exists())
+        setWorkspaceRoot(path);
+}
+
 void ConfigParser::saveEncryptedJsonToFile(const QString& jsonString) {
     QByteArray byteArray = jsonString.toUtf8();
 
@@ -553,13 +600,7 @@ void ConfigParser::saveEncryptedJsonToFile(const QString& jsonString) {
 
 void ConfigParser::refreshRecentProjects()
 {
-    QString appDir = QGuiApplication::applicationDirPath();
-#ifdef Q_OS_MAC
-    appDir += "/../../../books/";
-#else
-    appDir += "/../books/";
-#endif
-    QDir directory = appDir;
+    QDir directory = workspaceRoot() + "books/";
     directory.setFilter(QDir::Dirs | QDir::NoDotAndDotDot);
     auto dirList = directory.entryList();
     QStringList recentProjects;

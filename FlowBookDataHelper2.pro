@@ -1,5 +1,10 @@
 QT += quick concurrent quickcontrols2 network
 
+# Single source of truth for the app version. main.cpp feeds it to
+# setApplicationVersion(); the heartbeat and the updater both read it back.
+APP_VERSION = 3.0.2
+DEFINES += APP_VERSION=\\\"$${APP_VERSION}\\\"
+
 # You can make your code fail to compile if it uses deprecated APIs.
 # In order to do so, uncomment the following line.
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
@@ -10,7 +15,8 @@ HEADERS += \
     logger.h \
     pdfprocess/pdfprocess.h \
     games/gamesparser.h \
-    activity/activitytracker.h
+    activity/activitytracker.h \
+    update/updater.h
 
 SOURCES += \
     clipboardhelper.cpp \
@@ -19,7 +25,8 @@ SOURCES += \
     main.cpp \
     pdfprocess/pdfprocess.cpp \
     games/gamesparser.cpp \
-    activity/activitytracker.cpp
+    activity/activitytracker.cpp \
+    update/updater.cpp
 
 RESOURCES += qml.qrc
 RESOURCES += scripts.qrc
