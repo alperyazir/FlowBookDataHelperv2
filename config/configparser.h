@@ -1567,8 +1567,9 @@ public:
         Answer *answer = new Answer(this); // Parent set edildi
         answer->setRectBegin(QRect(x,y,w,h));
         answer->setRectEnd(QRect(x+ 150,y,w,h));
-        answer->setLineBegin(QPoint(x, y));
-        answer->setLineEnd(QPoint(x+150, y));
+        // Line auto-connects the two box centers (kept in sync by the editor).
+        answer->setLineBegin(QPoint(x + w/2, y + h/2));
+        answer->setLineEnd(QPoint(x + 150 + w/2, y + h/2));
         answer->setOpacity(0.5);
         
         

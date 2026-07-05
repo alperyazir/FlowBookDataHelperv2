@@ -1680,13 +1680,31 @@ Item {
                         model: modelData.answers
                         Item {
                             id: drawMatchedLine
-                            property point startPoint: Qt.point((flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.lineBegin.x * (picture.paintedWidth / picture.sourceSize.width), (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.lineBegin.y * (picture.paintedHeight / picture.sourceSize.height))
-                            property point endPoint: Qt.point((flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.lineEnd.x * (picture.paintedWidth / picture.sourceSize.width), (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.lineEnd.y * (picture.paintedHeight / picture.sourceSize.height))
-                            // x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.coords.x * (picture.paintedWidth / picture.sourceSize.width)
-                            // y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.coords.y * (picture.paintedHeight / picture.sourceSize.height)
-                            // width: modelData.coords.width * (picture.paintedWidth / picture.sourceSize.width)
-                            // height: modelData.coords.height * (picture.paintedHeight / picture.sourceSize.height)
+                            // The line auto-connects the centers of the two boxes.
+                            // Bound to the live box geometry so it follows drag/resize
+                            // in real time (box x/y/width update live during the drag).
+                            property point startPoint: Qt.point(beginRectItem.x + beginRectItem.width / 2,
+                                                                beginRectItem.y + beginRectItem.height / 2)
+                            property point endPoint: Qt.point(endRectItem.x + endRectItem.width / 2,
+                                                              endRectItem.y + endRectItem.height / 2)
                             visible: sectionType === "drawMatchedLine"
+
+                            // Keep the model's lineBegin/lineEnd (persisted, read by the
+                            // reader) at the box centers whenever a box moves or resizes,
+                            // so the saved line matches the on-page line.
+                            Connections {
+                                target: modelData
+                                function onRectBeginChanged() {
+                                    modelData.lineBegin = Qt.point(
+                                        modelData.rectBegin.x + modelData.rectBegin.width / 2,
+                                        modelData.rectBegin.y + modelData.rectBegin.height / 2);
+                                }
+                                function onRectEndChanged() {
+                                    modelData.lineEnd = Qt.point(
+                                        modelData.rectEnd.x + modelData.rectEnd.width / 2,
+                                        modelData.rectEnd.y + modelData.rectEnd.height / 2);
+                                }
+                            }
 
                             Item {
                                 id: beginRectItem
@@ -1794,83 +1812,9 @@ Item {
                                 }
                             }
 
-                            Rectangle {
-                                id: beginPoint
-                                color: "blue"
-                                width: 10
-                                height: 10
-                                border.color: "black"
-                                border.width: 1
-                                x: drawMatchedLine.startPoint.x
-                                y: drawMatchedLine.startPoint.y
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    drag {
-                                        target: parent
-                                        axis: Drag.XAndYAxis
-                                    }
-                                    onPressed: {
-                                        sideBar.hideAllComponent();
-                                        sideBar.drawMatchedVisible = true;
-                                        sideBar.page = page;
-                                        sideBar.section = sectionData;
-                                        sideBar.drawMatchedLineList = sectionItem.sectionAnswers;
-                                        sideBar.fillIndex = index;
-                                        sideBar.sectionIndex = sectionItem.sectionIndex;
-                                    }
-
-                                    onPositionChanged: {
-                                        var adjustedX = (beginPoint.x - (flick.contentWidth / 2 - picture.paintedWidth / 2));
-                                        var adjustedY = (beginPoint.y - (flick.contentHeight / 2 - picture.paintedHeight / 2));
-                                        var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
-                                        var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
-
-                                        modelData.lineBegin = Qt.point(originalX, originalY);
-                                        // config.bookSets[0].saveToJson();
-                                        print("Changes Are Saved Page Detail set status");
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                id: endPoint
-                                color: "red"
-                                width: 10
-                                height: 10
-                                border.color: "black"
-                                border.width: 1
-                                x: drawMatchedLine.endPoint.x
-                                y: drawMatchedLine.endPoint.y
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    drag {
-                                        target: parent
-                                        axis: Drag.XAndYAxis
-                                    }
-                                    onPressed: {
-                                        sideBar.hideAllComponent();
-                                        sideBar.drawMatchedVisible = true;
-                                        sideBar.page = page;
-                                        sideBar.section = sectionData;
-                                        sideBar.drawMatchedLineList = sectionItem.sectionAnswers;
-                                        sideBar.fillIndex = index;
-                                        sideBar.sectionIndex = sectionItem.sectionIndex;
-                                    }
-
-                                    onPositionChanged: {
-                                        var adjustedX = (endPoint.x - (flick.contentWidth / 2 - picture.paintedWidth / 2));
-                                        var adjustedY = (endPoint.y - (flick.contentHeight / 2 - picture.paintedHeight / 2));
-                                        var originalX = adjustedX * (picture.sourceSize.width / picture.paintedWidth);
-                                        var originalY = adjustedY * (picture.sourceSize.height / picture.paintedHeight);
-
-                                        modelData.lineEnd = Qt.point(originalX, originalY);
-                                        // config.bookSets[0].saveToJson();
-                                        print("Changes Are Saved Page Detail set status");
-                                    }
-                                }
-                            }
+                            // The line endpoints are no longer hand-placed: they
+                            // follow the two box centers automatically (startPoint /
+                            // endPoint above), so the old blue/red drag handles are gone.
 
                             Shape {
                                 id: lineShape
