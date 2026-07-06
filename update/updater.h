@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QVariantMap>
+#include <QVariantList>
 #include <QString>
 
 // Editor-side remote update engine.
@@ -35,21 +36,39 @@ class Updater : public QObject
     // it (the updater.exe hand-off) is a separate, explicit step.
     Q_PROPERTY(bool editorUpdateAvailable READ editorUpdateAvailable NOTIFY editorUpdateAvailableChanged)
     Q_PROPERTY(QString editorUpdateVersion READ editorUpdateVersion NOTIFY editorUpdateAvailableChanged)
+    // Unified "something newer is out there" flag: true if either a newer editor
+    // or a newer content (reader) build was detected. Nothing is downloaded until
+    // the user explicitly calls applyUpdate(); the UI surfaces this on the version
+    // badge. availableVersion is the version string to show (editor version when
+    // an editor update is pending, else the highest pending content version).
+    Q_PROPERTY(bool updateAvailable READ updateAvailable NOTIFY updateAvailableChanged)
+    Q_PROPERTY(QString availableVersion READ availableVersion NOTIFY updateAvailableChanged)
+    // List of what is pending, for the menu: each entry is a map { label, version }.
+    Q_PROPERTY(QVariantList pendingUpdates READ pendingUpdates NOTIFY updateAvailableChanged)
+    // Currently installed components (Helper + each bundled platform build), each
+    // a map { label, version }, for the "Installed" section of the menu.
+    Q_PROPERTY(QVariantList installedComponents READ installedComponents NOTIFY installedComponentsChanged)
 
 public:
     explicit Updater(QObject *parent = nullptr);
 
-    // Compare the manifest against what is installed and pull down every reader
-    // build that is newer. Safe to call on every heartbeat: it is a no-op while
-    // already running, and skips artifacts already up to date. Non-blocking
-    // (runs on a worker thread).
+    // Detect what the manifest advertises WITHOUT downloading anything: compare
+    // the editor version and every reader build against what is installed and
+    // record which are newer. Cheap (disk-only) and safe to call on every
+    // heartbeat; it is a no-op while an apply pass is running. The actual
+    // download/extract happens only when the user calls applyUpdate().
     Q_INVOKABLE void applyManifest(const QVariantMap &manifest);
 
-    // Apply the pending editor update: download + verify the editor zip, extract
-    // it, then hand off to the standalone `updater` helper (which waits for this
-    // process to exit, overwrites the install dir, and relaunches the editor).
-    // No-op unless a newer editor was seen in a prior applyManifest(). This
-    // quits the app on success.
+    // Apply everything detected as pending: download + verify + extract every
+    // newer content (reader) build, then, if a newer editor is pending, download
+    // it and hand off to the standalone `updater` helper (which waits for this
+    // process to exit, overwrites the install dir, and relaunches the editor —
+    // this quits the app). No-op unless updateAvailable is true. Non-blocking
+    // (runs on a worker thread).
+    Q_INVOKABLE void applyUpdate();
+
+    // Apply the pending editor update only. Kept for completeness; the UI drives
+    // applyUpdate() instead. Quits the app on success.
     Q_INVOKABLE void applyEditorUpdate();
 
     bool busy() const { return m_busy; }
@@ -57,12 +76,20 @@ public:
     QString statusMessage() const { return m_statusMessage; }
     bool editorUpdateAvailable() const { return m_editorUpdateAvailable; }
     QString editorUpdateVersion() const { return m_editorUpdateVersion; }
+    bool updateAvailable() const { return m_editorUpdateAvailable || m_contentUpdateAvailable; }
+    QString availableVersion() const { return m_availableVersion; }
+    QVariantList pendingUpdates() const { return m_pendingUpdates; }
+    QVariantList installedComponents() const { return m_installedComponents; }
 
 signals:
     void busyChanged();
     void progressChanged();
     void statusMessageChanged();
     void editorUpdateAvailableChanged();
+    // The unified updateAvailable / availableVersion pair changed.
+    void updateAvailableChanged();
+    // The list of currently installed components changed.
+    void installedComponentsChanged();
     // A reader build was downloaded and installed into package/<platform>/.
     void readerUpdated(const QString &platform, const QString &version);
     // One applyManifest() pass finished (whether or not anything changed).
@@ -72,8 +99,19 @@ signals:
     void editorUpdateStarted();
 
 private:
-    // Worker-thread helpers.
-    void runManifest(const QVariantMap &manifest);
+    // Detection (main thread, disk-only, no network): fills m_pending* / editor
+    // fields and updates the availability flags from a manifest.
+    void detect(const QVariantMap &manifest);
+    // Recompute m_availableVersion from the current pending editor/content state.
+    void recomputeAvailableVersion();
+    // Rebuild m_installedComponents (Helper + each installed platform build).
+    void refreshInstalled();
+    // Mirror a win reader's data/ subtree into test/FlowBookTestVersion v<ver>/
+    // (the real reader, without the root starter exe or the data/ wrapper).
+    // force=true replaces an existing folder; false skips if already present.
+    void mirrorDataToTest(const QString &dataDir, const QString &versionLabel, bool force);
+    // Ensure the latest installed win build is mirrored into test/ (startup path).
+    void mirrorWinToTest();
     // Download url → verify sha256 → extract into package/<platformFolder>/<version>/.
     // Returns true on success (or if already current). platformFolder is the
     // on-disk folder name: "win", "win7-8", "linux", "mac".
@@ -109,6 +147,16 @@ private:
     // Kept from the last manifest so applyEditorUpdate() can fetch the payload.
     QString m_editorUrl;
     QString m_editorSha;
+    // Content (reader) builds detected as newer than what is installed, awaiting
+    // an explicit applyUpdate(). Each entry is a map: folder, url, sha256, version.
+    bool m_contentUpdateAvailable = false;
+    QVariantList m_pendingReaders;
+    // Version string surfaced to the UI ("New version available: <availableVersion>").
+    QString m_availableVersion;
+    // { label, version } entries for the update menu (editor + each content build).
+    QVariantList m_pendingUpdates;
+    // { label, version } for what is currently installed (Helper + platforms).
+    QVariantList m_installedComponents;
 };
 
 #endif // UPDATER_H

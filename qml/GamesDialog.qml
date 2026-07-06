@@ -18,11 +18,12 @@ Dialog {
     header: null
     closePolicy: Popup.NoAutoClose // Prevents dialog from closing when clicking outside
 
-    // Load games.json when dialog opens
+    // Refresh games for the currently open book when the dialog opens. Uses the
+    // stored book directory (workspace/books/<name>) — NOT a bare relative path,
+    // which would resolve against the process CWD and load nothing.
     onOpened: {
-        // Load games.json file
-        if (!gamesParser.loadFromFile("games.json")) {
-            console.error("Failed to load games.json");
+        if (!gamesParser.reload()) {
+            console.error("Failed to reload games.json for the current book");
         }
     }
 

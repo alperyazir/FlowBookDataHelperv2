@@ -35,6 +35,10 @@ static bool copyRecursively(const QString &src, const QString &dst) {
         const QFileInfoList entries = sd.entryInfoList(
             QDir::NoDotAndDotDot | QDir::AllEntries | QDir::Hidden | QDir::System);
         for (const QFileInfo &fi : entries) {
+            // Skip macOS zip metadata that would otherwise pollute the install.
+            if (fi.fileName() == QLatin1String("__MACOSX")
+                || fi.fileName() == QLatin1String(".DS_Store"))
+                continue;
             if (!copyRecursively(fi.absoluteFilePath(), dst + "/" + fi.fileName()))
                 return false;
         }
@@ -42,6 +46,25 @@ static bool copyRecursively(const QString &src, const QString &dst) {
     }
     QFile::remove(dst); // QFile::copy won't overwrite
     return QFile::copy(src, dst);
+}
+
+// Resolve the real payload root. Some update zips (e.g. made on macOS) wrap all
+// files in a single top folder and add __MACOSX metadata — so the app exe ends
+// up one level deep. If the expected exe isn't at srcDir's root but sits inside
+// a single real subdirectory, return that subdirectory; otherwise return srcDir.
+static QString resolvePayloadRoot(const QString &srcDir, const QString &exeName) {
+    if (QFile::exists(srcDir + "/" + exeName))
+        return srcDir;
+    QDir sd(srcDir);
+    QStringList subs;
+    for (const QString &s : sd.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        if (s == QLatin1String("__MACOSX"))
+            continue;
+        subs << s;
+    }
+    if (subs.size() == 1 && QFile::exists(srcDir + "/" + subs.first() + "/" + exeName))
+        return srcDir + "/" + subs.first();
+    return srcDir;
 }
 
 static void waitForProcessExit(qint64 pid) {
@@ -71,11 +94,15 @@ int main(int argc, char *argv[]) {
 
     waitForProcessExit(pid);
 
+    // Resolve the payload root (handles zips that wrap everything in one folder).
+    const QString exeName = QFileInfo(exePath).fileName();
+    const QString payloadRoot = resolvePayloadRoot(srcDir, exeName);
+
     // Copy the staged build over the install dir, retrying while the exe may
     // still be briefly locked.
     bool ok = false;
     for (int attempt = 0; attempt < 15 && !ok; ++attempt) {
-        ok = copyRecursively(srcDir, installDir);
+        ok = copyRecursively(payloadRoot, installDir);
         if (!ok)
             QThread::msleep(1000);
     }

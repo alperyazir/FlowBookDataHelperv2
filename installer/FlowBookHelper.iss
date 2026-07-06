@@ -68,6 +68,13 @@ Name: "{code:GetWorkspaceDir}\Helper"; Filename: "{app}\bin\{#MyAppExe}"; Workin
 ; Start-menu shortcut too.
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\bin\{#MyAppExe}"; WorkingDir: "{app}\bin"
 
+[UninstallDelete]
+; Wipe the whole program tree, including content the app downloaded at runtime
+; (package\<platform>\<version> reader builds, workspace.txt, logs) that Inno did
+; not itself install and would otherwise leave behind. The user's WORKSPACE
+; (books/release) lives elsewhere and is intentionally NOT touched.
+Type: filesandordirs; Name: "{app}"
+
 [Run]
 Filename: "{app}\bin\{#MyAppExe}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 

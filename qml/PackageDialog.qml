@@ -34,7 +34,6 @@ Dialog {
 
     property var selectedOS: ({
                                   windows: false,
-                                  windows78: false,
                                   linux: false,
                                   macos: false
                               })
@@ -58,8 +57,6 @@ Dialog {
         var platforms = [];
         if (selectedOS.windows)
             platforms.push("windows");
-        if (selectedOS.windows78)
-            platforms.push("windows78");
         if (selectedOS.linux)
             platforms.push("linux");
         if (selectedOS.macos)
@@ -357,24 +354,6 @@ Dialog {
                     indicator: Rectangle {
                         width: 18; height: 18; radius: 4
                         color: windowsCheck.checked ? "#00e6e6" : "#232f34"
-                        border.color: "#009ca6"; border.width: 1
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.left: parent.left; anchors.leftMargin: 5
-                    }
-                    contentItem: Text {
-                        text: parent.text; color: "white"; font.pixelSize: 16
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.left: parent.indicator.right; anchors.leftMargin: 10
-                    }
-                }
-                CheckBox {
-                    id: windows78Check
-                    text: "Windows 7-8"
-                    checked: selectedOS.windows78
-                    onCheckedChanged: selectedOS.windows78 = checked
-                    indicator: Rectangle {
-                        width: 18; height: 18; radius: 4
-                        color: windows78Check.checked ? "#00e6e6" : "#232f34"
                         border.color: "#009ca6"; border.width: 1
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.left: parent.left; anchors.leftMargin: 5

@@ -1559,7 +1559,15 @@ public:
 
     // Load from JSON file
     Q_INVOKABLE bool loadFromFile(const QString &filePath);
-    
+
+    // Re-load games.json for the currently open book (uses the stored book
+    // directory). Safe no-op if no book has been opened yet.
+    Q_INVOKABLE bool reload() {
+        if (_bookDirectoryName.isEmpty())
+            return false;
+        return loadFromFile(_bookDirectoryName);
+    }
+
     // Save to JSON file
     Q_INVOKABLE bool saveToFile();
     

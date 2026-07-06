@@ -809,6 +809,7 @@ ApplicationWindow {
         anchors.margins: 20
         width: versionText.width + 20
         height: 40
+        z: 60  // keep the badge (and its update dot) above bottom-left controls
         color: "#1A2327"
         border.color: versionPulse.running ? "#00e6e6" : "#009ca6"
         border.width: versionPulse.running ? 2 : 1
@@ -821,36 +822,218 @@ ApplicationWindow {
             NumberAnimation { target: versionRect; property: "scale"; to: 1.0; duration: 320; easing.type: Easing.OutBounce }
         }
 
+        // The helper's own (latest) version.
         Text {
             id: versionText
-            text: "v3.2.1"
+            text: "v" + Qt.application.version
             color: "#009ca6"
             anchors.centerIn: parent
             font.pixelSize: 14
         }
 
+        // Red notification dot at the top-right when a newer version is available.
+        Rectangle {
+            visible: updater.updateAvailable
+            width: 10; height: 10; radius: 5
+            color: "#e5484d"
+            border.color: "#1A2327"
+            border.width: 2
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.rightMargin: -4
+            anchors.topMargin: -4
+            z: 5
+        }
+
         MouseArea {
-            id: versionClicker
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
+            // Clicking the version badge toggles the small update menu.
+            onClicked: updatePopup.opened ? updatePopup.close() : updatePopup.open()
+        }
 
-            property int clickCount: 0
+        // Update popup — anchored just above the version badge. Surfaces the
+        // pending version and an explicit Update button; nothing downloads until
+        // the user presses it. While applying, it shows live progress. English
+        // only, by design.
+        Popup {
+            id: updatePopup
+            x: 0
+            y: -height - 10
+            width: 300
+            padding: 16
+            modal: false
+            focus: true
+            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
-            Timer {
-                id: clickResetTimer
-                interval: 900
-                onTriggered: versionClicker.clickCount = 0
+            property string errorText: ""
+
+            Connections {
+                target: updater
+                function onError(message) {
+                    updatePopup.errorText = message;
+                    updateErrorClear.restart();
+                    if (!updatePopup.opened)
+                        updatePopup.open();
+                }
+                function onUpdateAvailableChanged() {
+                    // Auto-close once everything is applied and nothing is pending.
+                    if (!updater.updateAvailable && !updater.busy && updatePopup.opened
+                        && updatePopup.errorText === "")
+                        updatePopup.close();
+                }
             }
 
-            onClicked: {
-                versionClicker.clickCount++;
-                clickResetTimer.restart();
-                if (versionClicker.clickCount >= 3) {
-                    versionClicker.clickCount = 0;
-                    clickResetTimer.stop();
-                    easterEgg.playVideoOnly();
-                } else {
-                    easterEgg.burstOnly();
+            Timer {
+                id: updateErrorClear
+                interval: 8000
+                onTriggered: updatePopup.errorText = ""
+            }
+
+            background: Rectangle {
+                color: "#1A2327"
+                radius: 6
+                border.width: 1
+                border.color: updatePopup.errorText !== "" ? "#bc262c" : "#2a8e96"
+            }
+
+            contentItem: ColumnLayout {
+                spacing: 10
+
+                // Header
+                Text {
+                    Layout.fillWidth: true
+                    color: "#e8eef0"
+                    font.pixelSize: 14
+                    font.bold: true
+                    wrapMode: Text.WordWrap
+                    text: updatePopup.errorText !== "" ? "Update failed"
+                          : updater.busy ? "Updating…"
+                          : updater.updateAvailable ? "Updates available"
+                          : "You're up to date"
+                }
+
+                // Error line
+                Text {
+                    Layout.fillWidth: true
+                    visible: updatePopup.errorText !== ""
+                    color: "#ff8f93"
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                    text: updatePopup.errorText
+                }
+
+                // Busy status + progress
+                Text {
+                    Layout.fillWidth: true
+                    visible: updater.busy
+                    color: "#b8c6cd"
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                    text: updater.statusMessage
+                }
+                ProgressBar {
+                    Layout.fillWidth: true
+                    visible: updater.busy && updater.progress > 0
+                    from: 0; to: 100
+                    value: updater.progress
+                }
+
+                // List of what's pending (label → version), theme-styled.
+                Repeater {
+                    model: (!updater.busy && updatePopup.errorText === "") ? updater.pendingUpdates : []
+                    delegate: RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Rectangle {
+                            width: 6; height: 6; radius: 3
+                            color: "#00c2cc"
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            color: "#cdd8dd"
+                            font.pixelSize: 12
+                            text: modelData.label + "  →  v" + modelData.version
+                        }
+                    }
+                }
+
+                // Actions when an update is pending
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 2
+                    spacing: 8
+                    visible: !updater.busy && updater.updateAvailable && updatePopup.errorText === ""
+                    Item { Layout.fillWidth: true }
+                    Button {
+                        text: "Later"
+                        onClicked: updatePopup.close()
+                        contentItem: Text {
+                            text: parent.text; color: "#9fb0b7"; font.pixelSize: 13
+                            horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle { color: "transparent" }
+                    }
+                    Button {
+                        id: updateBtn
+                        text: "Update"
+                        onClicked: { updatePopup.errorText = ""; updater.applyUpdate(); }
+                        contentItem: Text {
+                            text: parent.text; color: "#04252a"; font.pixelSize: 13; font.bold: true
+                            horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle {
+                            radius: 4; implicitWidth: 84; implicitHeight: 30
+                            color: updateBtn.down ? "#00b0ba" : "#00c2cc"
+                        }
+                    }
+                }
+
+                // Divider + currently installed component versions (always shown).
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+                    height: 1
+                    color: "#243138"
+                    visible: updater.installedComponents.length > 0 && updatePopup.errorText === ""
+                }
+                Text {
+                    visible: updater.installedComponents.length > 0 && updatePopup.errorText === ""
+                    text: "Installed"
+                    color: "#7f9199"
+                    font.pixelSize: 11
+                    font.bold: true
+                }
+                Repeater {
+                    model: updatePopup.errorText === "" ? updater.installedComponents : []
+                    delegate: RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Text {
+                            Layout.fillWidth: true
+                            color: "#9fb0b7"
+                            font.pixelSize: 12
+                            text: modelData.label
+                        }
+                        Text {
+                            color: "#cdd8dd"
+                            font.pixelSize: 12
+                            text: "v" + modelData.version
+                        }
+                    }
+                }
+
+                // Close action when nothing is pending
+                Button {
+                    visible: !updater.busy && !updater.updateAvailable && updatePopup.errorText === ""
+                    text: "Close"
+                    Layout.alignment: Qt.AlignRight
+                    onClicked: updatePopup.close()
+                    contentItem: Text {
+                        text: parent.text; color: "#9fb0b7"; font.pixelSize: 13
+                    }
+                    background: Rectangle { color: "transparent" }
                 }
             }
         }
@@ -1211,7 +1394,4 @@ ApplicationWindow {
         visible: config.isLocked
     }
 
-    // Non-blocking toast for remote updates (reader sync progress + the
-    // "update the editor now" prompt). Driven by the `updater` context property.
-    UpdateBanner {}
 }

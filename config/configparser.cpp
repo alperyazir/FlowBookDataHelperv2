@@ -377,22 +377,24 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
 
 QVector<Subtitles *> BookSet::getSubtitles(QString videoPath)
 {
-    // Uzantıyı değiştirmek için son noktadan itibaren uzantıyı bul
-    int dotIndex = videoPath.lastIndexOf('.');
-    if (dotIndex == -1) {
+    // The .srt sits next to the video inside the book, under the user's
+    // workspace — e.g. <workspace>/books/<name>/video/xxx.srt for a videoPath
+    // like "./books/<name>/video/xxx.mp4". Resolve it from workspaceRoot() (the
+    // same base QML's appPath uses), NOT the exe dir.
+    if (videoPath.lastIndexOf('.') == -1) {
         return {};
     }
-    QString appDir = QGuiApplication::applicationDirPath();
+    QString rel = videoPath;
+    if (rel.startsWith(QLatin1String("./")))
+        rel = rel.mid(2);
+    else if (rel.startsWith('/'))
+        rel = rel.mid(1);
 
-#ifdef Q_OS_MAC
-    appDir += "/../../../data/";
-#endif
-
-    // Dosya adını ve uzantısını ayır
-    QString fileName = appDir + videoPath.left(dotIndex);
+    const QString base = ConfigParser::instance()->workspaceRoot(); // ends with '/'
+    const int relDot = rel.lastIndexOf('.');
 
     // Yeni uzantıyı ekleyerek dosya adını oluştur
-    QString srtFilePath = fileName + ".srt";
+    QString srtFilePath = base + rel.left(relDot) + ".srt";
 
     QVector<Subtitles*> subtitles;
 
@@ -570,11 +572,18 @@ void ConfigParser::setWorkspaceRoot(const QString &path) {
 }
 
 void ConfigParser::adoptWorkspaceFromInstallerIfUnset() {
-    if (!readEncryptedJsonFromFile()["workspace_dir"].toString().isEmpty())
-        return; // already chosen on a previous run
+    // Keep an existing, still-valid choice. But re-adopt the installer's
+    // workspace.txt when the stored path is unset OR no longer exists/reachable
+    // — e.g. a stale path left in the persistent identity file by an earlier
+    // install (the identity file survives uninstall). Otherwise a reinstall that
+    // chose a different workspace would be ignored and the app would keep looking
+    // in the wrong (old) place.
+    const QString stored = readEncryptedJsonFromFile()["workspace_dir"].toString();
+    if (!stored.isEmpty() && QDir(stored).exists())
+        return; // current choice is valid — leave it alone
     QFile f(programRoot() + "workspace.txt");
     if (!f.open(QIODevice::ReadOnly))
-        return; // no installer handoff → keep the dev fallback (books next to exe)
+        return; // no installer handoff → keep the current fallback
     const QString path = QString::fromUtf8(f.readAll()).trimmed();
     f.close();
     if (!path.isEmpty() && QDir(path).exists())

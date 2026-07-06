@@ -72,6 +72,21 @@ QString PdfProcess::pythonExecutable()
         return cached;
 
     QStringList candidates;
+    // A python interpreter bundled next to the app (programRoot()/python) is
+    // tried first: end-user installs may have no system Python, so this keeps
+    // PDF/analysis working out of the box. It still has to pass the fitz probe
+    // below, so a missing or broken bundle simply falls through to the system
+    // interpreters. (programRoot() ends in ".../bin/../", i.e. the exe's parent,
+    // matching the deploy layout {app}\python alongside {app}\bin.)
+    {
+#ifdef Q_OS_WIN
+        const QString bundled = ConfigParser::programRoot() + "python/python.exe";
+#else
+        const QString bundled = ConfigParser::programRoot() + "python/bin/python3";
+#endif
+        if (QFile::exists(bundled))
+            candidates << bundled;
+    }
     // Real interpreters that typically carry third-party packages come first.
 #ifdef Q_OS_WIN
     // On Windows the binary is usually "python"; "python3" is often the
@@ -893,7 +908,6 @@ bool PdfProcess::launchTestFlowBook(const QString &testVersion) {
 
 QString PdfProcess::getPlatformFolderName(const QString &platform) const {
     if (platform == "windows") return "win";
-    if (platform == "windows78") return "win7-8";
     if (platform == "linux") return "linux";
     if (platform == "macos") return "mac";
     return QString();
@@ -973,7 +987,6 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
     for (const QString &platform : platforms) {
         currentPlatform++;
         QString platformName = platform == "windows" ? "Windows" :
-                             platform == "windows78" ? "Windows 7-8" :
                              platform == "linux" ? "Linux" :
                              platform == "macos" ? "macOS" : platform;
 
@@ -1003,9 +1016,17 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
 
         // Source FlowBook path
         QString sourceFlowBookPath = packagePath + "/" + flowBookVersion;
-        
-        // Create the new folder name with the package name
-        QString targetFolderName = flowBookVersion + " - " + packageName;
+
+        // Normalize the reader version to a bare "1.9.0" whether the on-disk
+        // folder is "1.9.0" (from an update) or "(win) FlowBook v1.9.0" (bundled).
+        static const QRegularExpression verRe("\\d+(?:\\.\\d+)+");
+        const QRegularExpressionMatch verM = verRe.match(flowBookVersion);
+        const QString cleanVer = verM.hasMatch() ? verM.captured(0) : flowBookVersion;
+
+        // Output folder / zip name carries the platform, reader version and the
+        // book(s): e.g. "(win) FlowBook v1.9.0 My Book".
+        QString targetFolderName = QString("(%1) FlowBook v%2 %3")
+                                       .arg(platformFolder, cleanVer, packageName);
         QString targetPath = releaseBookPath + "/" + targetFolderName;
 
         // FlowBook kopyalama

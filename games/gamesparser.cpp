@@ -74,13 +74,6 @@ bool GamesParser::saveToFile() {
         static QMutex mutex;
         QMutexLocker locker(&mutex);
 
-        QString appDir = QGuiApplication::applicationDirPath();
-#ifdef Q_OS_MAC
-        appDir += "/../../../books";
-#else
-        appDir += "/books";
-#endif
-
         // Create directory if it doesn't exist
         QDir dir(_bookDirectoryName);
         if (!dir.exists()) {

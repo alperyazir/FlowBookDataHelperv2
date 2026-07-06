@@ -16,6 +16,7 @@
 #include <QUrl>
 #include <QRegularExpression>
 #include <QVariantMap>
+#include <QVariantList>
 #include <QCoreApplication>
 
 #ifndef APP_VERSION
@@ -53,26 +54,130 @@ QString platformFolderForKey(const QString &key) {
     return key.mid(QStringLiteral("reader-").size());
 }
 
+// On-disk platform folder → the name shown in the update menu.
+QString platformDisplayName(const QString &folder) {
+    if (folder == QLatin1String("win"))   return QStringLiteral("Windows");
+    if (folder == QLatin1String("mac"))   return QStringLiteral("macOS");
+    if (folder == QLatin1String("linux")) return QStringLiteral("Linux");
+    return folder;
+}
+
+// Pull a clean dotted version out of a version-folder name for display
+// (e.g. "(win) FlowBook v1.7.0" -> "1.7.0"); falls back to the raw name.
+QString extractVersionLabel(const QString &name) {
+    static const QRegularExpression re(QStringLiteral("\\d+(?:\\.\\d+)+"));
+    const QRegularExpressionMatch m = re.match(name);
+    return m.hasMatch() ? m.captured(0) : name;
+}
+
+// Recursively copy the contents of src into dst (creating dst). Overwrites files.
+bool copyDirRecursively(const QString &src, const QString &dst) {
+    QDir sdir(src);
+    if (!sdir.exists())
+        return false;
+    if (!QDir().mkpath(dst))
+        return false;
+    const QFileInfoList entries = sdir.entryInfoList(
+        QDir::NoDotAndDotDot | QDir::AllEntries | QDir::Hidden | QDir::System);
+    for (const QFileInfo &fi : entries) {
+        const QString target = dst + "/" + fi.fileName();
+        if (fi.isDir()) {
+            if (!copyDirRecursively(fi.absoluteFilePath(), target))
+                return false;
+        } else {
+            QFile::remove(target); // QFile::copy won't overwrite
+            if (!QFile::copy(fi.absoluteFilePath(), target))
+                return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
-Updater::Updater(QObject *parent) : QObject(parent) {}
+Updater::Updater(QObject *parent) : QObject(parent) {
+    refreshInstalled();
+    // On startup, make sure the latest installed win build is mirrored into the
+    // test/ folder (handles the reader that shipped with the installer). Done on
+    // a worker thread — the data/ copy is large and must not block the UI.
+    QtConcurrent::run([this]() { mirrorWinToTest(); });
+}
+
+void Updater::mirrorDataToTest(const QString &dataDir, const QString &versionLabel, bool force) {
+    // The test build is the win reader WITHOUT the root starter exe or the data/
+    // wrapper: just the contents of data/ (which include the real FlowBook.exe),
+    // under test/FlowBookTestVersion v<version>/.
+    if (!QDir(dataDir).exists())
+        return;
+    const QString testRoot = ConfigParser::programRoot() + "test";
+    const QString name = "FlowBookTestVersion v" + versionLabel;
+    const QString testDir = testRoot + "/" + name;
+
+    bool needCopy = true;
+    if (QDir(testDir).exists()) {
+        if (force)
+            QDir(testDir).removeRecursively();
+        else
+            needCopy = false; // already mirrored for this version
+    }
+    if (needCopy) {
+        setStatusMessage(QString("Preparing test version %1…").arg(versionLabel));
+        copyDirRecursively(dataDir, testDir);
+    }
+
+    // Only the latest test build is kept — drop any older FlowBookTestVersion folders.
+    QDir tr(testRoot);
+    if (tr.exists()) {
+        const QStringList olds =
+            tr.entryList({QStringLiteral("FlowBookTestVersion v*")}, QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QString &s : olds) {
+            if (s != name)
+                QDir(testRoot + "/" + s).removeRecursively();
+        }
+    }
+}
+
+void Updater::mirrorWinToTest() {
+    const QString winFolder = installedReaderVersion(QStringLiteral("win"));
+    if (winFolder.isEmpty())
+        return;
+    const QString dataDir =
+        ConfigParser::programRoot() + "package/win/" + winFolder + "/data";
+    mirrorDataToTest(dataDir, extractVersionLabel(winFolder), false);
+}
+
+void Updater::refreshInstalled() {
+    QVariantList list;
+    QVariantMap helper;
+    helper["label"] = QStringLiteral("Helper");
+    helper["version"] = QStringLiteral(APP_VERSION);
+    list.append(helper);
+
+    QDir pkg(ConfigParser::programRoot() + "package");
+    if (pkg.exists()) {
+        const QStringList platforms = pkg.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QString &p : platforms) {
+            const QString folder = installedReaderVersion(p);
+            if (folder.isEmpty())
+                continue;
+            QVariantMap e;
+            e["label"] = platformDisplayName(p);
+            e["version"] = extractVersionLabel(folder);
+            list.append(e);
+        }
+    }
+    m_installedComponents = list;
+    emit installedComponentsChanged();
+}
 
 void Updater::applyManifest(const QVariantMap &manifest) {
     if (m_busy)
-        return; // a pass is already running; the next heartbeat will retry
-    if (manifest.isEmpty()) {
-        emit finished();
+        return; // an apply pass is running; don't re-detect underneath it
+    if (manifest.isEmpty())
         return;
-    }
-    setBusy(true);
-    // Detach a copy onto a worker thread — networking + unzip must not block UI.
-    QVariantMap copy = manifest;
-    QtConcurrent::run([this, copy]() {
-        runManifest(copy);
-        setProgress(0);
-        setBusy(false);
-        emit finished();
-    });
+    // Detection only — cheap and disk-only. Nothing is downloaded until the user
+    // triggers applyUpdate() from the version badge.
+    detect(manifest);
 }
 
 void Updater::applyEditorUpdate() {
@@ -145,7 +250,7 @@ void Updater::launchUpdaterAndQuit(const QString &srcDir) {
     QCoreApplication::quit();
 }
 
-void Updater::runManifest(const QVariantMap &manifest) {
+void Updater::detect(const QVariantMap &manifest) {
     // 1) Editor: flag only — the actual swap is the updater.exe hand-off.
     const QVariantMap editor = manifest.value("editor").toMap();
     if (!editor.isEmpty()) {
@@ -164,7 +269,9 @@ void Updater::runManifest(const QVariantMap &manifest) {
         emit editorUpdateAvailableChanged();
     }
 
-    // 2) Readers: sync every advertised platform build that is newer than local.
+    // 2) Content (readers): record every advertised platform build that is newer
+    //    than local, but do NOT download — that waits for applyUpdate().
+    QVariantList pending;
     const QStringList keys = manifest.keys();
     for (const QString &key : keys) {
         const QString folder = platformFolderForKey(key);
@@ -176,8 +283,119 @@ void Updater::runManifest(const QVariantMap &manifest) {
         const QString sha = e.value("sha256").toString().toLower();
         if (version.isEmpty() || url.isEmpty())
             continue;
-        syncReader(folder, url, sha, version);
+        const QString local = installedReaderVersion(folder);
+        if (!local.isEmpty() && compareVersions(version, local) <= 0)
+            continue; // already current
+        QVariantMap entry;
+        entry["folder"] = folder;
+        entry["url"] = url;
+        entry["sha256"] = sha;
+        entry["version"] = version;
+        pending.append(entry);
     }
+    m_pendingReaders = pending;
+    m_contentUpdateAvailable = !pending.isEmpty();
+
+    // Build the menu list: the editor (shown as "Helper") first, then each
+    // content build. Neutral labels — no internal "reader" wording.
+    QVariantList items;
+    if (m_editorUpdateAvailable) {
+        QVariantMap e;
+        e["label"] = QStringLiteral("Helper");
+        e["version"] = m_editorUpdateVersion;
+        items.append(e);
+    }
+    for (const QVariant &r : pending) {
+        const QVariantMap m = r.toMap();
+        QVariantMap e;
+        e["label"] = platformDisplayName(m.value("folder").toString());
+        e["version"] = m.value("version");
+        items.append(e);
+    }
+    m_pendingUpdates = items;
+
+    recomputeAvailableVersion();
+    emit updateAvailableChanged();
+}
+
+void Updater::recomputeAvailableVersion() {
+    QString v;
+    if (m_editorUpdateAvailable) {
+        v = m_editorUpdateVersion; // an editor bump takes the headline
+    } else {
+        for (const QVariant &item : m_pendingReaders) {
+            const QString ver = item.toMap().value("version").toString();
+            if (v.isEmpty() || compareVersions(ver, v) > 0)
+                v = ver;
+        }
+    }
+    m_availableVersion = v;
+}
+
+void Updater::applyUpdate() {
+    if (m_busy)
+        return;
+    if (!updateAvailable())
+        return;
+    setBusy(true);
+
+    // Snapshot the pending work so the worker thread never touches live members.
+    const QVariantList readers = m_pendingReaders;
+    const bool doEditor = m_editorUpdateAvailable;
+    const QString eurl = m_editorUrl;
+    const QString esha = m_editorSha;
+    const QString ever = m_editorUpdateVersion;
+
+    QtConcurrent::run([this, readers, doEditor, eurl, esha, ever]() {
+        // 1) Content builds first: download + verify + extract into
+        //    package/<folder>/<version>/ (silent — no running reader to swap).
+        for (const QVariant &item : readers) {
+            const QVariantMap m = item.toMap();
+            syncReader(m.value("folder").toString(), m.value("url").toString(),
+                       m.value("sha256").toString(), m.value("version").toString());
+        }
+
+        // 2) Editor last: download + verify + extract, then hand off to the
+        //    helper (which waits for us to exit, overwrites the install, and
+        //    relaunches). This quits the app.
+        if (doEditor) {
+            setStatusMessage(QString("Downloading version %1…").arg(ever));
+            const QString zip = downloadToTemp(eurl, esha);
+            if (zip.isEmpty()) {
+                setProgress(0);
+                setBusy(false);
+                emit error("Update download or checksum failed.");
+                return;
+            }
+            const QString srcDir =
+                QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/fbeditor_" + ever;
+            setStatusMessage(QString("Preparing version %1…").arg(ever));
+            if (!extractZip(zip, srcDir)) {
+                QFile::remove(zip);
+                setProgress(0);
+                setBusy(false);
+                emit error("Update package could not be extracted.");
+                return;
+            }
+            QFile::remove(zip);
+            QMetaObject::invokeMethod(this, [this, srcDir]() { launchUpdaterAndQuit(srcDir); },
+                                      Qt::QueuedConnection);
+            return; // app quits from here
+        }
+
+        // Content-only pass: clear pending state and report done on the main thread.
+        setProgress(0);
+        setBusy(false);
+        QMetaObject::invokeMethod(this, [this]() {
+            m_pendingReaders.clear();
+            m_contentUpdateAvailable = false;
+            m_pendingUpdates.clear();
+            recomputeAvailableVersion();
+            refreshInstalled();
+            emit updateAvailableChanged();
+            emit finished();
+        }, Qt::QueuedConnection);
+    });
 }
 
 QString Updater::installedReaderVersion(const QString &platformFolder) const {
@@ -216,6 +434,12 @@ bool Updater::syncReader(const QString &platformFolder, const QString &url,
     QFile::remove(zip);
     setStatusMessage(QString("%1 reader updated to %2").arg(platformFolder, version));
     emit readerUpdated(platformFolder, version);
+
+    // Keep the test/ build in step with the latest win reader: mirror the freshly
+    // extracted data/ into test/FlowBookTestVersion v<version>/.
+    if (platformFolder == QLatin1String("win"))
+        mirrorDataToTest(dest + "/data", version, true);
+
     return true;
 }
 
