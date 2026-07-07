@@ -10,6 +10,10 @@ ColumnLayout {
 
     property var activityModelData: ({})
     property string title: "Words"
+    // When true each row gets a reading-order badge (click to renumber). Only
+    // meaningful where the row order IS the answer (the ordering activity);
+    // the plain drag-drop/fill/puzzle word pools leave it off.
+    property bool reorderable: false
 
     spacing: 8
 
@@ -66,6 +70,24 @@ ColumnLayout {
                         width: ListView.view ? ListView.view.width : 0
                         property string wText: tf.text
                         spacing: 6
+
+                        // Reading-order badge (ordering activity only): click to
+                        // type a new position. Invisible items are dropped from
+                        // the RowLayout, so the pool rows keep their old look.
+                        OrderBadge {
+                            visible: wl.reorderable
+                            diameter: 26
+                            Layout.preferredWidth: 26
+                            Layout.preferredHeight: 26
+                            number: index + 1
+                            total: wordsRepeater.count
+                            pillColor: "#E65100"
+                            onReorderRequested: (oneBased) => {
+                                wl.updateData();
+                                wl.activityModelData.moveWord(index, oneBased - 1);
+                                config.bookSets[0].saveToJson();
+                            }
+                        }
 
                         AppTextField {
                             id: tf

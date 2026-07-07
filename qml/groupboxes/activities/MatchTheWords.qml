@@ -201,6 +201,23 @@ ColumnLayout {
                             property string imagePathText: pictureEditRight.text
                             property string sentenceText: sentenceTxt.text
 
+                            // Reading-order badge for this match item: click to
+                            // type a new position. Each sentence keeps its own
+                            // word/sentence/image, so reordering is safe.
+                            OrderBadge {
+                                diameter: 26
+                                Layout.preferredWidth: 26
+                                Layout.preferredHeight: 26
+                                number: index + 1
+                                total: sentencesRepeater.count
+                                pillColor: "#E65100"
+                                onReorderRequested: (oneBased) => {
+                                    updateData();
+                                    root.activityModelData.moveSentences(index, oneBased - 1);
+                                    config.bookSets[0].saveToJson();
+                                }
+                            }
+
                             AppTextField {
                                 id: matchedLeft
                                 Layout.preferredWidth: 30

@@ -844,6 +844,18 @@ public:
 
     }
 
+    // Reorder a word WITHIN this activity (e.g. the correct-order sentences of
+    // an ordering activity, where the order IS the answer). Mirror of
+    // moveAnswer.
+    Q_INVOKABLE void moveWord(int from, int to) {
+        if (from < 0 || from >= _words.size()) return;
+        if (to < 0 || to >= _words.size()) return;
+        if (from == to) return;
+        QString w = _words.takeAt(from);
+        _words.insert(to, w);
+        emit wordsChanged();
+    }
+
     QVariantList words() const {
         QVariantList l;
         for (const QString &s : _words) {
@@ -936,6 +948,17 @@ public:
             }
             emit sentencesChanged();
         }
+    }
+
+    // Reorder a match item WITHIN this activity, so the reveal/reading order
+    // of the sentences can be fixed. Mirror of moveAnswer.
+    Q_INVOKABLE void moveSentences(int from, int to) {
+        if (from < 0 || from >= _sentences.size()) return;
+        if (to < 0 || to >= _sentences.size()) return;
+        if (from == to) return;
+        Sentences *s = _sentences.takeAt(from);
+        _sentences.insert(to, s);
+        emit sentencesChanged();
     }
 
     QVariantList circleExtra() const {

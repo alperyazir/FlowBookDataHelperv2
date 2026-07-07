@@ -32,5 +32,7 @@ ColumnLayout {
         Layout.fillHeight: true
         activityModelData: root.activityModelData
         title: "Correct sentences"
+        // The row order is the correct answer, so let it be reordered.
+        reorderable: true
     }
 }

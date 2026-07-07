@@ -407,6 +407,22 @@ Rectangle {
                             model: activityModelData.answers
                             Item {
                                 id: answerRect
+
+                                // Reading-order number for this answer zone
+                                // (same badges as the page's fill blanks and
+                                // the non-group drag-drop-picture activity).
+                                OrderBadge {
+                                    number: index + 1
+                                    total: activityModelData.answers ? activityModelData.answers.length : 0
+                                    diameter: Math.max(16, Math.min(answerRect.width, answerRect.height) * 0.6)
+                                    pillColor: "#E65100"
+                                    anchors.horizontalCenter: parent.left
+                                    anchors.verticalCenter: parent.top
+                                    onReorderRequested: (oneBased) => {
+                                        activityModelData.moveAnswer(index, oneBased - 1);
+                                        config.bookSets[0].saveToJson();
+                                    }
+                                }
                                 property real xScale: activityImage.paintedWidth / activityImage.sourceSize.width
                                 property real yScale: activityImage.paintedHeight / activityImage.sourceSize.height
                                 property real originalWidth: modelData.coords.width
