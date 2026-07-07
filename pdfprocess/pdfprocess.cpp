@@ -911,7 +911,6 @@ bool PdfProcess::launchTestFlowBook(const QString &testVersion) {
 
 QString PdfProcess::getPlatformFolderName(const QString &platform) const {
     if (platform == "windows") return "win";
-    if (platform == "windows78") return "win7-8";
     if (platform == "linux") return "linux";
     if (platform == "macos") return "mac";
     return QString();
@@ -993,7 +992,6 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
     for (const QString &platform : platforms) {
         currentPlatform++;
         QString platformName = platform == "windows" ? "Windows" :
-                             platform == "windows78" ? "Windows 7-8" :
                              platform == "linux" ? "Linux" :
                              platform == "macos" ? "macOS" : platform;
 
