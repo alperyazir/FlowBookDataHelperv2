@@ -73,8 +73,10 @@ CMakeLists.txt.user*
 *.exe
 
 build/
+build-win/
 debug/
 release/
+deploy/
 
 # Qt
 *.pro.user
