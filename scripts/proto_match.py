@@ -344,11 +344,29 @@ def build_match_sections(po, pa, page_num, images_dir, prefix, sx, sy):
 def redetect_match(raw_dir, page_no, rect_px, png_size, out_base):
     import json
     original_path, answered_path = find_pdf_pair(raw_dir)
-    if not original_path or not answered_path:
-        print(json.dumps({"error": "pdf pair not found in raw dir"}))
+    # Detection reads the answered page, but a missing answered PDF (or a
+    # missing page in it) must not error out — return an empty result so the
+    # editor keeps the activity as-is and the user wires it up by hand.
+    if not original_path:
+        print(json.dumps({"error": "original pdf not found in raw dir"}))
         return 1
-    orig, ans = fitz.open(original_path), fitz.open(answered_path)
-    po, pa = orig[page_no - 1], ans[page_no - 1]
+    orig = fitz.open(original_path)
+    if not (1 <= page_no <= len(orig)):
+        print(json.dumps({"error": "page %d out of range in original pdf" % page_no}))
+        orig.close()
+        return 1
+    po = orig[page_no - 1]
+    ans, pa = None, None
+    if answered_path:
+        ans = fitz.open(answered_path)
+        if 1 <= page_no <= len(ans):
+            pa = ans[page_no - 1]
+    if pa is None:
+        print(json.dumps({"match_words": [], "sentences": []}))
+        orig.close()
+        if ans is not None:
+            ans.close()
+        return 0
     sx = po.rect.width / png_size[0]
     sy = po.rect.height / png_size[1]
     x, y, w, h = rect_px
@@ -372,11 +390,17 @@ def redetect_match_column(raw_dir, page_no, rect_px, png_size, side, out_base):
     combined crop got wrong on scattered/duplicate labels). Picture items get
     a saved crop; entries are {"text", "image_path"?}."""
     import json
-    original_path, answered_path = find_pdf_pair(raw_dir)
-    if not original_path or not answered_path:
-        print(json.dumps({"error": "pdf pair not found in raw dir"}))
+    original_path, _ = find_pdf_pair(raw_dir)
+    # This column crop reads only the original page (rows + pictures under the
+    # rect), so the answered PDF is not needed here at all.
+    if not original_path:
+        print(json.dumps({"error": "original pdf not found in raw dir"}))
         return 1
-    orig, ans = fitz.open(original_path), fitz.open(answered_path)
+    orig = fitz.open(original_path)
+    if not (1 <= page_no <= len(orig)):
+        print(json.dumps({"error": "page %d out of range in original pdf" % page_no}))
+        orig.close()
+        return 1
     po = orig[page_no - 1]
     sx = po.rect.width / png_size[0]
     sy = po.rect.height / png_size[1]
@@ -409,7 +433,6 @@ def redetect_match_column(raw_dir, page_no, rect_px, png_size, side, out_base):
             entries.append({"text": "", "image_path": p})
     print(json.dumps({"side": side, "entries": entries}, ensure_ascii=False))
     orig.close()
-    ans.close()
     return 0
 
 

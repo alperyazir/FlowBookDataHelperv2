@@ -1041,11 +1041,25 @@ def redetect(raw_dir, page_no, rect_px, png_size, out_path, kind="circle"):
     kind: "circle" or "markwithx" — the activity the user is editing."""
     import json
     original_path, answered_path = find_pdf_pair(raw_dir)
-    if not original_path or not answered_path:
-        print(json.dumps({"error": "pdf pair not found in raw dir"}))
+    # The crop image is cut from the original, so that PDF (and this page in
+    # it) is the only hard requirement. The answered PDF only drives option/
+    # mark detection: when it's missing — or simply has no such page — fall
+    # back to cropping the region from the original and leaving the answers
+    # for the user to place by hand, rather than erroring out.
+    if not original_path:
+        print(json.dumps({"error": "original pdf not found in raw dir"}))
         return 1
-    orig, ans = fitz.open(original_path), fitz.open(answered_path)
-    po, pa = orig[page_no - 1], ans[page_no - 1]
+    orig = fitz.open(original_path)
+    if not (1 <= page_no <= len(orig)):
+        print(json.dumps({"error": "page %d out of range in original pdf" % page_no}))
+        orig.close()
+        return 1
+    po = orig[page_no - 1]
+    ans, pa = None, None
+    if answered_path:
+        ans = fitz.open(answered_path)
+        if 1 <= page_no <= len(ans):
+            pa = ans[page_no - 1]
     sx = po.rect.width / png_size[0]
     sy = po.rect.height / png_size[1]
     x, y, w, h = rect_px
@@ -1057,30 +1071,36 @@ def redetect(raw_dir, page_no, rect_px, png_size, out_path, kind="circle"):
     # page-PNG pixels (fills overlay the page directly). The editor deletes
     # the existing fills in the band and inserts these.
     if kind == "fill":
-        # Use the SAME pipeline as Analyze (detect_fills): registration +
-        # echo/phantom guards + prose/echo rescue + graphic-checkmark
-        # recovery. The bare snap_page here used to re-insert exactly the
-        # phantoms Analyze had filtered (and lose recovered ✓ marks) when
-        # the user adjusted a band and hit re-check.
-        from stage_fill import detect_fills
-        snap_sx = png_size[0] / po.rect.width
-        snap_sy = png_size[1] / po.rect.height
-        secs = detect_fills(po, pa, snap_sx, snap_sy)
+        # Fill re-check reads the answers from the answered/original diff, so
+        # without an answered page there is nothing to re-detect (and fill
+        # produces no crop image anyway) — return an empty band cleanly.
         out = []
-        for sec in secs:
-            for a in sec.get("answer", []):
-                c = a["coords"]
-                cx = c["x"] + c["w"] / 2.0
-                cy = c["y"] + c["h"] / 2.0
-                if x <= cx <= x + w and y <= cy <= y + h:
-                    out.append({"coords": c, "text": a.get("text", ""),
-                                "isTextBold": bool(a.get("is_text_bold", True)),
-                                "needs_review": bool(a.get("needs_review", False))})
+        if pa is not None:
+            # Use the SAME pipeline as Analyze (detect_fills): registration +
+            # echo/phantom guards + prose/echo rescue + graphic-checkmark
+            # recovery. The bare snap_page here used to re-insert exactly the
+            # phantoms Analyze had filtered (and lose recovered ✓ marks) when
+            # the user adjusted a band and hit re-check.
+            from stage_fill import detect_fills
+            snap_sx = png_size[0] / po.rect.width
+            snap_sy = png_size[1] / po.rect.height
+            secs = detect_fills(po, pa, snap_sx, snap_sy)
+            for sec in secs:
+                for a in sec.get("answer", []):
+                    c = a["coords"]
+                    cx = c["x"] + c["w"] / 2.0
+                    cy = c["y"] + c["h"] / 2.0
+                    if x <= cx <= x + w and y <= cy <= y + h:
+                        out.append({"coords": c, "text": a.get("text", ""),
+                                    "isTextBold": bool(a.get("is_text_bold", True)),
+                                    "needs_review": bool(a.get("needs_review", False))})
         # detect_fills already emits the blanks in the page's reading order;
         # keep that (walking it here filtered by band preserves it) so the
         # re-checked band matches the page exactly.
         print(json.dumps({"fill": True, "answer": out}, ensure_ascii=False))
-        orig.close(); ans.close()
+        orig.close()
+        if ans is not None:
+            ans.close()
         return 0
 
     # The user's rect is authoritative: crop exactly it, even when no
@@ -1100,32 +1120,37 @@ def redetect(raw_dir, page_no, rect_px, png_size, out_path, kind="circle"):
     answers = []
     circle_count = 0
     mark_count = 0
-    override = [{"rect": band, "header": None}]
-    if kind == "markwithx":
-        exs = detect_markwithx_exercises(po, pa, bands_override=override)
-        if exs:
-            mark_count = exs[0]["markCount"]
-            for b in exs[0]["boxes"]:
-                entry = {"coords": px(b["bbox"], pad=2.0), "opacity": 1}
-                if b["isCorrect"]:
-                    entry["isCorrect"] = True
-                answers.append(entry)
-    else:
-        exs = detect_circle_exercises(po, pa, bands_override=override)
-        if exs:
-            circle_count = exs[0]["circleCount"]
-            for o in exs[0]["options"]:
-                entry = {"coords": px(o["bbox"]), "opacity": 1}
-                if o["isCorrect"]:
-                    entry["isCorrect"] = True
-                answers.append(entry)
+    # Options/marks come from the answered page. With no answered page the crop
+    # is still saved above; we just emit no answers for the user to fill in.
+    if pa is not None:
+        override = [{"rect": band, "header": None}]
+        if kind == "markwithx":
+            exs = detect_markwithx_exercises(po, pa, bands_override=override)
+            if exs:
+                mark_count = exs[0]["markCount"]
+                for b in exs[0]["boxes"]:
+                    entry = {"coords": px(b["bbox"], pad=2.0), "opacity": 1}
+                    if b["isCorrect"]:
+                        entry["isCorrect"] = True
+                    answers.append(entry)
+        else:
+            exs = detect_circle_exercises(po, pa, bands_override=override)
+            if exs:
+                circle_count = exs[0]["circleCount"]
+                for o in exs[0]["options"]:
+                    entry = {"coords": px(o["bbox"]), "opacity": 1}
+                    if o["isCorrect"]:
+                        entry["isCorrect"] = True
+                    answers.append(entry)
     # Options come out of detect_*_exercises already in the same order the
     # main page uses (the (y,x) sort at build time), so leave them as-is to
     # match what the page shows.
     print(json.dumps({"answer": answers, "circleCount": circle_count,
                       "markCount": mark_count,
                       "crop": out_path}, ensure_ascii=False))
-    orig.close(); ans.close()
+    orig.close()
+    if ans is not None:
+        ans.close()
     return 0
 
 
