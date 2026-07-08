@@ -48,6 +48,23 @@ _APOS = str.maketrans({"’": "'", "‘": "'", "ʼ": "'",
                        "′": "'", "´": "'", "`": "'"})
 norm = lambda s: _NORM.sub("", s.lower().translate(_APOS))
 
+# A token is "spoken" — worth forced-aligning — only if it contains at least one
+# letter. Fill-in-the-blank (cloze) passages carry underscore runs ("________")
+# and bare question numbers ("1", "2") that are never read aloud. Force-aligning
+# them makes those tokens (and their neighbours) swallow multi-second bogus
+# durations, which desyncs the karaoke highlight. Numbers are dropped entirely
+# (a rare genuinely-spoken number costs one un-highlighted word, no desync);
+# blank lines are KEPT (flagged) and timed from the ASR gap instead (time_blanks)
+# so the box still lights up while the unwritten answer is spoken.
+_HAS_LETTER = re.compile(r"[a-z]")
+def _is_spoken(text):
+    return bool(_HAS_LETTER.search(text.lower().translate(_APOS)))
+
+# faster-whisper model for intro detection (see _asr_word_timeline). "base" is
+# accurate enough to locate where the passage starts and keeps the one-time
+# model download small; timing precision is irrelevant here.
+_ASR_MODEL = "base"
+
 # Below this mean alignment confidence we flag the passage for human review.
 REVIEW_SCORE = 0.30
 
@@ -108,6 +125,18 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
         if not run:
             return
         text = "".join(c["c"] for c in run)
+        # Classify the token. Spoken words (have a letter) align normally. A blank
+        # line ("______") is kept but flagged: it's held OUT of the forced align
+        # (it has no phonemes, so aligning it makes it swallow multi-second bogus
+        # time and desyncs everything) and instead timed from the ASR gap, so its
+        # box lights up while the unwritten answer word is spoken (see time_blanks
+        # + _is_spoken). Bare numbers / punctuation ("1", "2") are dropped.
+        if _is_spoken(text):
+            is_blank = False
+        elif "__" in text:
+            is_blank = True
+        else:
+            return
         x0 = min(c["bbox"][0] for c in run) * sx
         x1 = max(c["bbox"][2] for c in run) * sx
         if size > 0:
@@ -124,11 +153,14 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
         if key in seen:
             return
         seen.add(key)
-        out.append({
+        entry = {
             "text": text,
             "bbox": {"x": round(x0), "y": round(y0),
                      "w": round(x1 - x0), "h": round(y1 - y0)},
-        })
+        }
+        if is_blank:
+            entry["blank"] = True
+        out.append(entry)
 
     # rawdict yields blocks→lines→spans→chars in reading order; split each span
     # into words on whitespace. Each span carries the font size, and every char
@@ -217,33 +249,38 @@ def _model_cache_status():
 _WINDOW_PAD = 0.5
 
 
-def _asr_word_timeline(audio, model_a, meta, lang):
+def _asr_word_timeline(audio_path, lang):
     """Transcribe the WHOLE clip and return a word-level timeline
     [{w, start, end}] (w normalized). Used ONLY to locate where the passage
     begins — many clips open with a spoken instruction ("Revision 1. Page 6…
     Then listen and check.") that isn't in the passage crop, and forced-aligning
     the passage across the whole clip leaks its first words onto that intro.
-    Timing precision here is irrelevant; the real timestamps still come from the
-    forced pass. Returns [] if ASR is unavailable so the caller falls back to a
-    whole-clip align."""
-    import whisperx
+
+    Transcribes with faster-whisper and VAD DISABLED, on purpose. whisperx's own
+    transcribe() runs a pyannote VAD frontend that, on some clips, drops the
+    quieter lead-in speech (book title / "Page N" / instructions) entirely and
+    collapses the timeline so the passage looks like it starts at ~1s. That made
+    the window below fall back to the whole clip, and the first passage words
+    leaked onto the intro (highlight firing ~10s early). Bypassing VAD sees the
+    full clip, intro included. Timing precision here is irrelevant; the real
+    timestamps still come from the forced pass. Returns [] if ASR is unavailable
+    so the caller falls back to a whole-clip align."""
     try:
-        model = whisperx.load_model("base", device="cpu", compute_type="int8",
-                                    language=lang)
-        res = model.transcribe(audio, batch_size=8)
-        ali = whisperx.align(res["segments"], model_a, meta, audio, "cpu",
-                             return_char_alignments=False)
+        from faster_whisper import WhisperModel
+        model = WhisperModel(_ASR_MODEL, device="cpu", compute_type="int8")
+        segments, _info = model.transcribe(audio_path, language=lang,
+                                           word_timestamps=True, vad_filter=False)
+        out = []
+        for seg in segments:
+            for w in (seg.words or []):
+                if w.start is not None:
+                    out.append({"w": norm(w.word),
+                                "start": w.start, "end": w.end})
+        return [x for x in out if x["w"]]
     except Exception as e:
         print(f"PROGRESS: Intro detection unavailable ({e}); aligning whole clip",
               flush=True)
         return []
-    out = []
-    for seg in ali["segments"]:
-        for w in seg.get("words", []):
-            if w.get("start") is not None:
-                out.append({"w": norm(w["word"]),
-                            "start": w["start"], "end": w["end"]})
-    return out
 
 
 def _locate_passage_window(words, asr, dur):
@@ -286,15 +323,17 @@ def _locate_passage_window(words, asr, dur):
 
 
 def align(words, audio_path, lang):
-    """Forced-align the known passage text to audio. Returns (aligned, dur).
+    """Forced-align the known passage text to audio. Returns (aligned, dur, asr).
 
     First transcribes the clip to find where the passage begins (skipping any
     spoken intro/instruction that isn't in the crop), then forced-aligns the
     passage text only within that window — so leading words are timed to when
-    they are actually spoken, not leaked onto the intro."""
+    they are actually spoken, not leaked onto the intro. Blank tokens are held
+    out of the aligned text; the returned ASR timeline is used to time them."""
     import whisperx
     device = "cpu"
-    text = " ".join(w["text"] for w in words)
+    # Blanks have no spoken form — align only the real words (see time_blanks).
+    text = " ".join(w["text"] for w in words if not w.get("blank"))
     audio = whisperx.load_audio(audio_path)
     dur = len(audio) / 16000.0
     # The ~370MB wav2vec model is downloaded only once (it lives in the torch
@@ -317,7 +356,7 @@ def align(words, audio_path, lang):
 
     # Locate the passage in the clip and align only that window.
     print("PROGRESS: Finding where the passage begins in the audio…", flush=True)
-    asr = _asr_word_timeline(audio, model_a, meta, lang)
+    asr = _asr_word_timeline(audio_path, lang)
     t0, t1 = _locate_passage_window(words, asr, dur)
     i0, i1 = int(t0 * 16000), int(t1 * 16000)
     clip = audio[i0:i1] if (t0 > 0.0 or t1 < dur) else audio
@@ -325,7 +364,8 @@ def align(words, audio_path, lang):
         print(f"PROGRESS: Passage runs {t0:.1f}s–{t1:.1f}s; skipping "
               f"{t0:.0f}s of intro before it", flush=True)
 
-    print(f"PROGRESS: Aligning {len(words)} words to {(len(clip)/16000.0):.0f}s "
+    n_spoken = sum(1 for w in words if not w.get("blank"))
+    print(f"PROGRESS: Aligning {n_spoken} words to {(len(clip)/16000.0):.0f}s "
           f"of audio…", flush=True)
     segs = [{"text": text, "start": 0.0, "end": len(clip) / 16000.0}]
     res = whisperx.align(segs, model_a, meta, clip, device,
@@ -338,7 +378,7 @@ def align(words, audio_path, lang):
                 w["start"] += t0
                 w["end"] += t0
             aligned.append(w)
-    return aligned, dur
+    return aligned, dur, asr
 
 
 def attach_timing(words, aligned):
@@ -361,7 +401,9 @@ def attach_timing(words, aligned):
                     words[i1 + k]["score"] = round(float(aw.get("score", 0)), 3)
     scores = [w["score"] for w in words if w["score"] is not None]
     mean_score = round(sum(scores) / len(scores), 3) if scores else 0.0
-    missing = sum(1 for w in words if w["start"] is None)
+    # Blanks never get a forced timestamp (they're not in the aligned text) and
+    # are timed separately — don't count them as unaligned/needs-review words.
+    missing = sum(1 for w in words if not w.get("blank") and w["start"] is None)
     # Forward-fill gaps so the reader's highlight never stalls.
     last = 0.0
     for w in words:
@@ -371,6 +413,53 @@ def attach_timing(words, aligned):
             w["end"] = w["start"]
         last = w["end"]
     return mean_score, missing
+
+
+def time_blanks(words, asr):
+    """Give each blank ("______") a timespan from the ASR gap between its
+    neighbouring real words, so its box lights up while the (unwritten) answer
+    word is spoken. Runs after attach_timing, overwriting the blanks' forward-
+    filled placeholder times. No-op (blanks keep the placeholder) if ASR is
+    unavailable.
+
+    The forced pass can't time a blank — there's no token for the spoken answer,
+    so a neighbour absorbs it. But the whole-clip ASR *did* hear that answer, so
+    we map the real words onto the ASR timeline and read the blank's time from
+    the gap: [end of the previous word in ASR, start of the next word in ASR]."""
+    if not asr:
+        return
+    # Map each non-blank word (in reading order) to its ASR index.
+    spoken = [i for i, w in enumerate(words) if not w.get("blank")]
+    a = [norm(words[i]["text"]) for i in spoken]
+    b = [x["w"] for x in asr]
+    sm = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
+    word_asr = [None] * len(words)   # words-index -> asr-index
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag in ("equal", "replace"):
+            for k in range(min(i2 - i1, j2 - j1)):
+                word_asr[spoken[i1 + k]] = j1 + k
+
+    for bi, w in enumerate(words):
+        if not w.get("blank"):
+            continue
+        prev_sp = next((i for i in range(bi - 1, -1, -1)
+                        if word_asr[i] is not None), None)
+        next_sp = next((i for i in range(bi + 1, len(words))
+                        if word_asr[i] is not None), None)
+        # Read the answer's span from the ASR gap between the neighbours.
+        bs = asr[word_asr[prev_sp]]["end"] if prev_sp is not None else 0.0
+        be = (asr[word_asr[next_sp]]["start"] if next_sp is not None
+              else (words[prev_sp]["end"] if prev_sp is not None else bs))
+        # Clamp inside the neighbours' FORCED starts so reading-order start times
+        # stay monotonic — the reader's active-word logic depends on that.
+        lo = words[prev_sp]["start"] + 0.01 if prev_sp is not None else 0.0
+        hi = words[next_sp]["start"] - 0.01 if next_sp is not None else be
+        if hi <= lo:                     # neighbours too close for a real gap
+            bs = be = round((lo + hi) / 2, 3)
+        else:
+            bs = round(min(max(bs, lo), hi), 3)
+            be = round(min(max(be, bs), hi), 3)
+        w["start"], w["end"] = bs, be
 
 
 def merge_into_audio_json(path, audio_id, entry):
@@ -433,9 +522,10 @@ def main():
           flush=True)
     setup_align_runtime()
     # align() emits its own "Loading model…" / "Aligning…" progress lines.
-    aligned, dur = align(words, audio_path, lang)
+    aligned, dur, asr = align(words, audio_path, lang)
     print(f"Aligned {len(aligned)} words against {dur:.2f}s audio", flush=True)
     mean_score, missing = attach_timing(words, aligned)
+    time_blanks(words, asr)   # light up blank boxes when the answer is spoken
     needs_review = (mean_score < REVIEW_SCORE) or (missing > len(words) * 0.2)
     print(f"Mean score={mean_score}, unaligned={missing}, "
           f"needs_review={needs_review}", flush=True)
