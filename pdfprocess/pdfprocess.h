@@ -71,6 +71,14 @@ public:
     // if the file ends up without that entry (including when it was missing).
     Q_INVOKABLE bool deleteKaraoke(const QString &audioJsonPath,
                                    const QString &audioId);
+    // Overwrite one audio id's "words" array in audio/audio.json with the given
+    // list (each a {text, bbox, start, end, ...} map, order = playback order).
+    // Used by the audio panel to persist rename / reorder / delete edits. Other
+    // keys on the entry (passage, duration, mean_score, …) are left untouched.
+    // Returns false if the file/id is missing or the write fails.
+    Q_INVOKABLE bool saveKaraokeWords(const QString &audioJsonPath,
+                                      const QString &audioId,
+                                      const QVariantList &words);
     // Help ▸ Dependencies. checkDependencies() reports status (async, via
     // dependenciesChecked); installDependencies() pip-installs the given pip
     // package names (async, via dependenciesInstalled; progress on logMessage).

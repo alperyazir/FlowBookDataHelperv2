@@ -26,6 +26,12 @@ GroupBox {
     // completion handler shows "Canceled" rather than "Failed".
     property bool karaokeCanceled: false
 
+    // Word-list editing. In edit mode a click selects a word (instead of
+    // seeking) so it can be renamed / reordered / deleted; selectedWordIndex is
+    // the word being edited (-1 = none). Edits persist to audio.json immediately.
+    property bool wordsEditMode: false
+    property int selectedWordIndex: -1
+
     function _baseName(p) { return p ? String(p).substring(String(p).lastIndexOf("/") + 1) : ""; }
     function _isThisAudio(p) { return _baseName(p) === _baseName(root.audioModelData && root.audioModelData.audioPath); }
 
@@ -52,7 +58,11 @@ GroupBox {
         content.pageDetails.karaokeWords = pdfProcess.loadKaraokeWords(path, id);
     }
 
-    onAudioModelDataChanged: loadKaraoke()
+    onAudioModelDataChanged: {
+        root.wordsEditMode = false;      // reset editing when the audio changes
+        root.selectedWordIndex = -1;
+        loadKaraoke();
+    }
     Component.onCompleted: loadKaraoke()
 
     Connections {
@@ -136,6 +146,64 @@ GroupBox {
             playRecordAudio.setPosition(ms);
         else
             root._pendingSeekMs = ms;
+    }
+
+    // ----- Word-list editing helpers -----------------------------------------
+    // karaokeWords is a plain JS array (a QVariantList snapshot of audio.json).
+    // Each helper mutates a copy, reassigns it (so the list + page overlay
+    // rebind), then persists the whole array back to audio.json in C++.
+    function _persistWords(words) {
+        content.pageDetails.karaokeWords = words;
+        if (!root.audioModelData || !root.audioModelData.karaoke)
+            return;
+        var rel = _audioJsonPath();
+        if (rel === "")
+            return;
+        var id = _baseName(root.audioModelData.audioPath);
+        var path = appPath + (rel.indexOf("./") === 0 ? rel.substring(2) : rel);
+        pdfProcess.saveKaraokeWords(path, id, words);
+    }
+
+    function renameWord(index, newText) {
+        var words = (content.pageDetails.karaokeWords || []).slice();
+        if (index < 0 || index >= words.length)
+            return;
+        var t = String(newText).trim();
+        if (t === "" || t === words[index].text)
+            return;
+        // Copy the map so the reassignment is seen as a change.
+        var w = {};
+        for (var k in words[index]) w[k] = words[index][k];
+        w.text = t;
+        words[index] = w;
+        root._persistWords(words);
+    }
+
+    function deleteWord(index) {
+        var words = (content.pageDetails.karaokeWords || []).slice();
+        if (index < 0 || index >= words.length)
+            return;
+        words.splice(index, 1);
+        // Keep the selection sensible after removing a chip.
+        if (root.selectedWordIndex === index)
+            root.selectedWordIndex = -1;
+        else if (root.selectedWordIndex > index)
+            root.selectedWordIndex -= 1;
+        content.pageDetails.karaokeActiveIndex = -1;
+        root._persistWords(words);
+    }
+
+    // Move a word one step left/right (delta = -1 / +1) to fix its order.
+    function moveWord(index, delta) {
+        var words = (content.pageDetails.karaokeWords || []).slice();
+        var to = index + delta;
+        if (index < 0 || index >= words.length || to < 0 || to >= words.length)
+            return;
+        var tmp = words[index];
+        words[index] = words[to];
+        words[to] = tmp;
+        root.selectedWordIndex = to;   // selection follows the moved word
+        root._persistWords(words);
     }
 
     background: Rectangle {
@@ -420,6 +488,7 @@ GroupBox {
 
             RowLayout {
                 Layout.fillWidth: true
+                spacing: 8
                 Text {
                     text: "Words"
                     color: "white"
@@ -432,6 +501,79 @@ GroupBox {
                            ? content.pageDetails.karaokeWords.length : 0) + " words"
                     color: "#8aa0a8"
                     font.pixelSize: 12
+                }
+                // Toggle between playback (click a word to seek) and editing
+                // (click a word to rename / reorder / delete it).
+                AppButton {
+                    text: root.wordsEditMode ? "Done" : "Edit"
+                    variant: root.wordsEditMode ? "primary" : "secondary"
+                    height: 30
+                    leftPadding: 12
+                    rightPadding: 12
+                    enabled: content.pageDetails.karaokeWords
+                             && content.pageDetails.karaokeWords.length > 0
+                    onClicked: {
+                        root.wordsEditMode = !root.wordsEditMode;
+                        root.selectedWordIndex = -1;
+                        renameField.text = "";
+                    }
+                }
+            }
+
+            // Edit toolbar: acts on the selected word (highlighted in the list).
+            RowLayout {
+                Layout.fillWidth: true
+                visible: root.wordsEditMode
+                spacing: 6
+
+                TextField {
+                    id: renameField
+                    Layout.fillWidth: true
+                    enabled: root.selectedWordIndex >= 0
+                    placeholderText: root.selectedWordIndex >= 0
+                                     ? "Rename word…" : "Select a word to edit"
+                    placeholderTextColor: "#6b7a80"
+                    color: "white"
+                    font.pixelSize: 13
+                    selectByMouse: true
+                    background: Rectangle {
+                        radius: 6
+                        color: "#1A2327"
+                        border.color: renameField.activeFocus ? "#00b3be" : "#2f4650"
+                        border.width: 1
+                    }
+                    onAccepted: {
+                        root.renameWord(root.selectedWordIndex, text);
+                        focus = false;
+                    }
+                }
+                AppButton {
+                    text: "◀"          // ◀ move earlier
+                    variant: "secondary"
+                    height: 32
+                    leftPadding: 10
+                    rightPadding: 10
+                    enabled: root.selectedWordIndex > 0
+                    onClicked: root.moveWord(root.selectedWordIndex, -1)
+                }
+                AppButton {
+                    text: "▶"          // ▶ move later
+                    variant: "secondary"
+                    height: 32
+                    leftPadding: 10
+                    rightPadding: 10
+                    enabled: root.selectedWordIndex >= 0
+                             && content.pageDetails.karaokeWords
+                             && root.selectedWordIndex
+                                < content.pageDetails.karaokeWords.length - 1
+                    onClicked: root.moveWord(root.selectedWordIndex, 1)
+                }
+                AppButton {
+                    text: "Delete"
+                    variant: "danger"
+                    height: 32
+                    enabled: root.selectedWordIndex >= 0
+                    onClicked: root.deleteWord(root.selectedWordIndex)
                 }
             }
 
@@ -482,22 +624,32 @@ GroupBox {
                                 id: chip
                                 readonly property bool isActive:
                                     index === content.pageDetails.karaokeActiveIndex
-                                width: chipText.implicitWidth + 16
+                                readonly property bool isSelected:
+                                    root.wordsEditMode
+                                    && index === root.selectedWordIndex
+                                // Reserve room for the × delete button in edit mode.
+                                width: chipText.implicitWidth
+                                       + (root.wordsEditMode ? 42 : 16)
                                 height: chipText.implicitHeight + 10
                                 radius: 4
-                                color: isActive ? "#ffd200"
+                                color: isSelected ? "#0d3b44"
+                                       : isActive ? "#ffd200"
                                        : (chipMouse.containsMouse ? "#26343c" : "transparent")
-                                border.color: isActive ? "#ffd200" : "#2f4650"
-                                border.width: 1
+                                border.color: isSelected ? "#00b3be"
+                                              : isActive ? "#ffd200" : "#2f4650"
+                                border.width: isSelected ? 2 : 1
                                 Behavior on color { ColorAnimation { duration: 80 } }
 
                                 Text {
                                     id: chipText
-                                    anchors.centerIn: parent
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 8
+                                    anchors.verticalCenter: parent.verticalCenter
                                     text: (modelData && modelData.text) ? modelData.text : ""
-                                    color: chip.isActive ? "#10242b" : "#cfe8ea"
+                                    color: (chip.isActive && !chip.isSelected)
+                                           ? "#10242b" : "#cfe8ea"
                                     font.pixelSize: 14
-                                    font.bold: chip.isActive
+                                    font.bold: chip.isActive || chip.isSelected
                                 }
 
                                 MouseArea {
@@ -506,8 +658,42 @@ GroupBox {
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        if (modelData && modelData.start !== undefined)
+                                        if (root.wordsEditMode) {
+                                            root.selectedWordIndex = index;
+                                            renameField.text = (modelData && modelData.text)
+                                                               ? modelData.text : "";
+                                        } else if (modelData
+                                                   && modelData.start !== undefined) {
                                             root.seekToWord(modelData.start);
+                                        }
+                                    }
+                                }
+
+                                // Per-chip quick delete. Declared after chipMouse so
+                                // it sits on top and handles its own clicks.
+                                Rectangle {
+                                    id: chipDel
+                                    visible: root.wordsEditMode
+                                    width: 18
+                                    height: 18
+                                    radius: 9
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 5
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    color: delMouse.containsMouse ? "#c9504d" : "#33474f"
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "×"
+                                        color: "white"
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                    }
+                                    MouseArea {
+                                        id: delMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.deleteWord(index)
                                     }
                                 }
                             }

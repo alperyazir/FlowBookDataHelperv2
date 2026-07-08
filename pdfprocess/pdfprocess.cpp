@@ -1433,6 +1433,44 @@ QVariantList PdfProcess::loadKaraokeWords(const QString &audioJsonPath,
     return out;
 }
 
+bool PdfProcess::saveKaraokeWords(const QString &audioJsonPath,
+                                  const QString &audioId,
+                                  const QVariantList &words)
+{
+    QFile f(audioJsonPath);
+    if (!f.open(QIODevice::ReadOnly)) {
+        qDebug() << "saveKaraokeWords: cannot open" << audioJsonPath;
+        return false;
+    }
+    QJsonParseError err;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+    f.close();
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+        qDebug() << "saveKaraokeWords: bad json" << err.errorString();
+        return false;
+    }
+    QJsonObject obj = doc.object();
+    if (!obj.contains(audioId))
+        return false;   // nothing to update
+
+    // Replace only the "words" array; keep passage/duration/score/etc. intact.
+    QJsonObject entry = obj.value(audioId).toObject();
+    QJsonArray arr;
+    for (const QVariant &wv : words)
+        arr.append(QJsonObject::fromVariantMap(wv.toMap()));
+    entry.insert("words", arr);
+    obj.insert(audioId, entry);
+
+    // Atomic rewrite so a crash can't leave a half-written audio.json.
+    QSaveFile out(audioJsonPath);
+    if (!out.open(QIODevice::WriteOnly)) {
+        qDebug() << "saveKaraokeWords: cannot write" << audioJsonPath;
+        return false;
+    }
+    out.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
+    return out.commit();
+}
+
 void PdfProcess::checkDependencies()
 {
     QProcess *process = new QProcess(this);
