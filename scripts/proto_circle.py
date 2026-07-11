@@ -728,6 +728,18 @@ def crop_band(po, band, options, out_path):
     return rect, scale
 
 
+def image_coords_from_rect(rect, sx, sy):
+    """Page-PNG pixel region a crop_band() rect covers. Persisted on the
+    activity so the reader can map page-global karaoke word bboxes into
+    the cropped activity image (same space the editor's crop writes)."""
+    return {
+        "x": int(rect.x0 * sx),
+        "y": int(rect.y0 * sy),
+        "w": int(rect.width * sx),
+        "h": int(rect.height * sy),
+    }
+
+
 def _save_pixmap(pix, out_path, retries=2):
     """fitz save with the directory ensured and a short retry —
     freshly-copied book folders can hiccup on the first write."""
@@ -797,6 +809,7 @@ def build_circle_sections(po, pa, page_num, images_dir, prefix, sx, sy,
                 "coords": place_button(ex["header"], occupied, po.rect.width, sx, sy),
                 "headerText": "",
                 "section_path": f"{prefix}{fname}",
+                "image_coords": image_coords_from_rect(rect, sx, sy),
             },
             "audio_extra": {},
         })
@@ -977,6 +990,7 @@ def build_markwithx_sections(po, pa, page_num, images_dir, prefix, sx, sy,
                                        po.rect.width, sx, sy),
                 "headerText": "",
                 "section_path": f"{prefix}{fname}",
+                "image_coords": image_coords_from_rect(rect, sx, sy),
             },
             "audio_extra": {},
         })

@@ -76,16 +76,20 @@ def normalize_section(raw_section):
         circle_count = len(normalized_answers) if section_type == "circle" else 0
         mark_count = len(normalized_answers) if section_type == "markwithx" else 0
 
+        activity = {
+            "type": section_type,
+            "answer": normalized_answers,
+            "circleCount": circle_count,
+            "markCount": mark_count,
+            "coords": raw_section.get("header_coords", {"x": 0, "y": 0, "w": 0, "h": 0}),
+            "headerText": "",
+            "section_path": raw_section.get("section_path", ""),
+        }
+        # Carry the crop's page-PNG region through for karaoke word mapping.
+        if raw_section.get("image_coords"):
+            activity["image_coords"] = raw_section["image_coords"]
         return {
-            "activity": {
-                "type": section_type,
-                "answer": normalized_answers,
-                "circleCount": circle_count,
-                "markCount": mark_count,
-                "coords": raw_section.get("header_coords", {"x": 0, "y": 0, "w": 0, "h": 0}),
-                "headerText": "",
-                "section_path": raw_section.get("section_path", ""),
-            },
+            "activity": activity,
             "audio_extra": {},
         }
 
@@ -893,6 +897,14 @@ def detect_circle_activities(page, answer_rgb, scale_x, scale_y,
             "answers": answers,
             "header_coords": header_coords,
             "section_path": section_path_rel,
+            # Page-PNG region the crop covers, so the reader can map
+            # page-global karaoke word bboxes into the cropped image.
+            "image_coords": {
+                "x": int(q_bounds.x0 * scale_x),
+                "y": int(q_bounds.y0 * scale_y),
+                "w": int(q_bounds.width * scale_x),
+                "h": int(q_bounds.height * scale_y),
+            },
         })
 
     return sections

@@ -31,7 +31,8 @@ from proto_inventory import (diff_answer_spans, find_blank_lines,
                              get_spans, page_dict)
 from proto_snap import build_clickables, find_tick_boxes
 from proto_circle import (CROP_MIN_SCALE, CROP_TARGET, crop_band,
-                          find_exercise_bands, place_button)
+                          find_exercise_bands, image_coords_from_rect,
+                          place_button)
 
 MIN_ZONES = 3              # a pool exercise has at least this many blanks
 LINE_DENSITY = 0.45        # matched chars / line chars for a pool line
@@ -473,6 +474,7 @@ def build_dragdrop_sections(po, pa, page_num, images_dir, prefix, sx, sy,
                                        po.rect.width, sx, sy),
                 "headerText": ex["header_text"],
                 "section_path": f"{prefix}{fname}",
+                "image_coords": image_coords_from_rect(rect, sx, sy),
             },
             "audio_extra": {},
         })
