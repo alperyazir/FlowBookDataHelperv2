@@ -55,7 +55,45 @@ GroupBox {
         // rel is "./books/.../audio/audio.json"; drop the "./" and join the app
         // root. Read in C++ (QFile) so it works the same on Windows.
         var path = appPath + (rel.indexOf("./") === 0 ? rel.substring(2) : rel);
-        content.pageDetails.karaokeWords = pdfProcess.loadKaraokeWords(path, id);
+        var words = pdfProcess.loadKaraokeWords(path, id);
+        // Point each cloze blank at the fill box it opens. Done on load (not
+        // only right after aligning) so the link heals when the author moves,
+        // adds or deletes a fill afterwards; linkKaraokeBlanks returns null
+        // when nothing changed, so this doesn't rewrite audio.json every time.
+        // Only relink while this audio's own page is the one on screen —
+        // matching against another page's fills would wipe good links.
+        if (root._audioIsOnShownPage()) {
+            var linked = content.pageDetails.linkKaraokeBlanks(words);
+            if (linked) {
+                words = linked;
+                pdfProcess.saveKaraokeWords(path, id, words);
+            }
+        }
+        content.pageDetails.karaokeWords = words;
+    }
+
+    // audioModelData is a section object taken from a page's sections list, so
+    // identity against the shown page's sections is an exact check.
+    function _audioIsOnShownPage() {
+        var pg = content.pageDetails ? content.pageDetails.page : null;
+        if (!pg || !root.audioModelData)
+            return false;
+        var secs = pg.sections || [];
+        for (var i = 0; i < secs.length; i++)
+            if (secs[i] === root.audioModelData)
+                return true;
+        return false;
+    }
+
+    // Blanks that found no fill box: nothing for the reader to open there, so
+    // the panel warns and the author fixes it by drawing the missing fill.
+    function unlinkedBlankCount() {
+        var words = content.pageDetails.karaokeWords || [];
+        var n = 0;
+        for (var i = 0; i < words.length; i++)
+            if (words[i] && words[i].blank && !words[i].fill)
+                n++;
+        return n;
     }
 
     onAudioModelDataChanged: {
@@ -496,6 +534,17 @@ GroupBox {
                     font.bold: true
                 }
                 Item { Layout.fillWidth: true }
+                // A blank with no fill under it opens nothing in the reader —
+                // surface the count so the author can draw the missing fill.
+                Text {
+                    property int unlinked: content.pageDetails.karaokeWords
+                                           ? root.unlinkedBlankCount() : 0
+                    visible: unlinked > 0
+                    text: "⚠ " + unlinked + " blank" + (unlinked === 1 ? "" : "s")
+                          + " with no fill"
+                    color: "#e57373"
+                    font.pixelSize: 12
+                }
                 Text {
                     text: (content.pageDetails.karaokeWords
                            ? content.pageDetails.karaokeWords.length : 0) + " words"
@@ -627,6 +676,13 @@ GroupBox {
                                 readonly property bool isSelected:
                                     root.wordsEditMode
                                     && index === root.selectedWordIndex
+                                // Cloze blank: the chip shows the answer it will
+                                // reveal, not the underscores, so the author can
+                                // check the pairing at a glance.
+                                readonly property bool isBlank:
+                                    modelData && modelData.blank === true
+                                readonly property bool isLinked:
+                                    isBlank && modelData.fill
                                 // Reserve room for the × delete button in edit mode.
                                 width: chipText.implicitWidth
                                        + (root.wordsEditMode ? 42 : 16)
@@ -636,7 +692,9 @@ GroupBox {
                                        : isActive ? "#ffd200"
                                        : (chipMouse.containsMouse ? "#26343c" : "transparent")
                                 border.color: isSelected ? "#00b3be"
-                                              : isActive ? "#ffd200" : "#2f4650"
+                                              : isActive ? "#ffd200"
+                                              : isBlank ? (isLinked ? "#00c853" : "#e53935")
+                                              : "#2f4650"
                                 border.width: isSelected ? 2 : 1
                                 Behavior on color { ColorAnimation { duration: 80 } }
 
@@ -645,10 +703,13 @@ GroupBox {
                                     anchors.left: parent.left
                                     anchors.leftMargin: 8
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: (modelData && modelData.text) ? modelData.text : ""
+                                    text: (chip.isLinked && modelData.answer)
+                                          ? "__ " + modelData.answer
+                                          : ((modelData && modelData.text) ? modelData.text : "")
                                     color: (chip.isActive && !chip.isSelected)
                                            ? "#10242b" : "#cfe8ea"
                                     font.pixelSize: 14
+                                    font.italic: chip.isBlank
                                     font.bold: chip.isActive || chip.isSelected
                                 }
 

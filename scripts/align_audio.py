@@ -13,6 +13,17 @@ Word bboxes are stored in the same PNG pixel space as everything else in
 config.json, as {x,y,w,h}. config.json itself only needs "karaoke": true on
 the audio section; all timing data lives here.
 
+A word is either spoken text or a cloze blank:
+  {"text": "cat",      "bbox": {...}, "start": 1.2, "end": 1.5}
+  {"text": "________", "bbox": {...}, "start": 1.6, "end": 2.1, "blank": true,
+   "answer": "elephant", "fill": {"x":.., "y":.., "w":.., "h":..}}
+A blank is the reader's cue to open the fill box under it at "start". This
+script only emits "blank" + timing; "answer"/"fill" are stamped by the editor
+(PageDetails.linkKaraokeBlanks), which is the side that knows config.json's
+fill boxes. "fill" carries the box's coords rather than its text because two
+fills on one page can hold the same answer — coordinates identify it, text
+does not.
+
 Usage:
   align_audio.py <raw_dir> <page_index> <x> <y> <w> <h> \
                  <png_width> <png_height> <audio_path> <audio_json_path> <lang>

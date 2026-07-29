@@ -89,6 +89,87 @@ Item {
             idx = -1;   // clear after the last word + small tail
         karaokeActiveIndex = idx;
     }
+
+    // ----- Karaoke cloze blanks -> fill boxes ---------------------------------
+    // A "______" word in the passage is the reader's cue to open the fill box
+    // sitting on it (a fill box is atomic: one tap reveals the whole answer,
+    // however many words it is). The match is made here, once, and stamped into
+    // the word as `answer` + `fill` coords, so the reader identifies the box by
+    // geometry — the text alone would be ambiguous when a page carries two
+    // fills with the same answer.
+    //
+    // Both the word bbox (align_audio.py) and the fill coords (config.json) are
+    // page-PNG pixels, so they compare directly.
+
+    // Fill answer with the largest overlap with `bbox`, or null if none is
+    // close enough. The fill rect is padded vertically because the underscore
+    // run's box is baseline-anchored while the author's fill box is drawn on
+    // the line — they overlap heavily but rarely exactly.
+    function _fillForBlank(bbox) {
+        if (!page || !bbox)
+            return null;
+        var area = Math.max(1, bbox.w * bbox.h);
+        var secs = page.sections, best = null, bestScore = 0;
+        for (var s = 0; s < secs.length; s++) {
+            var sec = secs[s];
+            if (!sec || sec.type !== "fill" || !sec.answers)
+                continue;
+            for (var a = 0; a < sec.answers.length; a++) {
+                var c = sec.answers[a].coords;
+                if (!c || c.width <= 0 || c.height <= 0)
+                    continue;
+                var pad = c.height * 0.5;
+                var ox = Math.min(bbox.x + bbox.w, c.x + c.width)
+                         - Math.max(bbox.x, c.x);
+                var oy = Math.min(bbox.y + bbox.h, c.y + c.height + pad)
+                         - Math.max(bbox.y, c.y - pad);
+                if (ox <= 0 || oy <= 0)
+                    continue;
+                var score = (ox * oy) / area;
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = { coords: { x: c.x, y: c.y, w: c.width, h: c.height },
+                             text: sec.answers[a].text || "" };
+                }
+            }
+        }
+        return bestScore >= 0.35 ? best : null;
+    }
+
+    // Stamp `answer` + `fill` onto every blank in `words`. Returns a fresh array
+    // when anything changed (caller persists it), or null when the links are
+    // already correct — so re-linking on every load can't churn audio.json.
+    // Re-running it is how a link heals after the author moves or deletes the
+    // fill box the blank pointed at.
+    function linkKaraokeBlanks(words) {
+        if (!words || words.length === 0 || !page)
+            return null;
+        var out = [], changed = false;
+        for (var i = 0; i < words.length; i++) {
+            var w = words[i];
+            if (!w || !w.blank) {
+                out.push(w);
+                continue;
+            }
+            var m = _fillForBlank(w.bbox);
+            var nw = {};
+            for (var k in w)
+                nw[k] = w[k];
+            // "" / null (not absent) marks a blank we looked at and could not
+            // place, so the panel can flag it instead of silently dropping it.
+            nw.answer = m ? m.text : "";
+            nw.fill = m ? m.coords : null;
+            if (!changed) {
+                var of = w.fill || null;
+                changed = (String(w.answer || "") !== String(nw.answer))
+                          || (!of !== !m)
+                          || (!!of && !!m && (of.x !== m.coords.x || of.y !== m.coords.y
+                                              || of.w !== m.coords.w || of.h !== m.coords.h));
+            }
+            out.push(nw);
+        }
+        return changed ? out : null;
+    }
     property real cropStartX: 0
     property real cropStartY: 0
     property real cropEndX: 0
@@ -1114,17 +1195,24 @@ Item {
                 Rectangle {
                     // bbox is baseline-anchored by align_audio.py to hug the
                     // word, so draw it raw (same as the reader); keep the fill
-                    // light so the text stays readable.
+                    // light so the text stays readable. A linked cloze blank is
+                    // drawn on its fill box instead — that box, not the
+                    // underscore run, is what the reader opens.
+                    property var box: (modelData.blank && modelData.fill)
+                                      ? modelData.fill : modelData.bbox
                     property real sx: picture.paintedWidth / picture.sourceSize.width
                     property real sy: picture.paintedHeight / picture.sourceSize.height
                     visible: root.karaokeTime >= 0 && index === root.karaokeActiveIndex
-                    x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.bbox.x * sx
-                    y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.bbox.y * sy
-                    width: modelData.bbox.w * sx
-                    height: modelData.bbox.h * sy
+                    x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + box.x * sx
+                    y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + box.y * sy
+                    width: box.w * sx
+                    height: box.h * sy
                     radius: 3
                     z: 50
-                    color: "#4dffd200"
+                    // green = blank that will open a fill, red = blank with no
+                    // fill under it (nothing to reveal), yellow = spoken word.
+                    color: !modelData.blank ? "#4dffd200"
+                           : (modelData.fill ? "#5900c853" : "#59e53935")
                 }
             }
 
