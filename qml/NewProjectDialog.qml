@@ -364,7 +364,10 @@ Dialog {
                     ComboBox {
                         id: languageComboBox
                         Layout.fillWidth: true
-                        model: ["en", "tr", "de"]
+                        // The set the reader can actually switch to: it loads
+                        // ts/lang_<code>.qm for de/tr/es and falls back to the
+                        // untranslated strings (en) for anything else.
+                        model: ["en", "tr", "de", "es"]
                         currentIndex: 0 // Default en
 
                         background: Rectangle {
