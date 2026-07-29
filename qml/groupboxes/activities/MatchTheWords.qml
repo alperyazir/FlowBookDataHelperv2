@@ -41,6 +41,8 @@ ColumnLayout {
         // Match is built with the l / r single-column crops now, so the
         // combined Crop button is removed to avoid confusion.
         showCrop: false
+        showFontSize: true
+        defaultFontSize: 33      // ActivityMatchTheWords' fallback in the reader
         headerPlaceholder: "Match the words."
     }
 

@@ -23,7 +23,10 @@ Rectangle {
     property string audio_path
     property real spacing: Screen.width * 20 /mainwindow.width
     property bool isTextOnLeft: false
-    property real textFontSize: 33
+    // 0 means "unset" — the section carries no size — so fall back to 33
+    // rather than drawing the words at a pixelSize of 0, i.e. not at all.
+    property real textFontSize: 0
+    readonly property real effectiveFontSize: textFontSize > 0 ? textFontSize : 33
     z: 10
 
     id: root
@@ -130,7 +133,7 @@ Rectangle {
                                     text: modelData.word
                                     anchors.centerIn: parent
                                     horizontalAlignment:  Text.AlignRight
-                                    font.pixelSize: root.textFontSize / Screen.devicePixelRatio
+                                    font.pixelSize: root.effectiveFontSize
                                     fontSizeMode: Text.FixedSize
                                     color: "#009ca6"
                                     //font.pixelSize: 25
@@ -370,7 +373,7 @@ Rectangle {
                                     text: qsTr(modelData.sentence)
                                     anchors.centerIn: parent
                                     horizontalAlignment: Text.AlignLeft
-                                    font.pixelSize: root.textFontSize / Screen.devicePixelRatio
+                                    font.pixelSize: root.effectiveFontSize
                                     fontSizeMode: Text.FixedSize
                                     color: "#009ca6"
                                 }
@@ -406,7 +409,7 @@ Rectangle {
                                     text: qsTr(modelData.sentence)
                                     anchors.centerIn: parent
                                     horizontalAlignment: Text.AlignLeft
-                                    font.pixelSize: root.textFontSize / Screen.devicePixelRatio
+                                    font.pixelSize: root.effectiveFontSize
                                     fontSizeMode: Text.FixedSize
                                     color: "#009ca6"
                                 }

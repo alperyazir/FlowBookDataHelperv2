@@ -17,6 +17,8 @@ ColumnLayout {
         activityModelData: root.activityModelData
         showPath: true
         showCrop: true
+        showFontSize: true
+        defaultFontSize: 28      // ActivityFillPicture's fallback in the reader
         headerPlaceholder: "Complete the sentences."
     }
 

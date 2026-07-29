@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 import "activities"
+import "newComponents"
 
 Dialog {
     property string imageSource
@@ -10,6 +11,27 @@ Dialog {
     property var wordLists: []
     property var answers: []
     property var activityModelData
+
+    // The reader's fallback text size for this activity, or 0 when it doesn't
+    // read a size at all — which is also what hides the header's font control.
+    readonly property int fontSizeDefault: {
+        var t = activityModelData ? activityModelData.type : "";
+        if (t === "fillpicture")
+            return 28;
+        if (t === "matchTheWords")
+            return 33;
+        return 0;
+    }
+    function fontSizeText() {
+        return (activityModelData && activityModelData.textFontSize > 0)
+               ? String(activityModelData.textFontSize) : "";
+    }
+    function setFontSize(s) {
+        if (!activityModelData)
+            return;
+        var v = parseInt(s, 10);
+        activityModelData.textFontSize = (isNaN(v) || v <= 0) ? 0 : v;
+    }
     id: root
     width: mainwindow.width * 0.92
     height: mainwindow.height * 0.92
@@ -188,6 +210,42 @@ Dialog {
                 }
             }
         }
+
+        // Same size the side panel edits, repeated here so it can be nudged
+        // while watching the preview instead of looking away to the sidebar.
+        // Hidden for the activities whose text the reader never sizes from
+        // this field, where the control would do nothing at all.
+        Row {
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.right: parent.right
+            anchors.rightMargin: 12
+            spacing: 8
+            visible: root.fontSizeDefault > 0
+
+            Label {
+                text: "Font"
+                color: "#8aa0a8"
+                font.pixelSize: 13
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            AppTextField {
+                id: dialogFontField
+                width: 96
+                height: 28
+                anchors.verticalCenter: parent.verticalCenter
+                placeholderText: root.fontSizeDefault + " (default)"
+                text: root.fontSizeText()
+                inputMethodHints: Qt.ImhDigitsOnly
+                validator: IntValidator { bottom: 0; top: 200 }
+                onTextEdited: root.setFontSize(text)
+                // Typing breaks the binding above (that is how the field keeps
+                // showing what was typed). Restore it on the way out so the
+                // field picks up edits made from the side panel.
+                onActiveFocusChanged: if (!activeFocus)
+                                          text = Qt.binding(root.fontSizeText)
+            }
+        }
     }
 
     // Custom footer for buttons
@@ -337,6 +395,12 @@ Dialog {
         activityMatch.headerText = root.activityModelData.headerText
         activityMatch.shuffledWords= root.activityModelData.matchWord
         activityMatch.sentences = root.activityModelData.sentences
+        // Bound, not assigned once: the size is edited in the side panel while
+        // this preview is open, and a plain assignment would freeze it at
+        // whatever it was when the preview was created.
+        activityMatch.textFontSize = Qt.binding(function () {
+            return root.activityModelData.textFontSize;
+        })
         root.currentActivity = activityMatch
         // content.enableRightClick(false)
 
@@ -394,6 +458,11 @@ Dialog {
         activityDragDropPicture.shuffledWords= root.activityModelData.words
         activityDragDropPicture.imageSource = "file:" + appPath + root.activityModelData.sectionPath
         activityDragDropPicture.answers = root.activityModelData.answers
+        // See the matchthewords note above — bound so the preview follows the
+        // side panel live.
+        activityDragDropPicture.textFontSize = Qt.binding(function () {
+            return root.activityModelData.textFontSize;
+        })
         activityDragDropPicture.activityModelData = root.activityModelData
         root.currentActivity = activityDragDropPicture
         //content.enableRightClick(false)

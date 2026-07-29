@@ -12,6 +12,9 @@ Rectangle {
     // Sequential-review reveal count: -1 shows every answer (normal editing);
     // 0..N-1 shows only answers[0..revealCount] so a reviewer can step through.
     property int revealCount: -1
+    // Answer text size; 0 means the reader's default (28). Set from the
+    // section by ActivityDialog.
+    property int textFontSize: 0
     property string audio_path
     signal closed
     property var dragMap: []
@@ -484,6 +487,20 @@ Rectangle {
                                     rotation: modelData.rotation
                                     height: parent.height
                                     width: parent.width
+                                    // Both lines match the reader exactly.
+                                    // FixedSize matters: FlowText defaults to
+                                    // Text.Fit, which turns pixelSize into a
+                                    // cap and lets the box resize the word —
+                                    // the reader overrides that, so without it
+                                    // the preview sizes text by its own rules
+                                    // and disagrees with what a student sees.
+                                    fontSizeMode: Text.FixedSize
+                                    // Plain pixels, no devicePixelRatio: the
+                                    // number the author types has to mean the
+                                    // same thing as the default it replaces,
+                                    // and the same thing on every screen.
+                                    font.pixelSize: root.textFontSize > 0
+                                                    ? root.textFontSize : 28
                                 }
 
                                 MouseArea {
