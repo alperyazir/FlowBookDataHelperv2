@@ -63,13 +63,40 @@ norm = lambda s: _NORM.sub("", s.lower().translate(_APOS))
 # letter. Fill-in-the-blank (cloze) passages carry underscore runs ("________")
 # and bare question numbers ("1", "2") that are never read aloud. Force-aligning
 # them makes those tokens (and their neighbours) swallow multi-second bogus
-# durations, which desyncs the karaoke highlight. Numbers are dropped entirely
-# (a rare genuinely-spoken number costs one un-highlighted word, no desync);
-# blank lines are KEPT (flagged) and timed from the ASR gap instead (time_blanks)
-# so the box still lights up while the unwritten answer is spoken.
+# durations, which desyncs the karaoke highlight. So both are HELD OUT of the
+# forced pass and timed from the ASR gap instead (time_held_out):
+#   - blank lines are kept + flagged, so the box lights up while the unwritten
+#     answer is spoken;
+#   - digit tokens ("1874", "20") are kept too — a narrative passage reads them
+#     aloud ("She was born on November 30, 1874"), and dropping them left a hole
+#     in the highlight. Only tokens that really are question/enumeration numbers
+#     are dropped (see _is_enum_number).
 _HAS_LETTER = re.compile(r"[a-z]")
 def _is_spoken(text):
     return bool(_HAS_LETTER.search(text.lower().translate(_APOS)))
+
+# A digit token: no letters, but a normalized form that is all digits ("30,",
+# "1874," -> "30", "1874"). Superscript cloze markers ("⁵") normalize to "" and
+# so are not numbers — they are dropped like punctuation.
+def _is_number(text):
+    n = norm(text)
+    return bool(n) and n.isdigit()
+
+# Enumeration/question markers to drop. Two shapes cover what books actually do.
+# This is the one decidable from the token alone: a short number opening a line
+# at a sentence boundary — an exercise number ("1 Complete the paragraph…"), a
+# page number, a section number. The sentence-boundary test is what keeps a
+# wrapped narrative numeral ("…published 20 / novels"), whose previous token does
+# not end a sentence, from being mistaken for a marker. 3+ digits are never
+# markers (years). The other shape — the number labelling a cloze gap — needs
+# lookahead and is handled at the end of words_in_crop.
+_ENUM = re.compile(r"^\(?\d{1,2}[.)]?$")
+def _ends_sentence(text):
+    return bool(text) and text[-1] in ".!?:;"
+
+def _is_enum_number(text, line_first, prev_text):
+    return bool(line_first and _ENUM.match(text)
+                and (prev_text is None or _ends_sentence(prev_text)))
 
 # faster-whisper model for intro detection (see _asr_word_timeline). "base" is
 # accurate enough to locate where the passage starts and keeps the one-time
@@ -131,21 +158,32 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
     # near-identical position was already kept; genuine repeats sit at distinct
     # positions (different line/column) and survive.
     seen = set()
+    # Position context for classifying digit tokens (see _is_enum_number):
+    # whether this is the line's first token, and the token that preceded it.
+    line_first = True
+    prev_text = None
 
     def emit(run, size):
+        nonlocal line_first, prev_text
         if not run:
             return
         text = "".join(c["c"] for c in run)
-        # Classify the token. Spoken words (have a letter) align normally. A blank
-        # line ("______") is kept but flagged: it's held OUT of the forced align
-        # (it has no phonemes, so aligning it makes it swallow multi-second bogus
-        # time and desyncs everything) and instead timed from the ASR gap, so its
-        # box lights up while the unwritten answer word is spoken (see time_blanks
-        # + _is_spoken). Bare numbers / punctuation ("1", "2") are dropped.
+        was_first, was_prev = line_first, prev_text
+        line_first, prev_text = False, text
+        # Classify the token. Spoken words (have a letter) align normally. Blank
+        # lines ("______") and numbers are kept but flagged: they're held OUT of
+        # the forced align (a blank has no phonemes, a numeral no reliable one, so
+        # aligning them makes them swallow multi-second bogus time and desyncs
+        # everything) and timed from the ASR gap instead, so their box lights up
+        # while the answer / the number is spoken (see time_held_out + _is_spoken).
+        # Question and page numbers are dropped, as is bare punctuation.
+        kind = None
         if _is_spoken(text):
-            is_blank = False
+            kind = "word"
         elif "__" in text:
-            is_blank = True
+            kind = "blank"
+        elif _is_number(text) and not _is_enum_number(text, was_first, was_prev):
+            kind = "num"
         else:
             return
         x0 = min(c["bbox"][0] for c in run) * sx
@@ -169,8 +207,10 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
             "bbox": {"x": round(x0), "y": round(y0),
                      "w": round(x1 - x0), "h": round(y1 - y0)},
         }
-        if is_blank:
+        if kind == "blank":
             entry["blank"] = True
+        elif kind == "num":
+            entry["num"] = True
         out.append(entry)
 
     # rawdict yields blocks→lines→spans→chars in reading order; split each span
@@ -179,6 +219,7 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
     rd = page.get_text("rawdict")
     for block in rd.get("blocks", []):
         for line in block.get("lines", []):
+            line_first = True
             for span in line.get("spans", []):
                 size = span.get("size", 0) or 0
                 run = []
@@ -200,6 +241,15 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
                     prev_x1 = c["bbox"][2]
                 emit(run, size)
     doc.close()
+    # Second pass for the one marker shape that needs lookahead: the number
+    # labelling a cloze gap ("People will 1 ______ serious problems"). Test the
+    # next token for an underscore run rather than for the "blank" flag — a
+    # sloppy text layer can glue the gap to the word after it ("15 ____drawing"),
+    # which classifies as a spoken word but still labels a gap. Iterating
+    # backwards keeps the indices valid while deleting.
+    for i in range(len(out) - 2, -1, -1):
+        if out[i].get("num") and "__" in out[i + 1]["text"]:
+            del out[i]
     return out
 
 
@@ -258,6 +308,12 @@ def _model_cache_status():
 # How much audio to keep on each side of the located passage window, in
 # seconds — a little lead-in/out so forced alignment has room at the edges.
 _WINDOW_PAD = 0.5
+
+
+def _held_out(w):
+    """True for a token kept in the passage but excluded from forced alignment
+    (blank lines and numerals) — timed from the ASR timeline instead."""
+    return bool(w.get("blank") or w.get("num"))
 
 
 def _asr_word_timeline(audio_path, lang):
@@ -339,12 +395,13 @@ def align(words, audio_path, lang):
     First transcribes the clip to find where the passage begins (skipping any
     spoken intro/instruction that isn't in the crop), then forced-aligns the
     passage text only within that window — so leading words are timed to when
-    they are actually spoken, not leaked onto the intro. Blank tokens are held
-    out of the aligned text; the returned ASR timeline is used to time them."""
+    they are actually spoken, not leaked onto the intro. Blank and number tokens
+    are held out of the aligned text; the returned ASR timeline times them."""
     import whisperx
     device = "cpu"
-    # Blanks have no spoken form — align only the real words (see time_blanks).
-    text = " ".join(w["text"] for w in words if not w.get("blank"))
+    # Blanks and numerals have no reliable spoken form for the character-level
+    # aligner — align only the real words (see time_held_out).
+    text = " ".join(w["text"] for w in words if not _held_out(w))
     audio = whisperx.load_audio(audio_path)
     dur = len(audio) / 16000.0
     # The ~370MB wav2vec model is downloaded only once (it lives in the torch
@@ -375,7 +432,7 @@ def align(words, audio_path, lang):
         print(f"PROGRESS: Passage runs {t0:.1f}s–{t1:.1f}s; skipping "
               f"{t0:.0f}s of intro before it", flush=True)
 
-    n_spoken = sum(1 for w in words if not w.get("blank"))
+    n_spoken = sum(1 for w in words if not _held_out(w))
     print(f"PROGRESS: Aligning {n_spoken} words to {(len(clip)/16000.0):.0f}s "
           f"of audio…", flush=True)
     segs = [{"text": text, "start": 0.0, "end": len(clip) / 16000.0}]
@@ -395,7 +452,11 @@ def align(words, audio_path, lang):
 def attach_timing(words, aligned):
     """Map aligned timestamps onto the pdf words by normalized sequence
     alignment. Returns mean score and count of words with no own timestamp."""
-    a = [norm(w["text"]) for w in words]
+    # Match only the tokens that were actually sent to the aligner: held-out
+    # blanks/numerals have no counterpart in `aligned`, and leaving them in the
+    # sequence lets difflib pair a real word with the wrong timestamp across them.
+    spoken = [i for i, w in enumerate(words) if not _held_out(w)]
+    a = [norm(words[i]["text"]) for i in spoken]
     b = [norm(w.get("word", "")) for w in aligned]
     sm = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
     for w in words:
@@ -407,14 +468,15 @@ def attach_timing(words, aligned):
             for k in range(min(i2 - i1, j2 - j1)):
                 aw = aligned[j1 + k]
                 if aw.get("start") is not None:
-                    words[i1 + k]["start"] = round(aw["start"], 3)
-                    words[i1 + k]["end"] = round(aw["end"], 3)
-                    words[i1 + k]["score"] = round(float(aw.get("score", 0)), 3)
+                    w = words[spoken[i1 + k]]
+                    w["start"] = round(aw["start"], 3)
+                    w["end"] = round(aw["end"], 3)
+                    w["score"] = round(float(aw.get("score", 0)), 3)
     scores = [w["score"] for w in words if w["score"] is not None]
     mean_score = round(sum(scores) / len(scores), 3) if scores else 0.0
-    # Blanks never get a forced timestamp (they're not in the aligned text) and
-    # are timed separately — don't count them as unaligned/needs-review words.
-    missing = sum(1 for w in words if not w.get("blank") and w["start"] is None)
+    # Held-out tokens never get a forced timestamp (they're not in the aligned
+    # text) and are timed separately — don't count them as unaligned.
+    missing = sum(1 for w in words if not _held_out(w) and w["start"] is None)
     # Forward-fill gaps so the reader's highlight never stalls.
     last = 0.0
     for w in words:
@@ -426,51 +488,142 @@ def attach_timing(words, aligned):
     return mean_score, missing
 
 
-def time_blanks(words, asr):
-    """Give each blank ("______") a timespan from the ASR gap between its
-    neighbouring real words, so its box lights up while the (unwritten) answer
-    word is spoken. Runs after attach_timing, overwriting the blanks' forward-
-    filled placeholder times. No-op (blanks keep the placeholder) if ASR is
-    unavailable.
-
-    The forced pass can't time a blank — there's no token for the spoken answer,
-    so a neighbour absorbs it. But the whole-clip ASR *did* hear that answer, so
-    we map the real words onto the ASR timeline and read the blank's time from
-    the gap: [end of the previous word in ASR, start of the next word in ASR]."""
-    if not asr:
-        return
-    # Map each non-blank word (in reading order) to its ASR index.
-    spoken = [i for i, w in enumerate(words) if not w.get("blank")]
+def _map_to_asr(words, asr, exact_only):
+    """words-index -> asr-index for the force-aligned words, by sequence match
+    against the ASR timeline. exact_only keeps just the runs whose text matches
+    the transcript verbatim (used where a wrong pairing would move a correct
+    word); otherwise near-misses count too (enough to bracket a gap)."""
+    spoken = [i for i, w in enumerate(words) if not _held_out(w)]
     a = [norm(words[i]["text"]) for i in spoken]
     b = [x["w"] for x in asr]
     sm = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
-    word_asr = [None] * len(words)   # words-index -> asr-index
+    tags = ("equal",) if exact_only else ("equal", "replace")
+    word_asr = [None] * len(words)
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
-        if tag in ("equal", "replace"):
+        if tag in tags:
             for k in range(min(i2 - i1, j2 - j1)):
                 word_asr[spoken[i1 + k]] = j1 + k
+    return word_asr
 
-    for bi, w in enumerate(words):
-        if not w.get("blank"):
+
+# How far a forced timestamp may sit from where the transcript heard the same
+# word before we stop believing it. Measured on a narrated passage: ordinary
+# jitter between the two is well under 0.8s, so anything past this is not
+# imprecision, it's the aligner having placed the word somewhere else entirely.
+_DRIFT_MAX = 1.2
+
+
+def repair_drift(words, asr):
+    """Re-anchor words the forced pass placed grossly wrong. Returns the count.
+
+    Held-out tokens leave audio with no text to match (nobody wrote down the
+    cloze answer; a numeral is spelled with digits the character aligner cannot
+    read). Forced alignment must still consume that audio, and it can do so by
+    dragging the words that FOLLOW the hole back into it — on the passage that
+    prompted this, "…on April [24,] [1942,] in Toronto." aligned "in Toronto."
+    onto the spoken "twenty-four", 2.8s early, so the tail flashed past.
+
+    The transcript did hear those words. Where the two disagree by more than
+    _DRIFT_MAX the forced timestamp is not merely imprecise, so we take the
+    transcript's. Only verbatim text matches are trusted as anchors."""
+    if not asr:
+        return 0
+    word_asr = _map_to_asr(words, asr, exact_only=True)
+    fixed = 0
+    for i, w in enumerate(words):
+        if _held_out(w) or word_asr[i] is None or w["start"] is None:
             continue
+        a = asr[word_asr[i]]
+        if abs(w["start"] - a["start"]) > _DRIFT_MAX:
+            w["start"] = round(a["start"], 3)
+            w["end"] = round(max(a["end"], a["start"]), 3)
+            fixed += 1
+    return fixed
+
+
+def enforce_monotonic(words):
+    """Reading-order start times must never go backwards — the reader picks the
+    last word whose start has passed, so one out-of-order start stalls the
+    highlight there. Cheap insurance after the timing passes."""
+    last = 0.0
+    for w in words:
+        if w["start"] < last:
+            w["start"] = last
+        if w["end"] < w["start"]:
+            w["end"] = w["start"]
+        last = w["start"]
+
+
+def time_held_out(words, asr):
+    """Give each held-out token (a blank "______" or a numeral) a timespan from
+    the ASR gap between its neighbouring force-aligned words, so its box lights
+    up while the answer / the number is spoken. Runs after attach_timing,
+    overwriting the forward-filled placeholder times. No-op (placeholders kept)
+    if ASR is unavailable.
+
+    The forced pass can't time these — a blank has no token for the spoken
+    answer, a numeral no spelling the character aligner can use, so a neighbour
+    absorbs the time. But the whole-clip ASR *did* hear them, so we map the real
+    words onto the ASR timeline and read the span from the gap: [end of the
+    previous word in ASR, start of the next word in ASR]."""
+    if not asr:
+        return
+    # Map each force-aligned word (in reading order) to its ASR index.
+    word_asr = _map_to_asr(words, asr, exact_only=False)
+
+    bi = 0
+    while bi < len(words):
+        if not _held_out(words[bi]):
+            bi += 1
+            continue
+        # A run of adjacent held-out tokens shares one gap ("November 30, 1874,"
+        # holds two). They must split it: the reader highlights the LAST word
+        # whose start has passed, so identical spans would hide all but the last.
+        bj = bi
+        while bj < len(words) and _held_out(words[bj]):
+            bj += 1
         prev_sp = next((i for i in range(bi - 1, -1, -1)
                         if word_asr[i] is not None), None)
-        next_sp = next((i for i in range(bi + 1, len(words))
+        next_sp = next((i for i in range(bj, len(words))
                         if word_asr[i] is not None), None)
-        # Read the answer's span from the ASR gap between the neighbours.
-        bs = asr[word_asr[prev_sp]]["end"] if prev_sp is not None else 0.0
-        be = (asr[word_asr[next_sp]]["start"] if next_sp is not None
-              else (words[prev_sp]["end"] if prev_sp is not None else bs))
+        gs = asr[word_asr[prev_sp]]["end"] if prev_sp is not None else 0.0
+        ge = (asr[word_asr[next_sp]]["start"] if next_sp is not None
+              else (words[prev_sp]["end"] if prev_sp is not None else gs))
         # Clamp inside the neighbours' FORCED starts so reading-order start times
         # stay monotonic — the reader's active-word logic depends on that.
         lo = words[prev_sp]["start"] + 0.01 if prev_sp is not None else 0.0
-        hi = words[next_sp]["start"] - 0.01 if next_sp is not None else be
+        hi = words[next_sp]["start"] - 0.01 if next_sp is not None else max(ge, lo)
         if hi <= lo:                     # neighbours too close for a real gap
-            bs = be = round((lo + hi) / 2, 3)
-        else:
-            bs = round(min(max(bs, lo), hi), 3)
-            be = round(min(max(be, bs), hi), 3)
-        w["start"], w["end"] = bs, be
+            mid = round((lo + hi) / 2, 3)
+            for i in range(bi, bj):
+                words[i]["start"] = words[i]["end"] = mid
+            bi = bj
+            continue
+        gs = min(max(gs, lo), hi)
+        ge = min(max(ge, gs), hi)
+        # ASR words heard inside the gap. A numeral usually comes back from ASR
+        # as digits ("1874"), so we can time it exactly instead of by its share
+        # of the gap; `pool` only moves forward so two numerals in one gap can't
+        # match the same ASR word.
+        pool = list(range((word_asr[prev_sp] + 1) if prev_sp is not None else 0,
+                          word_asr[next_sp] if next_sp is not None else len(asr)))
+        n = bj - bi
+        step = (ge - gs) / n
+        cursor = gs
+        for k, i in enumerate(range(bi, bj)):
+            w = words[i]
+            s, e = gs + k * step, gs + (k + 1) * step
+            if w.get("num"):
+                key = norm(w["text"])
+                m = next((p for p in pool if asr[p]["w"] == key), None)
+                if m is not None:
+                    s, e = asr[m]["start"], asr[m]["end"]
+                    pool = [p for p in pool if p > m]
+            s = min(max(s, cursor), hi)
+            e = min(max(e, s), hi)
+            w["start"], w["end"] = round(s, 3), round(e, 3)
+            cursor = s
+        bi = bj
 
 
 def merge_into_audio_json(path, audio_id, entry):
@@ -536,7 +689,14 @@ def main():
     aligned, dur, asr = align(words, audio_path, lang)
     print(f"Aligned {len(aligned)} words against {dur:.2f}s audio", flush=True)
     mean_score, missing = attach_timing(words, aligned)
-    time_blanks(words, asr)   # light up blank boxes when the answer is spoken
+    # Order matters: repair first, so the held-out tokens are bracketed by
+    # timings that are actually where the words are spoken.
+    fixed = repair_drift(words, asr)
+    if fixed:
+        print(f"Re-anchored {fixed} word(s) the forced pass placed more than "
+              f"{_DRIFT_MAX}s from the transcript", flush=True)
+    time_held_out(words, asr)   # time blanks + numerals off the ASR timeline
+    enforce_monotonic(words)
     needs_review = (mean_score < REVIEW_SCORE) or (missing > len(words) * 0.2)
     print(f"Mean score={mean_score}, unaligned={missing}, "
           f"needs_review={needs_review}", flush=True)
