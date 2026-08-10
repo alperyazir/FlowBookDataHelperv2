@@ -213,10 +213,18 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
             entry["num"] = True
         out.append(entry)
 
-    # rawdict yields blocks→lines→spans→chars in reading order; split each span
-    # into words on whitespace. Each span carries the font size, and every char
-    # its baseline origin, which is what the baseline-anchored box needs.
-    rd = page.get_text("rawdict")
+    # rawdict yields blocks→lines→spans→chars; split each span into words on
+    # whitespace. Each span carries the font size, and every char its baseline
+    # origin, which is what the baseline-anchored box needs.
+    # sort=True is essential: without it blocks come in content-stream order,
+    # which is whatever order the layout tool wrote them and often has nothing
+    # to do with the page. On DavidCopperfield p3 the title and first paragraph
+    # are written LAST, so the passage handed to the aligner started at the
+    # second paragraph and ended with "…CHARLES DICKENS" — the words were all
+    # there but in an order the narration never follows, so forced alignment
+    # scattered the highlights. Cropping a single paragraph hid the bug because
+    # order only goes wrong *between* blocks.
+    rd = page.get_text("rawdict", sort=True)
     for block in rd.get("blocks", []):
         for line in block.get("lines", []):
             line_first = True
