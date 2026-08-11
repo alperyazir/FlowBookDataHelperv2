@@ -40,6 +40,21 @@ GroupBox {
     property var karaokeMeta: ({})
     property bool karaokeNeedsReview: !!(karaokeMeta && karaokeMeta.needs_review)
 
+    // Playback speed, held here rather than read back off the player. Setting
+    // MediaPlayer.source resets playbackRate to 1.0 behind QML's back, and a
+    // binding is pushed rather than polled — so buttons bound to the player's
+    // own property stopped showing the chosen speed the moment a clip reloaded.
+    // This is the authority; the player is re-told on every source change and
+    // whenever playback starts.
+    property real playSpeed: 1.0
+    onPlaySpeedChanged: playRecordAudio.playbackRate = playSpeed
+
+    // Anchor for the karaoke clock (see karaokeTicker): the last position the
+    // player actually reported, and the wall-clock instant it reported it.
+    property real _tickLastPos: -1
+    property real _tickBaseMs: 0
+    property real _tickBaseWall: 0
+
     function _baseName(p) { return p ? String(p).substring(String(p).lastIndexOf("/") + 1) : ""; }
     function _isThisAudio(p) { return _baseName(p) === _baseName(root.audioModelData && root.audioModelData.audioPath); }
 
@@ -287,24 +302,71 @@ GroupBox {
     MediaPlayer {
         id: playRecordAudio
         audioOutput: AudioOutput {}
-        onSourceChanged: play()
+        playbackRate: root.playSpeed
+        onSourceChanged: { playbackRate = root.playSpeed; play(); }
         // Push the position onto the slider while the user isn't dragging.
         onPositionChanged: function(position) {
             if (!audioSlider.pressed)
                 audioSlider.value = position;
-            // Drive the page karaoke highlight (position is ms).
-            if (root.audioModelData && root.audioModelData.karaoke)
+            // While playing, the highlight is driven by karaokeTicker instead —
+            // this signal is too coarse for short words. Still update it when
+            // paused or seeking, so scrubbing moves the highlight.
+            if (root.audioModelData && root.audioModelData.karaoke
+                    && playbackState !== MediaPlayer.PlayingState)
                 content.pageDetails.karaokeTime = position / 1000.0;
         }
-        // Clear the highlight when playback stops/ends.
-        onPlaybackStateChanged: if (playbackState === MediaPlayer.StoppedState)
-                                    content.pageDetails.karaokeTime = -1
+        // Clear the highlight when playback stops/ends. Starting playback is
+        // also where a backend-side reset of the rate shows up, so re-assert it,
+        // and drop the karaoke clock's anchor so it re-seeds from the new
+        // position instead of extrapolating from a stale one.
+        onPlaybackStateChanged: {
+            if (playbackState === MediaPlayer.StoppedState)
+                content.pageDetails.karaokeTime = -1;
+            else if (Math.abs(playbackRate - root.playSpeed) > 0.001)
+                playbackRate = root.playSpeed;
+            root._tickLastPos = -1;
+        }
         // Apply a click-to-seek that arrived before the player was seekable.
         onSeekableChanged: function(seekable) {
             if (seekable && root._pendingSeekMs >= 0) {
                 setPosition(root._pendingSeekMs);
                 root._pendingSeekMs = -1;
             }
+        }
+    }
+
+    // The karaoke clock, deliberately not the player's position signal.
+    //
+    // A word is the active one from its own start until the next word's start,
+    // and the highlight can only land on it if a clock reading falls inside that
+    // window. positionChanged arrives roughly every 100ms, and across the books
+    // 16% of word windows are shorter than 150ms and 2.7% shorter than 100ms —
+    // so a real, correctly-timed word could fall between two readings and never
+    // be drawn at all. That is the "it finds the word but never highlights it"
+    // report, and no amount of re-aligning fixes it: the timings are right, the
+    // clock is too coarse.
+    //
+    // Polling alone would not help if the backend only refreshes position on the
+    // same slow beat, so this anchors on each fresh reading and extrapolates
+    // from wall-clock in between. The extrapolation is capped, so if reports
+    // stall (buffering, a stopped clip) the clock waits rather than running off.
+    Timer {
+        id: karaokeTicker
+        interval: 30
+        repeat: true
+        running: playRecordAudio.playbackState === MediaPlayer.PlayingState
+                 && !!(root.audioModelData && root.audioModelData.karaoke)
+        onTriggered: {
+            var p = playRecordAudio.position;
+            if (p !== root._tickLastPos) {      // a genuinely new reading
+                root._tickLastPos = p;
+                root._tickBaseMs = p;
+                root._tickBaseWall = Date.now();
+            }
+            var ahead = (Date.now() - root._tickBaseWall) * playRecordAudio.playbackRate;
+            if (ahead > 250)
+                ahead = 250;
+            content.pageDetails.karaokeTime = (root._tickBaseMs + ahead) / 1000.0;
         }
     }
 
@@ -436,6 +498,38 @@ GroupBox {
                 Layout.preferredWidth: 70
                 Layout.preferredHeight: 32
                 onClicked: playRecordAudio.stop()
+            }
+        }
+
+        // Playback speed. The narration runs fast enough that checking a
+        // highlight word by word is hard at 1×; slowing the clip only changes
+        // how fast it is played, never the stored timings, so what you hear
+        // still lines up with what you see.
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 6
+
+            Text {
+                text: "Speed"
+                color: "#8aa0a8"
+                font.pixelSize: 11
+                Layout.preferredWidth: 38
+            }
+            Repeater {
+                model: [0.25, 0.5, 0.75, 1.0, 1.25, 1.5]
+                AppButton {
+                    readonly property bool current:
+                        Math.abs(root.playSpeed - modelData) < 0.001
+                    text: modelData + "×"
+                    variant: current ? "primary" : "secondary"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 28
+                    // Six buttons share a sidebar column — trim the shared
+                    // padding so the labels fit instead of eliding.
+                    leftPadding: 3
+                    rightPadding: 3
+                    onClicked: root.playSpeed = modelData
+                }
             }
         }
 
