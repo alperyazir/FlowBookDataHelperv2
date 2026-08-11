@@ -59,18 +59,19 @@ _APOS = str.maketrans({"’": "'", "‘": "'", "ʼ": "'",
                        "′": "'", "´": "'", "`": "'"})
 norm = lambda s: _NORM.sub("", s.lower().translate(_APOS))
 
-# A token is "spoken" — worth forced-aligning — only if it contains at least one
-# letter. Fill-in-the-blank (cloze) passages carry underscore runs ("________")
-# and bare question numbers ("1", "2") that are never read aloud. Force-aligning
-# them makes those tokens (and their neighbours) swallow multi-second bogus
-# durations, which desyncs the karaoke highlight. So both are HELD OUT of the
-# forced pass and timed from the ASR gap instead (time_held_out):
-#   - blank lines are kept + flagged, so the box lights up while the unwritten
-#     answer is spoken;
+# A token is "spoken" — alignable as written — only if it contains at least one
+# letter. Fill-in-the-blank (cloze) passages also carry gap runs ("________",
+# "……………") and bare question numbers ("1", "2") that are never read aloud.
+# The three kinds are treated differently:
+#   - blank runs are kept + flagged, so the box lights up while the unwritten
+#     answer is spoken. Nobody wrote that answer down, so there is no text to
+#     align: they are HELD OUT and timed from the ASR gap (time_held_out).
 #   - digit tokens ("1874", "20") are kept too — a narrative passage reads them
 #     aloud ("She was born on November 30, 1874"), and dropping them left a hole
-#     in the highlight. Only tokens that really are question/enumeration numbers
-#     are dropped (see _is_enum_number).
+#     in the highlight. They are spelled out the way they are spoken before the
+#     forced pass (say_number), so they get real timings rather than a share of
+#     a gap. Only tokens that really are question/enumeration numbers are
+#     dropped (see _is_enum_number).
 _HAS_LETTER = re.compile(r"[a-z]")
 def _is_spoken(text):
     return bool(_HAS_LETTER.search(text.lower().translate(_APOS)))
@@ -107,6 +108,91 @@ def _ends_sentence(text):
 def _is_enum_number(text, line_first, prev_text):
     return bool(line_first and _ENUM.match(text)
                 and (prev_text is None or _ends_sentence(prev_text)))
+
+
+# ----- Saying numbers out loud ------------------------------------------------
+# The character-level aligner reads letters; "1828" has no spelling it can match,
+# so numerals used to be pulled out of the forced pass and timed from the gap
+# between their neighbours instead. That gap is split evenly, which is wrong
+# whenever one gap holds numerals of very different spoken length: on
+# "born on February 8, 1828," the year — nearly a second of speech — came out
+# 0.09s long and the highlight flicked past it, while "8," opened before
+# "February" had finished. Writing the number the way the narrator says it puts
+# it back through forced alignment, where it earns its own timing like any word.
+#
+# Hand-rolled rather than pulled from num2words: this is a few dozen lines, and
+# a new pip dependency would have to be installed on every authoring machine and
+# bundled into the Windows deploy.
+_ONES = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
+         "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
+         "sixteen", "seventeen", "eighteen", "nineteen"]
+_TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy",
+         "eighty", "ninety"]
+_ORDINAL = {"one": "first", "two": "second", "three": "third", "five": "fifth",
+            "eight": "eighth", "nine": "ninth", "twelve": "twelfth"}
+_MONTHS = {"january", "february", "march", "april", "may", "june", "july",
+           "august", "september", "october", "november", "december"}
+
+
+def _cardinal(n):
+    """1828 -> [one, thousand, eight, hundred, twenty, eight]"""
+    if n < 20:
+        return [_ONES[n]]
+    if n < 100:
+        t = _TENS[n // 10]
+        return [t] if n % 10 == 0 else [t, _ONES[n % 10]]
+    for div, name in ((1000000000, "billion"), (1000000, "million"),
+                      (1000, "thousand"), (100, "hundred")):
+        if n >= div:
+            out = _cardinal(n // div) + [name]
+            return out + (_cardinal(n % div) if n % div else [])
+    return [_ONES[0]]
+
+
+def _year(n):
+    """Years are read in pairs, not as cardinals: 1828 is "eighteen twenty
+    eight", not "one thousand eight hundred twenty eight"."""
+    if 2000 <= n <= 2009:          # "two thousand five", not "twenty oh five"
+        return _cardinal(n)
+    hi, lo = divmod(n, 100)
+    if lo == 0:
+        return _cardinal(hi) + ["hundred"]      # 1900 -> nineteen hundred
+    if lo < 10:
+        return _cardinal(hi) + ["oh", _ONES[lo]]  # 1905 -> nineteen oh five
+    return _cardinal(hi) + _cardinal(lo)
+
+
+def _ordinal(n):
+    """24 -> [twenty, fourth]. Only the last word inflects."""
+    ws = _cardinal(n)
+    last = ws[-1]
+    if last in _ORDINAL:
+        ws[-1] = _ORDINAL[last]
+    elif last.endswith("y"):
+        ws[-1] = last[:-1] + "ieth"             # twenty -> twentieth
+    else:
+        ws[-1] = last + "th"
+    return ws
+
+
+def say_number(text, prev_text=None):
+    """How a narrator reads this numeral, as alignable tokens ([] if we can't
+    tell). prev_text supplies the one piece of context that changes the reading:
+    a day-of-month after a month name is spoken as an ordinal ("February 8" is
+    "February eighth", never "February eight")."""
+    n = norm(text)
+    if not n.isdigit():
+        return []
+    v = int(n)
+    if prev_text and norm(prev_text) in _MONTHS and 1 <= v <= 31:
+        return _ordinal(v)
+    # Four digits in this range are years in these books ("in 1836.", "March 24,
+    # 1905."); a bare 20,000 is not, and reads as a plain cardinal.
+    if 1100 <= v <= 2099:
+        return _year(v)
+    if v >= 1000000000000:
+        return []                                # beyond what _cardinal covers
+    return _cardinal(v)
 
 # faster-whisper model for intro detection (see _asr_word_timeline). "base" is
 # accurate enough to locate where the passage starts and keeps the one-time
@@ -346,9 +432,44 @@ _WINDOW_PAD = 0.5
 
 
 def _held_out(w):
-    """True for a token kept in the passage but excluded from forced alignment
-    (blank lines and numerals) — timed from the ASR timeline instead."""
-    return bool(w.get("blank") or w.get("num"))
+    """True for a token kept in the passage but excluded from forced alignment —
+    timed from the ASR timeline instead (see time_held_out).
+
+    Only cloze blanks now: nobody wrote down the answer, so there is genuinely
+    no text to align. Numerals used to be held out too, but they are spelled out
+    for the aligner (say_number) and take their timing from the forced pass like
+    any other word; one that cannot be spelled falls back here."""
+    if w.get("blank"):
+        return True
+    if w.get("num"):
+        return not say_number(w["text"])
+    return False
+
+
+def expand_for_align(words):
+    """The text handed to the forced aligner, plus who owns each token.
+
+    Returns (tokens, owner): owner[k] is the index in `words` that produced
+    tokens[k]. Mostly one-to-one, but a numeral expands to however many words it
+    is read as ("1828" -> eighteen twenty eight), which is exactly why the
+    mapping has to be carried rather than recomputed — attach_timing then gives
+    the numeral the span from the first of its tokens to the last."""
+    tokens, owner = [], []
+    prev_text = None
+    for i, w in enumerate(words):
+        if _held_out(w):
+            prev_text = None      # a gap breaks the month/day adjacency
+            continue
+        if w.get("num"):
+            said = say_number(w["text"], prev_text)
+            for t in said:
+                tokens.append(t)
+                owner.append(i)
+        else:
+            tokens.append(w["text"])
+            owner.append(i)
+        prev_text = w["text"]
+    return tokens, owner
 
 
 def _asr_word_timeline(audio_path, lang):
@@ -448,18 +569,22 @@ def _locate_passage_window(words, asr, dur):
 
 
 def align(words, audio_path, lang):
-    """Forced-align the known passage text to audio. Returns (aligned, dur, asr).
+    """Forced-align the known passage text to audio.
+
+    Returns (aligned, dur, asr, tokens, owner) — the last two map the aligned
+    tokens back onto the passage words (see expand_for_align).
 
     First transcribes the clip to find where the passage begins (skipping any
     spoken intro/instruction that isn't in the crop), then forced-aligns the
     passage text only within that window — so leading words are timed to when
-    they are actually spoken, not leaked onto the intro. Blank and number tokens
-    are held out of the aligned text; the returned ASR timeline times them."""
+    they are actually spoken, not leaked onto the intro. Cloze blanks are held
+    out of the aligned text; the returned ASR timeline times them."""
     import whisperx
     device = "cpu"
-    # Blanks and numerals have no reliable spoken form for the character-level
-    # aligner — align only the real words (see time_held_out).
-    text = " ".join(w["text"] for w in words if not _held_out(w))
+    # Blanks have no spoken form the character-level aligner can use; numerals
+    # are written out the way they are read (see expand_for_align).
+    tokens, owner = expand_for_align(words)
+    text = " ".join(tokens)
     audio = whisperx.load_audio(audio_path)
     dur = len(audio) / 16000.0
     # The ~370MB wav2vec model is downloaded only once (it lives in the torch
@@ -511,32 +636,39 @@ def align(words, audio_path, lang):
                 w["start"] += t0
                 w["end"] += t0
             aligned.append(w)
-    return aligned, dur, asr
+    return aligned, dur, asr, tokens, owner
 
 
-def attach_timing(words, aligned):
+def attach_timing(words, aligned, tokens, owner):
     """Map aligned timestamps onto the pdf words by normalized sequence
     alignment. Returns mean score and count of words with no own timestamp."""
-    # Match only the tokens that were actually sent to the aligner: held-out
-    # blanks/numerals have no counterpart in `aligned`, and leaving them in the
-    # sequence lets difflib pair a real word with the wrong timestamp across them.
-    spoken = [i for i, w in enumerate(words) if not _held_out(w)]
-    a = [norm(words[i]["text"]) for i in spoken]
+    # Match against what was actually sent to the aligner — the expanded token
+    # list, not the passage words. Held-out blanks have no counterpart in
+    # `aligned`, and a numeral is several tokens there ("eighteen twenty eight"
+    # for one "1828,"), so pairing the two lists directly would slide every
+    # later word onto the wrong timestamp.
+    a = [norm(t) for t in tokens]
     b = [norm(w.get("word", "")) for w in aligned]
     sm = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
     for w in words:
         w["start"] = None
         w["end"] = None
         w["score"] = None
+    # A word takes the span of all its tokens: first onset to last release, so a
+    # spelled-out year stays lit for as long as it is being said.
+    spans = {}
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
         if tag in ("equal", "replace"):
             for k in range(min(i2 - i1, j2 - j1)):
                 aw = aligned[j1 + k]
                 if aw.get("start") is not None:
-                    w = words[spoken[i1 + k]]
-                    w["start"] = round(aw["start"], 3)
-                    w["end"] = round(aw["end"], 3)
-                    w["score"] = round(float(aw.get("score", 0)), 3)
+                    spans.setdefault(owner[i1 + k], []).append(
+                        (aw["start"], aw["end"], float(aw.get("score", 0))))
+    for wi, sp in spans.items():
+        w = words[wi]
+        w["start"] = round(min(s for s, _, _ in sp), 3)
+        w["end"] = round(max(e for _, e, _ in sp), 3)
+        w["score"] = round(sum(c for _, _, c in sp) / len(sp), 3)
     scores = [w["score"] for w in words if w["score"] is not None]
     mean_score = round(sum(scores) / len(scores), 3) if scores else 0.0
     # Held-out tokens never get a forced timestamp (they're not in the aligned
@@ -680,11 +812,15 @@ def time_held_out(words, asr):
     overwriting the forward-filled placeholder times. No-op (placeholders kept)
     if ASR is unavailable.
 
-    The forced pass can't time these — a blank has no token for the spoken
-    answer, a numeral no spelling the character aligner can use, so a neighbour
-    absorbs the time. But the whole-clip ASR *did* hear them, so we map the real
-    words onto the ASR timeline and read the span from the gap: [end of the
-    previous word in ASR, start of the next word in ASR]."""
+    The forced pass can't time these — nobody wrote down the cloze answer, so a
+    neighbour absorbs its audio. But the whole-clip ASR *did* hear it, so we map
+    the real words onto the ASR timeline and read the span from the gap: [end of
+    the previous word in ASR, start of the next word in ASR].
+
+    Numerals used to come through here too and it went badly: one gap holding
+    "February 8, 1828," was split evenly between the two, so the year got the
+    same slice as the day and lit for 0.09s. They are spelled out for the forced
+    aligner now (say_number) and only land here if they cannot be spelled."""
     if not asr:
         return
     # Map each force-aligned word (in reading order) to its ASR index.
@@ -840,9 +976,9 @@ def main():
           flush=True)
     setup_align_runtime()
     # align() emits its own "Loading model…" / "Aligning…" progress lines.
-    aligned, dur, asr = align(words, audio_path, lang)
+    aligned, dur, asr, tokens, owner = align(words, audio_path, lang)
     print(f"Aligned {len(aligned)} words against {dur:.2f}s audio", flush=True)
-    mean_score, missing = attach_timing(words, aligned)
+    mean_score, missing = attach_timing(words, aligned, tokens, owner)
     # Order matters: repair first, so the held-out tokens are bracketed by
     # timings that are actually where the words are spoken.
     fixed = repair_drift(words, asr)
