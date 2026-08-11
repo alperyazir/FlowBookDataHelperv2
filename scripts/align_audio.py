@@ -75,6 +75,16 @@ _HAS_LETTER = re.compile(r"[a-z]")
 def _is_spoken(text):
     return bool(_HAS_LETTER.search(text.lower().translate(_APOS)))
 
+# A cloze gap is not always an underscore run. Exercise pages just as often draw
+# it with dots — "The children lived in …………….." — and those tokens carry no
+# letters, so they used to fall through to the punctuation branch and be dropped
+# outright: the gap disappeared from the passage and the highlight jumped over
+# the spoken answer instead of resting on it. Two or more gap characters and
+# nothing else; a lone "…" is ordinary narrative punctuation and stays dropped.
+_GAP_RUN = re.compile(r"^[_.…․‥]{2,}$")
+def _is_gap(text):
+    return "__" in text or bool(_GAP_RUN.match(text.strip()))
+
 # A digit token: no letters, but a normalized form that is all digits ("30,",
 # "1874," -> "30", "1874"). Superscript cloze markers ("⁵") normalize to "" and
 # so are not numbers — they are dropped like punctuation.
@@ -104,7 +114,24 @@ def _is_enum_number(text, line_first, prev_text):
 _ASR_MODEL = "base"
 
 # Below this mean alignment confidence we flag the passage for human review.
-REVIEW_SCORE = 0.30
+# Calibrated on 121 aligned passages across four books: healthy runs sit at
+# 0.74–0.84 (mean 0.81), the two known-broken ones at 0.35 and 0.45. The old
+# 0.30 was under every observed value, so needs_review never once fired — a
+# badly desynced passage shipped looking exactly like a good one.
+REVIEW_SCORE = 0.65
+
+# Structural sanity limits, checked alongside the score (see review_flags). A
+# passage can align with a respectable mean score and still be plainly wrong;
+# these catch the shapes that score alone misses. Bounds are set clear of the
+# healthy population measured on the same 121 passages (largest internal start
+# gap 4.0s, speaking rate 1.78–3.22 words/s).
+_MAX_INTERNAL_GAP = 8.0     # silence between consecutive words mid-passage
+_RATE_MIN, _RATE_MAX = 0.8, 6.0   # words per second across the passage span
+
+# Shortest span a highlight can occupy and still be seen. The reader lights the
+# last word whose start has passed, so a zero-length word is drawn for no frames
+# at all and the highlight visibly skips it.
+_MIN_WORD = 0.06
 
 
 def find_original_pdf(raw_dir):
@@ -180,7 +207,7 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
         kind = None
         if _is_spoken(text):
             kind = "word"
-        elif "__" in text:
+        elif _is_gap(text):
             kind = "blank"
         elif _is_number(text) and not _is_enum_number(text, was_first, was_prev):
             kind = "num"
@@ -256,7 +283,7 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
     # which classifies as a spoken word but still labels a gap. Iterating
     # backwards keeps the indices valid while deleting.
     for i in range(len(out) - 2, -1, -1):
-        if out[i].get("num") and "__" in out[i + 1]["text"]:
+        if out[i].get("num") and _is_gap(out[i + 1]["text"]):
             del out[i]
     return out
 
@@ -360,26 +387,49 @@ def _asr_word_timeline(audio_path, lang):
 
 def _locate_passage_window(words, asr, dur):
     """Find the [t0, t1] audio window the passage actually occupies by matching
-    the passage tokens against the ASR timeline. Returns (t0, t1) padded, or
-    (0.0, dur) if the passage can't be located confidently (then we just align
-    the whole clip, i.e. the old behaviour)."""
+    the passage tokens against the ASR timeline. Returns (t0, t1, j0, j1) — the
+    padded window plus the ASR index range it covers — or the whole clip if the
+    passage can't be located confidently."""
     if not asr:
-        return 0.0, dur
+        return 0.0, dur, 0, len(asr) - 1
     a = [norm(w["text"]) for w in words]
     a = [t for t in a if t]                      # drop blanks (e.g. "____")
     b = [x["w"] for x in asr]
     if not a:
-        return 0.0, dur
+        return 0.0, dur, 0, len(asr) - 1
+    whole = (0.0, dur, 0, len(asr) - 1)
     sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
     blocks = [bl for bl in sm.get_matching_blocks() if bl.size > 0]
-    matched = sum(bl.size for bl in blocks)
-    if not blocks or matched < max(3, 0.3 * len(a)):
-        return 0.0, dur                          # too weak -> whole clip
-    # difflib maximizes total matches, so the passage's long contiguous run wins
-    # over any stray single-word coincidence in the intro: the first block marks
-    # where the passage begins in the ASR timeline, the last where it ends.
-    j_start = blocks[0].b
-    j_end = min(len(asr) - 1, blocks[-1].b + blocks[-1].size - 1)
+    if not blocks:
+        return whole
+    # Anchor on the LONGEST run, not on whichever block comes first. difflib
+    # maximizes the total match count, so a stray one-word coincidence far from
+    # the passage is happily included — and taking blocks[0] then let that stray
+    # define where the window starts. On FiveChildrenandIT p12 the 8-word crop
+    # ("We will never see them again!" said Robert.) matched a lone "we" at 40s
+    # on top of its real 4-word run at 105s, so the window opened at 39.5s and
+    # the aligner spread all 8 words over the 68s that followed — the highlight
+    # ran a full minute ahead of the voice. The longest run is the passage; a
+    # coincidence is short by definition.
+    anchor = max(blocks, key=lambda bl: (bl.size, -bl.b))
+    off = anchor.b - anchor.a                    # asr index of passage token 0
+    # Keep only blocks consistent with that projection. Real matches share the
+    # anchor's offset up to whatever the transcript inserted or dropped inside
+    # the passage; strays sit hundreds of words away.
+    slack = max(10, len(a) // 2)
+    kept = [bl for bl in blocks if abs((bl.b - bl.a) - off) <= slack]
+    matched = sum(bl.size for bl in kept)
+    if matched < max(3, 0.3 * len(a)):
+        return whole                             # too weak -> whole clip
+    # Project through the head/tail tokens that did not match, so a passage whose
+    # first or last words the transcript misheard still gets its own audio: the
+    # window must start before the first spoken word, not at the first *matched*
+    # one. (On p12 the opening "We" never matched its true position, and without
+    # this the window would have opened after it and clipped the word off.)
+    first, last = kept[0], kept[-1]
+    j_start = max(0, first.b - first.a)
+    j_end = min(len(asr) - 1,
+                last.b + last.size - 1 + (len(a) - (last.a + last.size)))
     # Start the window at the END of the last intro word (the ASR word right
     # before the passage), not at the passage word's own ASR start. ASR timing
     # on that first passage word is jittery and often lands late; anchoring on
@@ -394,7 +444,7 @@ def _locate_passage_window(words, asr, dur):
     else:
         t0 = max(0.0, asr[j_start]["start"] - _WINDOW_PAD)
     t1 = min(dur, asr[j_end]["end"] + _WINDOW_PAD)
-    return t0, t1
+    return t0, t1, j_start, j_end
 
 
 def align(words, audio_path, lang):
@@ -433,7 +483,14 @@ def align(words, audio_path, lang):
     # Locate the passage in the clip and align only that window.
     print("PROGRESS: Finding where the passage begins in the audio…", flush=True)
     asr = _asr_word_timeline(audio_path, lang)
-    t0, t1 = _locate_passage_window(words, asr, dur)
+    t0, t1, j0, j1 = _locate_passage_window(words, asr, dur)
+    # Everything downstream (repair_drift, time_held_out) re-matches the passage
+    # against this timeline, and outside the window it hits the same stray
+    # coincidences the locator just rejected — a word can then be "confirmed" by
+    # a transcript hit a minute away and keep its wrong timestamp. Hand back only
+    # the window's slice so those passes see the passage's own audio and nothing
+    # else.
+    asr = asr[j0:j1 + 1]
     i0, i1 = int(t0 * 16000), int(t1 * 16000)
     clip = audio[i0:i1] if (t0 > 0.0 or t1 < dur) else audio
     if t0 > 0.0 or t1 < dur:
@@ -552,14 +609,68 @@ def repair_drift(words, asr):
 def enforce_monotonic(words):
     """Reading-order start times must never go backwards — the reader picks the
     last word whose start has passed, so one out-of-order start stalls the
-    highlight there. Cheap insurance after the timing passes."""
+    highlight there. Returns how many words had to be pushed forward.
+
+    That count is a quality signal in its own right (see review_flags): a sound
+    alignment clamps nothing, because the aligner already produced the words in
+    order. Clamping many means the forced pass placed a stretch of the passage
+    somewhere it does not belong and this pass is only hiding it."""
+    clamped = 0
     last = 0.0
     for w in words:
         if w["start"] < last:
             w["start"] = last
+            clamped += 1
         if w["end"] < w["start"]:
             w["end"] = w["start"]
         last = w["start"]
+    _spread_ties(words)
+    return clamped
+
+
+def _spread_ties(words):
+    """Give every word a visible span, keeping starts non-decreasing.
+
+    Clamping above collapses each out-of-order word onto its predecessor's
+    start, so it ends up zero-length — and a zero-length word is drawn for no
+    frames at all: the highlight freezes on the word before it, then jumps past
+    a whole stretch of text. That "es geçiyor" skip is what the collapse looks
+    like on screen (13 consecutive words shared one timestamp on DavidCopperfield
+    p17). The timing is already wrong at that point and this cannot invent the
+    truth, but sweeping the tied run across the room available to it degrades to
+    a slightly-off highlight instead of an invisible one.
+
+    Held-out blanks and numerals reach here zero-length too whenever their ASR
+    gap collapsed (time_held_out's `hi <= lo` branch), which is why a spoken year
+    would light up for no time at all; they get the same treatment."""
+    n = len(words)
+    i = 0
+    while i < n:
+        # words[i..j] share one start (j == i in the healthy case).
+        j = i
+        while j + 1 < n and words[j + 1]["start"] <= words[i]["start"]:
+            j += 1
+        run = j - i + 1
+        s = words[i]["start"]
+        nxt = words[j + 1]["start"] if j + 1 < n else None   # always > s
+        if run > 1:
+            limit = nxt if nxt is not None else max(words[j]["end"],
+                                                    s + run * _MIN_WORD)
+            if limit <= s:
+                limit = s + run * _MIN_WORD
+            step = (limit - s) / run
+            for k in range(run):
+                w = words[i + k]
+                w["start"] = round(s + k * step, 3)
+                w["end"] = round(s + (k + 1) * step, 3)
+        else:
+            # A single word that merely came out very short: lengthen it to the
+            # visibility floor, never past where the next word begins.
+            w = words[i]
+            floor = s + _MIN_WORD if nxt is None else min(s + _MIN_WORD, nxt)
+            if w["end"] < floor:
+                w["end"] = round(floor, 3)
+        i = j + 1
 
 
 def time_held_out(words, asr):
@@ -634,6 +745,41 @@ def time_held_out(words, asr):
         bi = bj
 
 
+def review_flags(words, mean_score, missing, clamped, dur):
+    """Reasons this passage should not be trusted, as short human-readable
+    strings (empty == looks sound).
+
+    Mean score alone is not enough: the passage that started this — an 8-word
+    crop whose highlight ran a minute ahead of the voice — still scored 0.35 and
+    shipped silently, because the old threshold sat under every value the metric
+    ever produces. These add the shapes a score cannot see: a stretch of words
+    the aligner had to be forced back into order, a silent chasm inside what is
+    supposed to be continuous narration, and a passage read at a speed no human
+    reads at."""
+    flags = []
+    if mean_score < REVIEW_SCORE:
+        flags.append(f"low confidence (score {mean_score:.2f} "
+                     f"< {REVIEW_SCORE})")
+    if missing > len(words) * 0.2:
+        flags.append(f"{missing} of {len(words)} words got no timestamp")
+    if clamped > max(2, 0.05 * len(words)):
+        flags.append(f"{clamped} words were out of order and had to be clamped")
+    gaps = [(words[i + 1]["start"] - words[i]["start"], i)
+            for i in range(len(words) - 1)]
+    if gaps:
+        g, gi = max(gaps)
+        if g > _MAX_INTERNAL_GAP:
+            flags.append(f"{g:.0f}s silence inside the passage after "
+                         f"'{words[gi]['text']}'")
+    span = words[-1]["end"] - words[0]["start"] if words else 0.0
+    if span > 0.5:
+        rate = len(words) / span
+        if rate < _RATE_MIN or rate > _RATE_MAX:
+            flags.append(f"implausible pace ({rate:.1f} words/s over "
+                         f"{span:.0f}s of a {dur:.0f}s clip)")
+    return flags
+
+
 def merge_into_audio_json(path, audio_id, entry):
     data = {}
     if os.path.exists(path):
@@ -704,10 +850,13 @@ def main():
         print(f"Re-anchored {fixed} word(s) the forced pass placed more than "
               f"{_DRIFT_MAX}s from the transcript", flush=True)
     time_held_out(words, asr)   # time blanks + numerals off the ASR timeline
-    enforce_monotonic(words)
-    needs_review = (mean_score < REVIEW_SCORE) or (missing > len(words) * 0.2)
-    print(f"Mean score={mean_score}, unaligned={missing}, "
+    clamped = enforce_monotonic(words)
+    flags = review_flags(words, mean_score, missing, clamped, dur)
+    needs_review = bool(flags)
+    print(f"Mean score={mean_score}, unaligned={missing}, clamped={clamped}, "
           f"needs_review={needs_review}", flush=True)
+    for f in flags:
+        print(f"REVIEW: {f}", flush=True)
     print(f"PROGRESS: Aligned {len(words)} words (score {mean_score}). Saving…",
           flush=True)
 
@@ -720,13 +869,15 @@ def main():
         "lang": lang,
         "mean_score": mean_score,
         "needs_review": needs_review,
+        "review": flags,
         "words": words,
     }
     merge_into_audio_json(audio_json_path, audio_id, entry)
     print(f"Wrote {audio_id} -> {audio_json_path}", flush=True)
     # Compact summary for the C++ caller (parsed off stdout, before "OK").
     summary = {"audio_id": audio_id, "words": len(words),
-               "mean_score": mean_score, "needs_review": needs_review}
+               "mean_score": mean_score, "needs_review": needs_review,
+               "review": flags}
     print("SUMMARY: " + json.dumps(summary, ensure_ascii=False), flush=True)
     print("OK", flush=True)
 

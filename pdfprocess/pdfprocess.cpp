@@ -1433,6 +1433,38 @@ QVariantList PdfProcess::loadKaraokeWords(const QString &audioJsonPath,
     return out;
 }
 
+// The quality verdict for an already-aligned passage: mean_score, needs_review
+// and the aligner's plain-language reasons. loadKaraokeWords deliberately
+// returns only the word list, so before this the verdict was visible for the
+// few seconds after an align and then gone — reopening the panel showed a
+// desynced passage as if it were fine. Read back separately so the warning
+// survives a reload.
+QVariantMap PdfProcess::loadKaraokeMeta(const QString &audioJsonPath,
+                                        const QString &audioId)
+{
+    QVariantMap out;
+    QFile f(audioJsonPath);
+    if (!f.open(QIODevice::ReadOnly))
+        return out;
+    QJsonParseError err;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+    f.close();
+    if (err.error != QJsonParseError::NoError || !doc.isObject())
+        return out;
+    const QJsonObject obj = doc.object();
+    if (!obj.contains(audioId))
+        return out;
+    const QJsonObject entry = obj.value(audioId).toObject();
+    out.insert("mean_score", entry.value("mean_score").toDouble(-1.0));
+    out.insert("needs_review", entry.value("needs_review").toBool(false));
+    QStringList reasons;
+    for (const QJsonValue &rv : entry.value("review").toArray())
+        reasons << rv.toString();
+    out.insert("review", reasons);
+    out.insert("duration", entry.value("duration").toDouble(0.0));
+    return out;
+}
+
 bool PdfProcess::saveKaraokeWords(const QString &audioJsonPath,
                                   const QString &audioId,
                                   const QVariantList &words)

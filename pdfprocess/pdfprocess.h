@@ -64,6 +64,13 @@ public:
     // without QML's file:// XHR quirks.
     Q_INVOKABLE QVariantList loadKaraokeWords(const QString &audioJsonPath,
                                               const QString &audioId);
+    // Read the quality verdict for one audio id: {mean_score, needs_review,
+    // review: [reason, …], duration}. Separate from loadKaraokeWords so the
+    // panel can warn about a bad alignment every time it opens, not only in the
+    // moments right after the align that produced it. Empty if the id is absent;
+    // mean_score is -1 for entries written before the aligner recorded one.
+    Q_INVOKABLE QVariantMap loadKaraokeMeta(const QString &audioJsonPath,
+                                            const QString &audioId);
     // Cancel an in-flight cropPassageAudio() run (kills the python process).
     // Safe to call when nothing is running.
     Q_INVOKABLE void cancelPassageAudio();

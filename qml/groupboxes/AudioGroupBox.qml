@@ -32,6 +32,14 @@ GroupBox {
     property bool wordsEditMode: false
     property int selectedWordIndex: -1
 
+    // Alignment quality for the loaded passage, re-read from audio.json on every
+    // load: {mean_score, needs_review, review: [reason, …]}. karaokeStatus only
+    // ever held the verdict of an align done in this session, so a passage that
+    // came out desynced looked identical to a good one as soon as the panel was
+    // reopened — and the author had no reason to play it back.
+    property var karaokeMeta: ({})
+    property bool karaokeNeedsReview: !!(karaokeMeta && karaokeMeta.needs_review)
+
     function _baseName(p) { return p ? String(p).substring(String(p).lastIndexOf("/") + 1) : ""; }
     function _isThisAudio(p) { return _baseName(p) === _baseName(root.audioModelData && root.audioModelData.audioPath); }
 
@@ -46,6 +54,7 @@ GroupBox {
     function loadKaraoke() {
         content.pageDetails.karaokeTime = -1;
         content.pageDetails.karaokeWords = [];
+        root.karaokeMeta = ({});
         if (!root.audioModelData || !root.audioModelData.karaoke)
             return;
         var rel = _audioJsonPath();
@@ -56,6 +65,7 @@ GroupBox {
         // root. Read in C++ (QFile) so it works the same on Windows.
         var path = appPath + (rel.indexOf("./") === 0 ? rel.substring(2) : rel);
         var words = pdfProcess.loadKaraokeWords(path, id);
+        root.karaokeMeta = pdfProcess.loadKaraokeMeta(path, id) || {};
         // Point each cloze blank at the fill box it opens. Done on load (not
         // only right after aligning) so the link heals when the author moves,
         // adds or deletes a fill afterwards; linkKaraokeBlanks returns null
@@ -460,6 +470,60 @@ GroupBox {
                 visible: root.karaokeBusy
                 implicitWidth: 22
                 implicitHeight: 22
+            }
+        }
+
+        // A passage can align "successfully" and still be badly out of sync, and
+        // nothing on screen said so — the author had to play the whole clip to
+        // find out. The aligner now records why it distrusts a result, and this
+        // stays visible for as long as the problem does, so a bad passage is
+        // caught in the editor rather than by a reader.
+        Rectangle {
+            Layout.fillWidth: true
+            visible: root.karaokeNeedsReview && !root.karaokeBusy
+            Layout.preferredHeight: reviewCol.implicitHeight + 16
+            color: "#3a2a1a"
+            border.color: "#e0a000"
+            border.width: 1
+            radius: 4
+
+            ColumnLayout {
+                id: reviewCol
+                anchors.fill: parent
+                anchors.margins: 8
+                spacing: 3
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "⚠ This alignment looks wrong"
+                          + (root.karaokeMeta && root.karaokeMeta.mean_score >= 0
+                             ? "  ·  score " + Number(root.karaokeMeta.mean_score).toFixed(2)
+                             : "")
+                    color: "#e0a000"
+                    font.pixelSize: 13
+                    font.bold: true
+                    wrapMode: Text.WordWrap
+                }
+
+                Repeater {
+                    model: (root.karaokeMeta && root.karaokeMeta.review) ? root.karaokeMeta.review : []
+                    Text {
+                        Layout.fillWidth: true
+                        text: "• " + modelData
+                        color: "#d8c9a8"
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "Play it back to check. If the passage is read in "
+                          + "separate chunks, select each chunk on its own."
+                    color: "#8aa0a8"
+                    font.pixelSize: 11
+                    wrapMode: Text.WordWrap
+                }
             }
         }
 
