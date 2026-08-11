@@ -214,6 +214,25 @@ REVIEW_SCORE = 0.65
 _MAX_INTERNAL_GAP = 8.0     # silence between consecutive words mid-passage
 _RATE_MIN, _RATE_MAX = 0.8, 6.0   # words per second across the passage span
 
+# Tail compression. When the forced pass runs short of audio it does not fail —
+# it packs whatever words are left into a sliver and finishes early, so the
+# highlight sprints through the closing sentence and the voice then says it.
+# 20.000 Leagues p20 ended that way: the last five words shared half a second at
+# 119.8s while the narrator was still reading them at 122s. Nothing else caught
+# it — score 0.80, nothing clamped, no internal gap, pace 2.07 words/s — so it
+# shipped and only a listening human noticed.
+#
+# The signature is two things at once: a tail far shorter than the passage's own
+# word length, and clip left over that nobody is speaking during. Measured over
+# 121 passages the broken one sits at 36% of median with 3.3s spare, the worst
+# healthy one at 59% with 0.7s — so requiring both, at these cuts, separates
+# them cleanly. Only checked on passages long enough for a median to mean
+# something; short ones are better served by the score and pace tests.
+_TAIL_WORDS = 6
+_TAIL_MIN_LEN = 20          # passage words needed before this test is meaningful
+_TAIL_RATIO = 0.5           # tail mean vs median word duration
+_TAIL_LEFTOVER = 1.5        # seconds of unused clip after the passage ends
+
 # Shortest span a highlight can occupy and still be seen. The reader lights the
 # last word whose start has passed, so a zero-length word is drawn for no frames
 # at all and the highlight visibly skips it.
@@ -913,6 +932,18 @@ def review_flags(words, mean_score, missing, clamped, dur):
         if rate < _RATE_MIN or rate > _RATE_MAX:
             flags.append(f"implausible pace ({rate:.1f} words/s over "
                          f"{span:.0f}s of a {dur:.0f}s clip)")
+    if len(words) >= _TAIL_MIN_LEN and dur > 0:
+        lens = sorted(w["end"] - w["start"] for w in words)
+        median = lens[len(lens) // 2]
+        tail = words[-_TAIL_WORDS:]
+        tail_mean = sum(w["end"] - w["start"] for w in tail) / len(tail)
+        leftover = dur - words[-1]["end"]
+        if (median > 0 and tail_mean < _TAIL_RATIO * median
+                and leftover > _TAIL_LEFTOVER):
+            flags.append(f"the last {_TAIL_WORDS} words average "
+                         f"{tail_mean:.2f}s against {median:.2f}s for the "
+                         f"passage, and {leftover:.0f}s of clip goes unused — "
+                         f"the ending is running ahead of the voice")
     return flags
 
 
