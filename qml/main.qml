@@ -823,7 +823,7 @@ ApplicationWindow {
 
         Text {
             id: versionText
-            text: "v3.3.10"
+            text: "v3.3.11"
             color: "#009ca6"
             anchors.centerIn: parent
             font.pixelSize: 14
