@@ -138,7 +138,10 @@ Rectangle {
         audioModelData: root.audioModelData
         sectionIndex: root.sectionIndex
         width: parent.width * .98
-        height: parent.height / 3 * 2
+        // Nearly the whole sidebar: the panel's tallest part is the word list,
+        // and a passage runs to a few hundred words. At two thirds it showed
+        // barely two rows of them.
+        height: parent.height * .97
         onRemoveSection: {
             page.removeSection(secIndex);
         }

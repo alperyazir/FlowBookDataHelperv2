@@ -49,6 +49,35 @@ GroupBox {
     property real playSpeed: 1.0
     onPlaySpeedChanged: playRecordAudio.playbackRate = playSpeed
 
+    // How many pieces of the passage have been cropped but not yet submitted.
+    // Drives Crop → + Crop → Submit; zero means there is nothing pending.
+    readonly property int passagePieceCount:
+        (content.pageDetails && content.pageDetails.passageRects)
+        ? content.pageDetails.passageRects.length : 0
+
+    // The word list with a heading before each piece. Words carry `piece` (the
+    // crop they came from); a passage cropped in one go has a single piece and
+    // gets no heading, since a divider that never divides anything is noise.
+    readonly property var wordRows: {
+        var src = content.pageDetails.karaokeWords || [];
+        var rows = [];
+        var last = -1;
+        var multi = false;
+        for (var i = 0; i < src.length; i++) {
+            var p = (src[i] && src[i].piece !== undefined) ? src[i].piece : 0;
+            if (p !== last) {
+                if (last >= 0)
+                    multi = true;
+                rows.push({ sep: true, piece: p });
+                last = p;
+            }
+            rows.push({ sep: false, wi: i, w: src[i] });
+        }
+        if (!multi)
+            rows = rows.filter(function (r) { return !r.sep; });
+        return rows;
+    }
+
     // Anchor for the karaoke clock (see karaokeTicker): the last position the
     // player actually reported, and the wall-clock instant it reported it.
     property real _tickLastPos: -1
@@ -651,14 +680,42 @@ GroupBox {
             Layout.fillWidth: true
             spacing: 8
 
-            // Same as pressing "c" with this audio open.
+            // Same as pressing "c" with this audio open. Once a piece has been
+            // drawn this keeps adding pieces — a passage laid out in columns or
+            // scattered around a picture is cropped one piece at a time, in the
+            // order it is read, and nothing is aligned until Submit.
             AppButton {
-                text: root.karaokeBusy ? "Analyzing…" : "Select karaoke (C)"
+                readonly property int pieces: root.passagePieceCount
+                text: root.karaokeBusy ? "Analyzing…"
+                      : (pieces > 0 ? "+ Crop" : "Crop (C)")
                 variant: "secondary"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 32
                 enabled: !root.karaokeBusy
-                onClicked: content.pageDetails.startPassageCropMode(root.audioModelData)
+                onClicked: {
+                    if (root.passagePieceCount > 0)
+                        content.pageDetails.resumePassageCropMode();
+                    else
+                        content.pageDetails.startPassageCropMode(root.audioModelData);
+                }
+            }
+
+            AppButton {
+                text: "Undo"
+                variant: "secondary"
+                visible: root.passagePieceCount > 0 && !root.karaokeBusy
+                Layout.preferredWidth: 70
+                Layout.preferredHeight: 32
+                onClicked: content.pageDetails.undoPassageRect()
+            }
+
+            AppButton {
+                text: "Submit"
+                variant: "primary"
+                visible: root.passagePieceCount > 0 && !root.karaokeBusy
+                Layout.preferredWidth: 88
+                Layout.preferredHeight: 32
+                onClicked: content.pageDetails.submitPassageRects()
             }
 
             // Cancel the in-flight alignment.
@@ -850,22 +907,62 @@ GroupBox {
 
                         Repeater {
                             id: wordsRep
-                            model: content.pageDetails.karaokeWords
+                            model: root.wordRows
 
-                            delegate: Rectangle {
+                            // Either a piece heading or a word chip. A heading
+                            // takes the full row width, which is what makes the
+                            // Flow break the line before the next piece starts.
+                            delegate: Item {
+                                id: row
+                                readonly property bool isSep: modelData.sep === true
+                                readonly property var wd: isSep ? null : modelData.w
+                                readonly property int wi: isSep ? -1 : modelData.wi
+                                width: isSep ? wordsFlow.width : chip.width
+                                height: isSep ? 26 : chip.height
+
+                                Item {
+                                    visible: row.isSep
+                                    anchors.fill: parent
+                                    Rectangle {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        height: 1
+                                        color: "#2f4650"
+                                    }
+                                    Rectangle {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        anchors.left: parent.left
+                                        width: sepText.implicitWidth + 12
+                                        height: 18
+                                        radius: 3
+                                        color: "#1A2327"
+                                        Text {
+                                            id: sepText
+                                            anchors.centerIn: parent
+                                            text: "Crop " + (modelData.piece + 1)
+                                            color: "#8aa0a8"
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                        }
+                                    }
+                                }
+
+                            Rectangle {
                                 id: chip
+                                visible: !row.isSep
                                 readonly property bool isActive:
-                                    index === content.pageDetails.karaokeActiveIndex
+                                    row.wi === content.pageDetails.karaokeActiveIndex
                                 readonly property bool isSelected:
                                     root.wordsEditMode
-                                    && index === root.selectedWordIndex
+                                    && row.wi === root.selectedWordIndex
                                 // Cloze blank: the chip shows the answer it will
                                 // reveal, not the underscores, so the author can
                                 // check the pairing at a glance.
                                 readonly property bool isBlank:
-                                    modelData && modelData.blank === true
+                                    row.wd && row.wd.blank === true
                                 readonly property bool isLinked:
-                                    isBlank && modelData.fill
+                                    isBlank && row.wd.fill
                                 // Reserve room for the × delete button in edit mode.
                                 width: chipText.implicitWidth
                                        + (root.wordsEditMode ? 42 : 16)
@@ -886,9 +983,9 @@ GroupBox {
                                     anchors.left: parent.left
                                     anchors.leftMargin: 8
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: (chip.isLinked && modelData.answer)
-                                          ? "__ " + modelData.answer
-                                          : ((modelData && modelData.text) ? modelData.text : "")
+                                    text: (chip.isLinked && row.wd.answer)
+                                          ? "__ " + row.wd.answer
+                                          : ((row.wd && row.wd.text) ? row.wd.text : "")
                                     color: (chip.isActive && !chip.isSelected)
                                            ? "#10242b" : "#cfe8ea"
                                     font.pixelSize: 14
@@ -903,12 +1000,12 @@ GroupBox {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         if (root.wordsEditMode) {
-                                            root.selectedWordIndex = index;
-                                            renameField.text = (modelData && modelData.text)
-                                                               ? modelData.text : "";
-                                        } else if (modelData
-                                                   && modelData.start !== undefined) {
-                                            root.seekToWord(modelData.start);
+                                            root.selectedWordIndex = row.wi;
+                                            renameField.text = (row.wd && row.wd.text)
+                                                               ? row.wd.text : "";
+                                        } else if (row.wd
+                                                   && row.wd.start !== undefined) {
+                                            root.seekToWord(row.wd.start);
                                         }
                                     }
                                 }
@@ -937,9 +1034,10 @@ GroupBox {
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.deleteWord(index)
+                                        onClicked: root.deleteWord(row.wi)
                                     }
                                 }
+                            }
                             }
                         }
                     }

@@ -52,12 +52,24 @@ public:
     // Forced-align the text under the rect to the audio and write word-level
     // karaoke timing into <book>/audio/audio.json (keyed by the audio file
     // name). rawDir is <book>/raw; pageIndex is 0-based.
+    // Align a passage made of one or more crops. `rects` is a JSON array of
+    // {x,y,w,h} in page-image pixels, IN READING ORDER — a page can lay a
+    // passage out in columns or scatter it, and no geometry reliably recovers
+    // the order, so the order the author cropped in is the order used.
     Q_INVOKABLE void cropPassageAudio(const QString &rawDir, int pageIndex,
-                                      double x, double y, double w, double h,
+                                      const QString &rectsJson,
                                       double pngWidth, double pngHeight,
                                       const QString &audioPath,
                                       const QString &audioJsonPath,
                                       const QString &lang = "en");
+    // The words under those crops, without aligning anything — so the panel can
+    // show what a crop caught the moment it is drawn, and the author can check
+    // the passage (and its order) before spending minutes on the aligner.
+    // Answers on passageWordsReady; runs a script that needs only PyMuPDF, so
+    // it returns in well under a second.
+    Q_INVOKABLE void previewPassageWords(const QString &rawDir, int pageIndex,
+                                         const QString &rectsJson,
+                                         double pngWidth, double pngHeight);
     // Read the word list for one audio id ("4.mp3") from audio/audio.json.
     // Returns a list of {text, bbox:{x,y,w,h}, start, end, score} maps, empty
     // if the file/id is missing. Read in C++ (QFile) so it works cross-platform
@@ -152,6 +164,10 @@ signals:
     void passageCropCanceled(const QString &audioPath);
     void passageCropCompleted(bool success, const QString &audioPath,
                               const QString &summaryJson);
+    // Result of previewPassageWords: the word list for the crops as drawn, or
+    // empty with `error` set. Each word carries `piece`, the index of the crop
+    // it came from, so the panel can keep the pieces visibly apart.
+    void passageWordsReady(const QVariantList &words, const QString &error);
     void dependenciesChecked(bool ok, const QString &json);
     void dependenciesInstalled(bool ok);
     // A Python helper script failed — carries a short, user-readable reason

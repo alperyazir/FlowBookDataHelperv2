@@ -1363,14 +1363,14 @@ void PdfProcess::cropSectionFromPdf(const QString &pdfPath, int pageIndex,
 }
 
 void PdfProcess::cropPassageAudio(const QString &rawDir, int pageIndex,
-                                  double x, double y, double w, double h,
+                                  const QString &rectsJson,
                                   double pngWidth, double pngHeight,
                                   const QString &audioPath,
                                   const QString &audioJsonPath,
                                   const QString &lang)
 {
     qDebug() << "Passage karaoke align:" << rawDir << "page:" << pageIndex
-             << "rect:" << x << y << w << h << "audio:" << audioPath
+             << "rects:" << rectsJson << "audio:" << audioPath
              << "json:" << audioJsonPath << "lang:" << lang;
 
     emit passageCropStarted(audioPath);
@@ -1456,10 +1456,7 @@ void PdfProcess::cropPassageAudio(const QString &rawDir, int pageIndex,
     arguments << "-u" << scriptPath
               << rawDir
               << QString::number(pageIndex)
-              << QString::number(x, 'f', 2)
-              << QString::number(y, 'f', 2)
-              << QString::number(w, 'f', 2)
-              << QString::number(h, 'f', 2)
+              << rectsJson
               << QString::number(pngWidth, 'f', 2)
               << QString::number(pngHeight, 'f', 2)
               << audioPath
@@ -1470,6 +1467,66 @@ void PdfProcess::cropPassageAudio(const QString &rawDir, int pageIndex,
 
     process->start(pythonExecutable(), arguments);
     qDebug() << "Karaoke process started";
+}
+
+// Words under the given crops, with no alignment. Deliberately a separate,
+// short-lived process from the align: it runs passage_text, which imports only
+// PyMuPDF, so it answers in a fraction of a second instead of the seconds torch
+// takes to load. Not tracked by _passageProcess — cancelling an align must not
+// kill a preview, and a preview is too brief to be worth cancelling.
+void PdfProcess::previewPassageWords(const QString &rawDir, int pageIndex,
+                                     const QString &rectsJson,
+                                     double pngWidth, double pngHeight)
+{
+    QProcess *process = new QProcess(this);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    process->setProcessEnvironment(env);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+
+    connect(process, &QProcess::finished, this,
+            [this, process](int exitCode, QProcess::ExitStatus status) {
+        const QString out = QString::fromUtf8(process->readAll());
+        process->deleteLater();
+        QVariantList words;
+        QString error;
+        if (status != QProcess::NormalExit || exitCode != 0) {
+            error = extractScriptError(out, exitCode);
+        } else {
+            const int at = out.indexOf(QStringLiteral("WORDS: "));
+            if (at < 0) {
+                error = QStringLiteral("No words returned");
+            } else {
+                int end = out.indexOf('\n', at);
+                if (end < 0)
+                    end = out.size();
+                const QByteArray payload =
+                    out.mid(at + 7, end - at - 7).trimmed().toUtf8();
+                QJsonParseError perr;
+                const QJsonDocument doc = QJsonDocument::fromJson(payload, &perr);
+                if (perr.error != QJsonParseError::NoError || !doc.isArray())
+                    error = QStringLiteral("Could not read the word list");
+                else
+                    for (const QJsonValue &v : doc.array())
+                        words.append(v.toObject().toVariantMap());
+            }
+        }
+        emit passageWordsReady(words, error);
+    });
+    connect(process, &QProcess::errorOccurred, this, [this, process]() {
+        const QString msg = process->errorString();
+        process->deleteLater();
+        emit passageWordsReady(QVariantList(), msg);
+    });
+
+    QStringList arguments;
+    arguments << "-u" << (scriptsDir() + "/passage_text.py")
+              << rawDir
+              << QString::number(pageIndex)
+              << QString::number(pngWidth, 'f', 2)
+              << QString::number(pngHeight, 'f', 2)
+              << rectsJson;
+    process->start(pythonExecutable(), arguments);
 }
 
 void PdfProcess::cancelPassageAudio()

@@ -376,7 +376,11 @@ ApplicationWindow {
     // handler closes it and clears the selection too.
     Shortcut {
         sequence: "Escape"
+        // Not while cropping: PageDetails has its own Escape for leaving crop
+        // mode, and a crop always has a side panel open, so both would be live
+        // on the same key at once.
         enabled: !activityDialog.visible
+                 && !content.pageDetails.cropMode
                  && (sideBar.audioVisible || sideBar.videoVisible || sideBar.activityVisible
                      || sideBar.fillVisible || sideBar.circleVisible
                      || sideBar.fillwColorVisible || sideBar.drawMatchedVisible

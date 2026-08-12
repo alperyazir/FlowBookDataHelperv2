@@ -2191,6 +2191,58 @@ Item {
         height: Math.abs(root.cropEndY - root.cropStartY)
     }
 
+    // The pieces already taken, numbered. The order is the reading order and it
+    // is the author's to give, so it has to be visible while they give it — a
+    // piece cropped out of turn is only obvious if you can see the turns.
+    // Original page pixels back into the space the rubber band lives in — the
+    // exact inverse of _mouseToOriginal. Anything less than the inverse drifts
+    // as soon as the page is scrolled or zoomed, because the centring offset
+    // and contentX/Y both move.
+    function _originalToDisplay(ox, oy) {
+        var sx = picture.paintedWidth / picture.sourceSize.width;
+        var sy = picture.paintedHeight / picture.sourceSize.height;
+        return {
+            x: ox * sx + (flick.contentWidth / 2 - picture.paintedWidth / 2)
+               - flick.contentX,
+            y: oy * sy + (flick.contentHeight / 2 - picture.paintedHeight / 2)
+               - flick.contentY
+        };
+    }
+
+    Repeater {
+        model: root.cropPassage ? root.passageRects : []
+        Rectangle {
+            z: 100
+            // Re-read on scroll/zoom so the boxes stay on their text.
+            readonly property var p: root._originalToDisplay(
+                modelData.x, modelData.y,
+                flick.contentX, flick.contentY,
+                picture.paintedWidth, picture.paintedHeight)
+            x: p.x
+            y: p.y
+            width: modelData.w * (picture.paintedWidth / picture.sourceSize.width)
+            height: modelData.h * (picture.paintedHeight / picture.sourceSize.height)
+            color: "#2600b3be"
+            border.color: "#00b3be"
+            border.width: 2
+            radius: 3
+            Rectangle {
+                width: 22; height: 22; radius: 11
+                color: "#00b3be"
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.margins: 4
+                Text {
+                    anchors.centerIn: parent
+                    text: index + 1
+                    color: "#10242b"
+                    font.pixelSize: 12
+                    font.bold: true
+                }
+            }
+        }
+    }
+
     // Crop mode indicator label
     Rectangle {
         visible: root.cropMode
@@ -2206,11 +2258,25 @@ Item {
         Text {
             id: cropLabel
             anchors.centerIn: parent
-            text: "CROP MODE - Draw selection, Right-click or Esc to cancel"
+            text: root.cropPassage
+                  ? (root.passageRects.length === 0
+                     ? "PASSAGE — draw the first piece"
+                     : root.passageRects.length + " piece"
+                       + (root.passageRects.length === 1 ? "" : "s")
+                       + " — draw the next, Backspace undoes, Submit when done")
+                  : "CROP MODE - Draw selection, Right-click or Esc to cancel"
             color: "white"
             font.pixelSize: 12
         }
     }
+
+    // Backspace drops the last piece while a passage is being assembled.
+    Shortcut {
+        sequence: "Backspace"
+        enabled: root.cropMode && root.cropPassage && root.passageRects.length > 0
+        onActivated: root.undoPassageRect()
+    }
+
 
     function setDefaultZoom() {
         // İçeriği orijinal boyutuna (1x zoom) döndür
@@ -2316,9 +2382,94 @@ Item {
     }
 
     // Audio section is selected: pressing "c" picks the passage to karaoke-align.
+    // The pieces of the passage being assembled, in the order they were drawn.
+    // That order is the reading order — see passage_text.words_in_crops.
+    property var passageRects: []
+
+    // Ask for the words under the pieces so far. Cheap (a PyMuPDF-only script,
+    // well under a second), so it runs after every piece and the author sees
+    // what was caught before anything is aligned.
+    // The book's directory, from the page's own image path — the same
+    // derivation executeCrop() does inline. `page` is a real property; the
+    // imagePath/bookDir/pdfPath names in that function are locals, so they
+    // cannot be reached from here and the path has to be rebuilt.
+    function _bookAbs() {
+        if (!page || !page.image_path)
+            return "";
+        var ip = String(page.image_path).replace(/\\/g, "/");
+        var cut = ip.indexOf("/images/");
+        if (cut < 0)
+            return "";
+        return appPath + ip.substring(0, cut).substring(2);
+    }
+    function _rawDir() {
+        var b = root._bookAbs();
+        return b === "" ? "" : b + "/raw";
+    }
+    // 0-based, as the scripts want it. Another executeCrop local.
+    function _pageIndex() {
+        return (page && page.page_number !== undefined) ? page.page_number - 1 : -1;
+    }
+
+    function previewPassageRects() {
+        if (!root.passageRects.length || root._rawDir() === ""
+                || root._pageIndex() < 0)
+            return;
+        pdfProcess.previewPassageWords(root._rawDir(), root._pageIndex(),
+                                       JSON.stringify(root.passageRects),
+                                       picture.sourceSize.width,
+                                       picture.sourceSize.height);
+    }
+
+    // Drop the last piece (Backspace while cropping).
+    function undoPassageRect() {
+        if (!root.passageRects.length)
+            return;
+        var r = root.passageRects.slice();
+        r.pop();
+        root.passageRects = r;
+        if (r.length)
+            root.previewPassageRects();
+        else
+            content.pageDetails.karaokeWords = [];
+    }
+
+    // Hand the assembled pieces to the aligner. Called by the panel's Submit.
+    function submitPassageRects() {
+        if (!root.passageRects.length || !root.cropPassageAudioRef)
+            return;
+        var bookAbs = root._bookAbs();
+        var aRel = String(root.cropPassageAudioRef.audioPath || "");
+        if (bookAbs === "" || aRel === "" || root._pageIndex() < 0) {
+            print("Passage submit: no book path, audio path or page index");
+            return;
+        }
+        pdfProcess.cropPassageAudio(
+            root._rawDir(), root._pageIndex(),
+            JSON.stringify(root.passageRects),
+            picture.sourceSize.width, picture.sourceSize.height,
+            appPath + aRel.substring(2), bookAbs + "/audio/audio.json", "en"
+        );
+        root.passageRects = [];
+        endCropMode();
+    }
+
+    // Go back to drawing without discarding the pieces already taken — what
+    // "+ Crop" does. startPassageCropMode is the fresh start and clears them.
+    function resumePassageCropMode() {
+        if (!root.cropPassageAudioRef)
+            return;
+        root.cropMode = true;
+        root.cropPassage = true;
+        root.cropDrawing = false;
+        mainMouseArea.cursorShape = Qt.CrossCursor;
+    }
+
     function startPassageCropMode(audioObj) {
         if (!audioObj)
             return;
+        root.passageRects = [];          // a new selection replaces the old one
+        content.pageDetails.karaokeWords = [];
         root.cropMode = true;
         root.cropRedetect = false;
         root.cropHeaderPick = false;
@@ -2336,6 +2487,7 @@ Item {
     }
 
     function endCropMode() {
+        root.passageRects = [];          // abandon any half-assembled passage
         root.cropMode = false;
         root.cropRedetect = false;
         root.cropHeaderPick = false;
@@ -2356,9 +2508,15 @@ Item {
         var selW = Math.abs(root.cropEndX - root.cropStartX);
         var selH = Math.abs(root.cropEndY - root.cropStartY);
 
-        // Minimum selection check
+        // Minimum selection check. While a passage is being assembled a stray
+        // click must not end the mode — that would throw away every piece
+        // already taken. Ignore it and stay where we are.
         if (selW < 10 || selH < 10) {
             print("Crop selection too small, ignoring");
+            if (root.cropPassage) {
+                root.cropDrawing = false;
+                return;
+            }
             endCropMode();
             return;
         }
@@ -2438,24 +2596,20 @@ Item {
         // Passage crop: forced-align the selected audio to the text under the
         // rect and write word-level karaoke timing into audio/audio.json. No
         // crop image; result comes back via pdfProcess.passageCropCompleted.
+        // A passage can be several pieces — columns, or text scattered around a
+        // picture — and no geometry recovers the order they are read in, so the
+        // author gives it by cropping in that order. Each piece is collected
+        // and previewed here; nothing is aligned until Submit.
         if (root.cropPassage) {
-            var bookAbs = appPath + bookDir.substring(2);
-            var aRel = root.cropPassageAudioRef
-                       ? String(root.cropPassageAudioRef.audioPath || "") : "";
-            if (aRel === "") {
-                print("Passage crop: audio section has no audio path");
-                endCropMode();
-                return;
-            }
-            var audioAbs = appPath + aRel.substring(2);          // "./books/.../x.mp3"
-            var audioJson = bookAbs + "/audio/audio.json";
-            pdfProcess.cropPassageAudio(
-                pdfPath, pageIndex,
-                originalX, originalY, originalW, originalH,
-                picture.sourceSize.width, picture.sourceSize.height,
-                audioAbs, audioJson, "en"
-            );
-            endCropMode();
+            root.passageRects.push({ x: Math.round(originalX),
+                                     y: Math.round(originalY),
+                                     w: Math.round(originalW),
+                                     h: Math.round(originalH) });
+            root.passageRectsChanged();
+            root.previewPassageRects();
+            // Stay in crop mode: the next rectangle is the next piece. The
+            // panel's Submit / the Escape key end it.
+            root.cropDrawing = false;
             return;
         }
 
@@ -2690,6 +2844,18 @@ Item {
             }
         }
 
+        // The words under the pieces cropped so far, shown before anything is
+        // aligned so the passage — and the order of its pieces — can be checked
+        // while it is still cheap to fix.
+        function onPassageWordsReady(words, error) {
+            if (error !== "") {
+                print("Passage preview failed: " + error);
+                return;
+            }
+            content.pageDetails.karaokeTime = -1;
+            content.pageDetails.karaokeWords = words;
+        }
+
         // Passage karaoke alignment finished: flag the audio section so the
         // reader loads audio.json. The AudioGroupBox shows the busy/result
         // status off the same signal.
@@ -2849,6 +3015,11 @@ Item {
         }
     }
 
+    // Leaving crop mode. This has always existed, but never fired: main.qml has
+    // its own Escape for closing the side panels, and during a passage crop the
+    // audio panel is open, so both were enabled on the same key at once and Qt
+    // resolved the ambiguity by running neither. main.qml's is now switched off
+    // while cropping, which leaves this one alone and Escape works again.
     Shortcut {
         sequence: "Escape"
         enabled: root.cropMode
