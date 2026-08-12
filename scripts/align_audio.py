@@ -196,6 +196,141 @@ def say_number(text, prev_text=None):
         return []                                # beyond what _cardinal covers
     return _cardinal(v)
 
+# ----- Cloze gaps, located by the answer boxes rather than by the text --------
+# A gap used to be found by what it looks like in the text layer, and books draw
+# it every possible way: a run of underscores, a run of dots, and — the one that
+# started this — underscores with spaces between them ("(1) _ _ _ _ _ _ _"),
+# which arrive as seven separate one-character tokens and were thrown away as
+# punctuation. Each new book brought a new shape, and missing the gap costs
+# twice: the highlight skips the spoken answer, and the "(1)" labelling the gap
+# survives as a numeral, so the aligner is handed a word nobody says.
+#
+# The author has already told us where every gap is, by drawing the fill box
+# that reveals the answer. That is authored data, not a guess about typography,
+# and it carries the answer text as well as the position. Reading gaps from it
+# is format-proof by construction.
+
+
+def fills_for_page(book_dir, page_idx):
+    """Answer boxes the author drew on this page: [{x, y, w, h, text}] in page
+    image pixels — the same space words_in_crop reports word boxes in. Empty
+    when there is no config, no such page, or no fills on it."""
+    path = os.path.join(book_dir, "config.json")
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception:
+        return []
+    want = page_idx + 1            # config numbers pages from 1
+    out, stack = [], [cfg]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            if (node.get("page_number") == want
+                    and isinstance(node.get("sections"), list)):
+                for sec in node["sections"]:
+                    if sec.get("type") != "fill":
+                        continue
+                    for a in (sec.get("answer") or []):
+                        c = a.get("coords") or {}
+                        t = str(a.get("text") or "").strip()
+                        if t and all(k in c for k in ("x", "y", "w", "h")):
+                            out.append({"x": c["x"], "y": c["y"], "w": c["w"],
+                                        "h": c["h"], "text": t})
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+    return out
+
+
+def _reading_position(words, f):
+    """Where this box falls in the passage's reading order.
+
+    The words are already in reading order, so walk them and stop at the first
+    one that comes after the box: further right on the same line, or on a line
+    below it. Same line is decided on vertical centres, which survives the
+    difference in height between a word and a drawn answer box."""
+    fcy = f["y"] + f["h"] / 2.0
+    for i, w in enumerate(words):
+        b = w["bbox"]
+        wcy = b["y"] + b["h"] / 2.0
+        same_line = abs(wcy - fcy) < 0.6 * max(b["h"], f["h"])
+        if same_line:
+            if b["x"] > f["x"]:
+                return i
+        elif wcy > fcy:
+            return i
+    return len(words)
+
+
+def _box_overlap(a, b):
+    """Intersection as a fraction of the smaller box."""
+    ix = max(0, min(a["x"] + a["w"], b["x"] + b["w"]) - max(a["x"], b["x"]))
+    iy = max(0, min(a["y"] + a["h"], b["y"] + b["h"]) - max(a["y"], b["y"]))
+    small = min(a["w"] * a["h"], b["w"] * b["h"]) or 1
+    return (ix * iy) / small
+
+
+def _insert_fill_blanks(out, fills, rect_px):
+    """Put a blank in the passage wherever the author drew an answer box.
+
+    Only boxes whose centre is inside the crop count, which is what keeps a word
+    bank or a column of ✓/✗ marks elsewhere on the page from being mistaken for
+    gaps in this passage — on the page that prompted this, that filter picks the
+    right 8 of the page's 26 boxes with nothing else to tune.
+
+    A box that lands on a gap the text layer already found upgrades it in place
+    — it gains the answer and the exact box — rather than adding a second blank
+    over the same gap.
+
+    Boxes are only allowed to CREATE blanks when the text layer found no gaps at
+    all in this crop. Being inside the crop does not make a box part of the
+    passage: a broad crop can take in a neighbouring exercise, and on two
+    MyEnglishPath pages it does — a dozen answer boxes sitting on their own
+    lines, nothing to do with the underscored sentences above them. Geometry
+    cannot reliably tell those apart, but it does not have to. Where the text
+    layer shows the gaps it already knows how many there are, so boxes there only
+    annotate; where it shows none, as in the book that prompted this, they are
+    the only evidence and are trusted completely. The rule cannot inflate the
+    count of a passage that already worked."""
+    cx0, cy0, cw, ch = rect_px
+    cx1, cy1 = cx0 + cw, cy0 + ch
+    inside = [f for f in fills
+              if cx0 <= f["x"] + f["w"] / 2.0 <= cx1
+              and cy0 <= f["y"] + f["h"] / 2.0 <= cy1]
+    may_create = not any(w.get("blank") for w in out)
+    claimed = set()
+    added = merged = 0
+    for f in sorted(inside, key=lambda f: (f["y"], f["x"])):
+        box = {"x": round(f["x"]), "y": round(f["y"]),
+               "w": round(f["w"]), "h": round(f["h"])}
+        hit = next((w for w in out
+                    if w.get("blank") and id(w) not in claimed
+                    and _box_overlap(w["bbox"], box) > 0.5), None)
+        if hit is not None:
+            claimed.add(id(hit))
+            hit["answer"] = f["text"]
+            hit["fill"] = dict(box)
+            hit["bbox"] = dict(box)
+            merged += 1
+            continue
+        if not may_create:
+            continue
+        w = {
+            "text": "______",       # what the page shows; `answer` is what is said
+            "bbox": dict(box),
+            "blank": True,
+            "answer": f["text"],
+            "fill": dict(box),      # already linked: no matching pass needed
+        }
+        out.insert(_reading_position(out, f), w)
+        claimed.add(id(w))
+        added += 1
+    return added, merged
+
+
 # faster-whisper model for intro detection (see _asr_word_timeline). "base" is
 # accurate enough to locate where the passage starts and keeps the one-time
 # model download small; timing precision is irrelevant here.
@@ -269,12 +404,17 @@ _HL_CAP = 0.78     # top above caps/ascenders (cap height ≈ 0.70)
 _HL_DESC = 0.25    # bottom below the baseline to cover descenders (g, y, p)
 
 
-def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
+def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h, fills=None):
     """Words whose center falls inside the crop rect, in reading order.
 
     Returns [{text, bbox:{x,y,w,h}}] with bbox in PNG pixel space. The box is
     baseline-anchored (see _HL_CAP/_HL_DESC) so the karaoke highlight hugs the
     word rather than floating above it.
+
+    `fills` are the answer boxes the author drew on this page (fills_for_page).
+    Each one inside the crop becomes a blank at its place in the reading order,
+    carrying the answer — which is how a gap is found regardless of how the book
+    happens to draw it.
     """
     doc = fitz.open(pdf_path)
     if page_idx < 0 or page_idx >= len(doc):
@@ -383,6 +523,11 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h):
                     prev_x1 = c["bbox"][2]
                 emit(run, size)
     doc.close()
+    # Before the lookahead below, so a gap the text layer failed to show still
+    # gets its "(1)" label dropped: the label is only recognised by what follows
+    # it, and what follows it is now a blank whatever the typography did.
+    if fills:
+        _insert_fill_blanks(out, fills, rect_px)
     # Second pass for the one marker shape that needs lookahead: the number
     # labelling a cloze gap ("People will 1 ______ serious problems"). Test the
     # next token for an underscore run rather than for the "blank" flag — a
@@ -477,15 +622,50 @@ def _held_out(w):
     """True for a token kept in the passage but excluded from forced alignment —
     timed from the ASR timeline instead (see time_held_out).
 
-    Only cloze blanks now: nobody wrote down the answer, so there is genuinely
-    no text to align. Numerals used to be held out too, but they are spelled out
-    for the aligner (say_number) and take their timing from the forced pass like
-    any other word; one that cannot be spelled falls back here."""
+    A cloze blank normally lands here: the page shows underscores, so there is
+    no text to align and its span has to be inferred from the gap either side.
+    But when the answer box gives us the word AND the transcript confirms the
+    narrator says it (mark_spoken_answers), the blank is aligned like any other
+    word and gets a real timestamp instead of a share of a gap.
+
+    Numerals used to be held out too; they are spelled out for the aligner
+    (say_number) now, and only one that cannot be spelled falls back here."""
     if w.get("blank"):
-        return True
+        return not w.get("_speak")
     if w.get("num"):
         return not say_number(w["text"])
     return False
+
+
+def mark_spoken_answers(words, asr):
+    """Flag the cloze answers the transcript actually heard. Returns the count.
+
+    Worth being strict about: feeding the aligner a word that is not in the
+    audio is precisely the damage the unrecognised "(1)" labels were doing, so a
+    blank is only promoted when its answer is really there. The check joins runs
+    of up to three transcript words before comparing, because an answer written
+    as one word is often heard as two ("easygoing" -> "easy going") and that is
+    a match, not a miss. Anything unconfirmed simply stays held out, which is
+    the behaviour that existed before."""
+    if not asr:
+        return 0
+    heard, ws = set(), [x["w"] for x in asr]
+    for i in range(len(ws)):
+        acc = ""
+        for k in range(3):
+            if i + k >= len(ws):
+                break
+            acc += ws[i + k]
+            heard.add(acc)
+    n = 0
+    for w in words:
+        if not w.get("blank"):
+            continue
+        key = norm(w.get("answer") or "")
+        if key and key in heard:
+            w["_speak"] = True
+            n += 1
+    return n
 
 
 def expand_for_align(words):
@@ -501,6 +681,14 @@ def expand_for_align(words):
     for i, w in enumerate(words):
         if _held_out(w):
             prev_text = None      # a gap breaks the month/day adjacency
+            continue
+        if w.get("blank"):
+            # A confirmed answer goes in as the words the narrator says, so the
+            # box lights up on the word itself rather than on a divided gap.
+            for t in str(w.get("answer") or "").split():
+                tokens.append(t)
+                owner.append(i)
+            prev_text = None
             continue
         if w.get("num"):
             said = say_number(w["text"], prev_text)
@@ -622,14 +810,11 @@ def align(words, audio_path, lang):
     First transcribes the clip to find where the passage begins (skipping any
     spoken intro/instruction that isn't in the crop), then forced-aligns the
     passage text only within that window — so leading words are timed to when
-    they are actually spoken, not leaked onto the intro. Cloze blanks are held
-    out of the aligned text; the returned ASR timeline times them."""
+    they are actually spoken, not leaked onto the intro. A cloze blank is held
+    out and timed from the ASR gap unless the transcript confirms its answer is
+    spoken, in which case it is aligned like any other word."""
     import whisperx
     device = "cpu"
-    # Blanks have no spoken form the character-level aligner can use; numerals
-    # are written out the way they are read (see expand_for_align).
-    tokens, owner = expand_for_align(words)
-    text = " ".join(tokens)
     audio = whisperx.load_audio(audio_path)
     dur = len(audio) / 16000.0
     # The ~370MB wav2vec model is downloaded only once (it lives in the torch
@@ -666,6 +851,18 @@ def align(words, audio_path, lang):
     if t0 > 0.0 or t1 < dur:
         print(f"PROGRESS: Passage runs {t0:.1f}s–{t1:.1f}s; skipping "
               f"{t0:.0f}s of intro before it", flush=True)
+
+    # Needs the transcript, so it happens here rather than with the rest of the
+    # text preparation: a cloze answer only joins the aligned text once we can
+    # see the narrator actually said it.
+    n_blank = sum(1 for w in words if w.get("blank"))
+    if n_blank:
+        spoken = mark_spoken_answers(words, asr)
+        print(f"{n_blank} cloze gap(s) from the answer boxes; {spoken} "
+              f"answered aloud and aligned, {n_blank - spoken} timed from the gap",
+              flush=True)
+    tokens, owner = expand_for_align(words)
+    text = " ".join(tokens)
 
     n_spoken = sum(1 for w in words if not _held_out(w))
     print(f"PROGRESS: Aligning {n_spoken} words to {(len(clip)/16000.0):.0f}s "
@@ -730,13 +927,23 @@ def attach_timing(words, aligned, tokens, owner):
     return mean_score, missing
 
 
+def _spoken_text(w):
+    """What a token sounds like, for matching against a transcript. A cloze
+    blank shows underscores on the page but is heard as its answer, and matching
+    on the underscores would put an empty string in the middle of the sequence
+    for difflib to trip over."""
+    if w.get("blank") and w.get("answer"):
+        return w["answer"]
+    return w["text"]
+
+
 def _map_to_asr(words, asr, exact_only):
     """words-index -> asr-index for the force-aligned words, by sequence match
     against the ASR timeline. exact_only keeps just the runs whose text matches
     the transcript verbatim (used where a wrong pairing would move a correct
     word); otherwise near-misses count too (enough to bracket a gap)."""
     spoken = [i for i, w in enumerate(words) if not _held_out(w)]
-    a = [norm(words[i]["text"]) for i in spoken]
+    a = [norm(_spoken_text(words[i])) for i in spoken]
     b = [x["w"] for x in asr]
     sm = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
     tags = ("equal",) if exact_only else ("equal", "replace")
@@ -1068,8 +1275,11 @@ def main():
     # status so the author sees what stage the (multi-second) align is at,
     # instead of a bare spinner.
     print("PROGRESS: Reading passage text from the page…", flush=True)
+    # raw_dir is <book>/raw, so the book's config — and the answer boxes drawn
+    # on this page — sit one level up.
+    fills = fills_for_page(os.path.dirname(os.path.normpath(raw_dir)), page_idx)
     try:
-        words = words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h)
+        words = words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h, fills)
     except IndexError as e:
         print(f"ERROR: {e}", flush=True)
         sys.exit(1)
@@ -1102,6 +1312,12 @@ def main():
         print(f"REVIEW: {f}", flush=True)
     print(f"PROGRESS: Aligned {len(words)} words (score {mean_score}). Saving…",
           flush=True)
+
+    # Drop the run-local flags (mark_spoken_answers) before anything is written;
+    # audio.json is the reader's contract, not a scratchpad.
+    for w in words:
+        for k in [k for k in w if k.startswith("_")]:
+            del w[k]
 
     audio_id = os.path.basename(audio_path)
     entry = {
