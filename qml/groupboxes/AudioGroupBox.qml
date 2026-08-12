@@ -135,6 +135,15 @@ GroupBox {
                 root.karaokeBusy = true;
                 root.karaokeCanceled = false;
                 root.karaokeStatus = "Starting…";
+                // The aligner may rewrite this very file, converting a
+                // variable-bitrate clip to a constant one so it can be seeked.
+                // Windows will not let a file be replaced while another process
+                // holds it open, and this panel's player holds it from the
+                // moment the clip is auditioned — which is exactly what an
+                // author does before running karaoke. Let go for the run.
+                playRecordAudio.stop();
+                playRecordAudio.source = "";
+                content.pageDetails.karaokeTime = -1;
             }
         }
         // Live stage messages from align_audio.py ("PROGRESS:" lines).
@@ -163,6 +172,15 @@ GroupBox {
             var msg = (info.words || 0) + " words";
             if (info.mean_score !== undefined)
                 msg += " · score " + info.mean_score;
+            // The aligner rewrites a variable-bitrate clip to a constant one
+            // before timing it, because a VBR mp3 cannot be seeked accurately
+            // and the highlight drifts after a slider drag. That changes the
+            // author's file, so say so rather than let them find a different
+            // mp3 than the one they dropped in.
+            if (info.audio_cbr && info.audio_cbr.kbps)
+                msg += " · audio → CBR " + info.audio_cbr.kbps + "k";
+            else if (info.audio_cbr && info.audio_cbr.failed)
+                msg += " · ⚠ audio is VBR (seeking will drift)";
             if (info.needs_review)
                 msg += " · ⚠ review";
             root.karaokeStatus = msg;
@@ -303,7 +321,14 @@ GroupBox {
         id: playRecordAudio
         audioOutput: AudioOutput {}
         playbackRate: root.playSpeed
-        onSourceChanged: { playbackRate = root.playSpeed; play(); }
+        // Clearing the source is how the panel releases the file (see
+        // onPassageCropStarted); don't try to play nothing.
+        onSourceChanged: {
+            if (String(source) === "")
+                return;
+            playbackRate = root.playSpeed;
+            play();
+        }
         // Push the position onto the slider while the user isn't dragging.
         onPositionChanged: function(position) {
             if (!audioSlider.pressed)

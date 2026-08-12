@@ -116,6 +116,12 @@ public:
     bool removeDir(const QString &dirPath);
     bool copyDir(const QString &srcPath, const QString &dstPath, bool filterBookData = false);
     bool zipFolder(const QString &sourceDir, const QString &zipFilePath);
+    // Names of clips under <bookDir>/audio whose MP3 bitrate varies. Such a
+    // file plays correctly but cannot be seeked accurately, which desyncs the
+    // karaoke highlight after a slider drag or a word click — see
+    // mp3IsConstantBitrate. Q_INVOKABLE so a dialog can check before packaging,
+    // not only report during it.
+    Q_INVOKABLE QStringList variableBitrateAudio(const QString &bookDir);
 
 signals:
     void progressChanged();

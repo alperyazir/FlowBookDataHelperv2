@@ -1053,6 +1053,15 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
                 break;
             }
             setLogMessages(QString("       + %1").arg(book));
+            // A variable-bitrate clip ships fine and plays fine — it only
+            // desyncs the karaoke highlight after a seek, on the reader, on
+            // someone else's machine. Say so here, where the book is still in
+            // the author's hands, rather than let it leave silently.
+            const QStringList vbr = variableBitrateAudio(srcBook);
+            for (const QString &clip : vbr)
+                setLogMessages(QString("       ⚠  %1 · %2 is variable bitrate — "
+                                       "seeking will drift; re-run karaoke on it "
+                                       "to convert").arg(book, clip));
             // raw/ is excluded above; copy the book's original PDF back as
             // raw/original.pdf — the optimized (compressed) cache if the user
             // ran Optimize, otherwise the source original as-is.
@@ -1097,6 +1106,99 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
     setProgress(100);
     setLogMessages(QString("✨  Done — \"%1\" is ready in the release folder.").arg(packageName));
     return true;
+}
+
+// Is every audio frame in this MP3 the same size?
+//
+// An MP3 carries no index, so a decoder turns "2:05" into a byte offset by
+// arithmetic, and that is only exact while the bitrate is constant. A variable
+// one instead ships a Xing table of 100 entries — one per 1% of the file — and
+// the decoder interpolates within it; on a two-minute clip that bracket is over
+// a second wide. The player still reports the second you asked for, so the
+// karaoke highlight looks right and the audio is elsewhere, but only after a
+// seek and only where the decoder rounds differently (Windows plays these
+// through Media Foundation, whose behaviour has moved between releases).
+//
+// The aligner converts a clip before timing it (scripts/audio_cbr.py); this is
+// the net underneath, for audio that reaches a package without ever being
+// aligned. Deliberately a plain header walk with no Python and no ffprobe —
+// packaging must not start depending on either, and an averaged bit_rate cannot
+// answer this anyway: the file that caused the reports averages a perfectly
+// ordinary 152 kbps.
+static bool mp3IsConstantBitrate(const QString &path)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return true;                       // unreadable: not ours to judge
+    const QByteArray d = f.readAll();
+    f.close();
+
+    static const int kV1[16] = {0,32,40,48,56,64,80,96,112,128,160,192,224,256,320,0};
+    static const int kV2[16] = {0,8,16,24,32,40,48,56,64,80,96,112,128,144,160,0};
+    static const int kRate[4][3] = {{11025,12000,8000}, {0,0,0},
+                                    {22050,24000,16000}, {44100,48000,32000}};
+
+    int i = 0;
+    // Skip an ID3v2 tag; its payload contains bytes that look like frame syncs.
+    if (d.size() > 10 && d.startsWith("ID3")
+        && !((d[6] | d[7] | d[8] | d[9]) & 0x80)) {
+        int size = 0;
+        for (int k = 6; k < 10; ++k)
+            size = (size << 7) | (d[k] & 0x7F);
+        i = 10 + size + ((d[5] & 0x10) ? 10 : 0);
+    }
+
+    int seen = -1, frames = 0;
+    const int limit = d.size() - 4;
+    while (i >= 0 && i < limit) {
+        const quint8 b0 = quint8(d[i]), b1 = quint8(d[i + 1]), b2 = quint8(d[i + 2]);
+        if (b0 != 0xFF || (b1 & 0xE0) != 0xE0) { ++i; continue; }
+        const int version = (b1 >> 3) & 0x03;      // 3 = MPEG1, 2 = MPEG2, 0 = 2.5
+        const int layer   = (b1 >> 1) & 0x03;      // 1 = Layer III
+        const int brIdx   = (b2 >> 4) & 0x0F;
+        const int srIdx   = (b2 >> 2) & 0x03;
+        if (version == 1 || layer == 0 || brIdx == 0 || brIdx == 15 || srIdx == 3) {
+            ++i; continue;
+        }
+        const int kbps = (version == 3 ? kV1[brIdx] : kV2[brIdx]);
+        const int rate = kRate[version][srIdx];
+        if (!kbps || !rate) { ++i; continue; }
+        const int padding = (b2 >> 1) & 0x01;
+        int len;
+        if (layer == 3)            len = (12 * kbps * 1000 / rate + padding) * 4;
+        else if (layer == 2)       len = 144 * kbps * 1000 / rate + padding;
+        else                       len = (version == 3 ? 144 : 72) * kbps * 1000 / rate + padding;
+        if (len < 4) { ++i; continue; }
+
+        // The first frame of a VBR file holds the Xing/Info table rather than
+        // audio, and its bitrate is arbitrary — it must not count as evidence.
+        if (frames == 0) {
+            const QByteArray head = d.mid(i, len);
+            if (head.contains("Xing") || head.contains("Info") || head.contains("VBRI")) {
+                i += len;
+                continue;
+            }
+        }
+        if (seen < 0)        seen = kbps;
+        else if (seen != kbps) return false;
+        ++frames;
+        i += len;
+    }
+    return true;                            // constant, or no frames to judge
+}
+
+// Clips in a book whose bitrate varies; empty when the book is fine.
+QStringList PdfProcess::variableBitrateAudio(const QString &bookDir)
+{
+    QStringList bad;
+    QDir dir(bookDir + "/audio");
+    const QStringList files = dir.entryList(QStringList() << "*.mp3", QDir::Files,
+                                            QDir::Name);
+    for (const QString &name : files) {
+        if (!mp3IsConstantBitrate(dir.filePath(name)))
+            bad << name;
+    }
+    return bad;
 }
 
 bool PdfProcess::zipFolder(const QString &sourceDir, const QString &zipFilePath) {

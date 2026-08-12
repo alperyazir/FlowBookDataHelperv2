@@ -46,6 +46,8 @@ for _stream in (sys.stdout, sys.stderr):
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _bootstrap import ensure_runtime_deps, ensure_align_deps
+# Stdlib + ffmpeg only, so it can be imported before the heavy deps are pulled.
+import audio_cbr
 
 ensure_runtime_deps()   # fitz
 ensure_align_deps()     # whisperx (+ torch)
@@ -1045,6 +1047,23 @@ def main():
         print(f"ERROR: Audio not found: {audio_path}", flush=True)
         sys.exit(1)
 
+    # Must come before the CBR conversion, not just before the aligner: on
+    # Windows this is what puts ffmpeg on PATH, and the conversion shells out to
+    # it. Called the other way round, ffmpeg went missing exactly where it was
+    # needed and the clip would have been left variable-bitrate with only a
+    # console line to say so.
+    setup_align_runtime()
+
+    # Make the clip seekable BEFORE timing it. A variable-bitrate MP3 has no
+    # exact time-to-byte mapping, so the reader's decoder guesses from the Xing
+    # table and can land over a second from where it reports being — the
+    # highlight then drifts, but only after a seek and only on the machines
+    # whose decoder interpolates differently (see audio_cbr). Converting first
+    # means the timings below describe the file that actually ships; doing it
+    # afterwards would leave them describing a file nobody plays, off by the
+    # encoder's delay and padding. Already-CBR clips are untouched.
+    cbr = audio_cbr.ensure_cbr(audio_path, log=lambda m: print(m, flush=True))
+
     # Lines prefixed "PROGRESS:" are surfaced live in the editor's karaoke
     # status so the author sees what stage the (multi-second) align is at,
     # instead of a bare spinner.
@@ -1063,7 +1082,6 @@ def main():
 
     print(f"PROGRESS: Found {len(words)} words. Preparing the aligner…",
           flush=True)
-    setup_align_runtime()
     # align() emits its own "Loading model…" / "Aligning…" progress lines.
     aligned, dur, asr, tokens, owner = align(words, audio_path, lang)
     print(f"Aligned {len(aligned)} words against {dur:.2f}s audio", flush=True)
@@ -1097,12 +1115,18 @@ def main():
         "review": flags,
         "words": words,
     }
+    # Recorded on the entry as well as reported, so "why is this mp3 different
+    # from the one I dropped in?" has an answer months from now.
+    if cbr:
+        entry["audio_cbr"] = cbr
     merge_into_audio_json(audio_json_path, audio_id, entry)
     print(f"Wrote {audio_id} -> {audio_json_path}", flush=True)
     # Compact summary for the C++ caller (parsed off stdout, before "OK").
     summary = {"audio_id": audio_id, "words": len(words),
                "mean_score": mean_score, "needs_review": needs_review,
                "review": flags}
+    if cbr:
+        summary["audio_cbr"] = cbr
     print("SUMMARY: " + json.dumps(summary, ensure_ascii=False), flush=True)
     print("OK", flush=True)
 

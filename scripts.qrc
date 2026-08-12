@@ -4,6 +4,7 @@
         <file>scripts/ai_analyzer.py</file>
         <file>scripts/stage_fill.py</file>
         <file>scripts/align_audio.py</file>
+        <file>scripts/audio_cbr.py</file>
         <file>scripts/compress_pdf.py</file>
         <file>scripts/crop_section.py</file>
         <file>scripts/deps.py</file>
