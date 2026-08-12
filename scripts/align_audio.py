@@ -741,19 +741,53 @@ def repair_drift(words, asr):
 
     The transcript did hear those words. Where the two disagree by more than
     _DRIFT_MAX the forced timestamp is not merely imprecise, so we take the
-    transcript's. Only verbatim text matches are trusted as anchors."""
+    transcript's. Only verbatim text matches are trusted as anchors.
+
+    A verbatim match is not proof it is the RIGHT occurrence, though, and that
+    is how this misfired across machines. The transcript comes from
+    faster-whisper, whose int8 inference runs different kernels per
+    architecture (NEON on the author's arm64 mac, AVX on the Windows x86 boxes),
+    so the two do not hear quite the same timeline. Meanwhile a page like The
+    Secret Garden p3 — a biography carrying nine separate years — hands difflib
+    a pile of identical strings to choose between. Pair a year with the wrong
+    year and the "drift" is enormous, so the word gets dragged tens of seconds
+    away with full confidence. On the mac every numeral sat within 0.26s of the
+    transcript and nothing moved; on Windows the same passage, same crop, same
+    0.791 score, came back with fifteen words out of order — one per numeral on
+    the page. Everything upstream matched exactly (same 195 words extracted,
+    same forced-alignment score), which is what pins the divergence here.
+
+    So a re-anchor now has to be plausible as well as confident: it must land
+    between the words either side of it. A genuine rescue passes, because a
+    misplaced stretch moves together and its neighbours move with it; a
+    mispairing does not, because its neighbours are still sitting where they
+    belong. Proposals are collected before any are applied, so a run is judged
+    as a run rather than each word against a neighbour already moved."""
     if not asr:
         return 0
     word_asr = _map_to_asr(words, asr, exact_only=True)
-    fixed = 0
+    proposed = [None] * len(words)
     for i, w in enumerate(words):
         if _held_out(w) or word_asr[i] is None or w["start"] is None:
             continue
         a = asr[word_asr[i]]
         if abs(w["start"] - a["start"]) > _DRIFT_MAX:
-            w["start"] = round(a["start"], 3)
-            w["end"] = round(max(a["end"], a["start"]), 3)
+            proposed[i] = (round(a["start"], 3),
+                           round(max(a["end"], a["start"]), 3))
+    # Where each word would end up if every proposal were taken.
+    final = [proposed[i][0] if proposed[i] else words[i]["start"]
+             for i in range(len(words))]
+    fixed = 0
+    for i in range(len(words)):
+        if proposed[i] is None:
+            continue
+        lo = final[i - 1] if i > 0 else 0.0
+        hi = final[i + 1] if i + 1 < len(words) else float("inf")
+        if lo <= final[i] <= hi:
+            words[i]["start"], words[i]["end"] = proposed[i]
             fixed += 1
+        else:
+            final[i] = words[i]["start"]   # rejected — keep the forced timing
     return fixed
 
 
