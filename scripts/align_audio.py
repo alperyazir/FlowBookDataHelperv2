@@ -445,9 +445,30 @@ def _model_cache_status():
         return None, "", 0.0
 
 
-# How much audio to keep on each side of the located passage window, in
-# seconds — a little lead-in/out so forced alignment has room at the edges.
+# How much audio to keep before the located passage, in seconds. Kept tight on
+# purpose: an over-wide start lets the opening words leak onto a spoken intro.
 _WINDOW_PAD = 0.5
+
+# The end is not symmetric with the start, and treating it as if it were is what
+# made the last sentence drift on other people's machines.
+#
+# The window's end was pinned to where the transcript thought the final word
+# ended, plus this same half second. Measured on the two passages that were
+# reported, the true last word finished 0.40s and 0.38s before that edge — so
+# barely any room. The transcript comes from an ASR that hears a slightly
+# different timeline on every architecture, and a passage's closing words are
+# the quietest thing in the clip, exactly where it is most likely to cut early.
+# When it does, the window shuts before those words are spoken and forced
+# alignment has no audio left to give them: it packs them into whatever sliver
+# remains and the highlight sprints through the last sentence.
+#
+# Over-reaching at the end costs almost nothing — trailing audio simply goes
+# unused, because the aligner assigns the tokens it was given and stops. So when
+# the passage runs to the end of what was transcribed, take the whole rest of
+# the clip and let no ASR jitter be able to starve the tail; otherwise still
+# give it three times the head's slack.
+_TAIL_PAD = 1.5
+_TAIL_AT_END = 2      # ASR words from the transcript end that still count as "the end"
 
 
 def _held_out(w):
@@ -583,7 +604,10 @@ def _locate_passage_window(words, asr, dur):
         t0 = max(0.0, t0)
     else:
         t0 = max(0.0, asr[j_start]["start"] - _WINDOW_PAD)
-    t1 = min(dur, asr[j_end]["end"] + _WINDOW_PAD)
+    if j_end >= len(asr) - 1 - _TAIL_AT_END:
+        t1 = dur                      # passage runs to the end — take it all
+    else:
+        t1 = min(dur, asr[j_end]["end"] + _TAIL_PAD)
     return t0, t1, j_start, j_end
 
 
