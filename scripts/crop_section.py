@@ -13,25 +13,7 @@ if len(sys.argv) != 10:
     sys.exit(1)
 
 
-def find_original_pdf(raw_dir):
-    """Find the original (unanswered) PDF in raw/ directory."""
-    if not os.path.exists(raw_dir):
-        return None
-    pdf_files = [f for f in os.listdir(raw_dir) if f.lower().endswith(".pdf")]
-    if not pdf_files:
-        return None
-    # Prefer files with 'original' or 'soru' in name
-    for pdf_file in pdf_files:
-        lower_name = pdf_file.lower()
-        if "original" in lower_name or "soru" in lower_name:
-            return os.path.join(raw_dir, pdf_file)
-    # If multiple PDFs, pick the one that's NOT the answered version
-    answered_keywords = ("cevap", "answer", "key")
-    for pdf_file in pdf_files:
-        if not any(kw in pdf_file.lower() for kw in answered_keywords):
-            return os.path.join(raw_dir, pdf_file)
-    # Last resort: first PDF
-    return os.path.join(raw_dir, pdf_files[0])
+from book_files import find_original_pdf   # one rule, shared (see book_files)
 
 
 raw_dir = sys.argv[1]

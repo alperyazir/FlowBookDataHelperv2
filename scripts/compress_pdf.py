@@ -32,9 +32,6 @@ ensure_runtime_deps()
 import fitz
 from PIL import Image
 
-ANSWERED_KEYS = ("cevap", "answer", "key")
-COVER_KEYS = ("kapak", "cover", "kapag")
-
 # Images smaller than this (raw embedded bytes) are icons/logos/rules: lots
 # of them on a page, but each saves almost nothing — skip to save time.
 MIN_IMAGE_BYTES = 30 * 1024
@@ -44,21 +41,7 @@ MIN_IMAGE_BYTES = 30 * 1024
 MIN_IMAGE_PIXELS = 256
 
 
-def find_original_pdf(raw_dir):
-    """The original (unanswered) book PDF in raw/. Prefers an
-    'original'/'soru' name, skips answer keys and obvious covers."""
-    if not os.path.isdir(raw_dir):
-        return None
-    pdfs = [f for f in os.listdir(raw_dir) if f.lower().endswith(".pdf")]
-    rest = [f for f in pdfs if not any(k in f.lower() for k in ANSWERED_KEYS)]
-    if not rest:
-        return None
-    named = [f for f in rest if any(k in f.lower() for k in ("original", "soru"))]
-    if named:
-        return os.path.join(raw_dir, named[0])
-    no_cover = [f for f in rest if not any(k in f.lower() for k in COVER_KEYS)]
-    pick = (no_cover or rest)
-    return os.path.join(raw_dir, pick[0])
+from book_files import find_original_pdf   # one rule, shared (see book_files)
 
 
 def _recompress_image(raw_bytes, max_px, quality):
