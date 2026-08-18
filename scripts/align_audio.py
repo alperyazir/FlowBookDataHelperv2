@@ -855,13 +855,30 @@ def main():
     # on this page — sit one level up.
     fills = fills_for_page(os.path.dirname(os.path.normpath(raw_dir)), page_idx)
     try:
-        words = words_in_crops(pdf_path, page_idx, rects_px, png_w, png_h, fills)
+        words = words_in_crops(pdf_path, page_idx, rects_px, png_w, png_h, fills,
+                               lang)
     except IndexError as e:
         print(f"ERROR: {e}", flush=True)
         sys.exit(1)
     if not words:
-        print("ERROR: No text-layer words inside the crop rect (scanned page "
-              "or empty selection?)", flush=True)
+        print("ERROR: Nothing inside the crop rect — no text and no answer "
+              "boxes. Empty selection, or a rectangle drawn off the passage?",
+              flush=True)
+        sys.exit(1)
+    # Answer boxes alone are not a passage. A crop over a picture yields exactly
+    # that — one blank per box and not a word between them — and the run used to
+    # go on to align an empty text against a minute of narration and write the
+    # result, flagged for review but written. Refusing is the honest answer:
+    # there is nothing here to sync the audio to.
+    if not any(_is_spoken(w["text"]) for w in words):
+        why = ("this passage is drawn as a picture, not text"
+               if passage_text.passage_ocr.available()
+               else "this passage is drawn as a picture, not text, and there "
+                    "is no OCR to read it — "
+                    + passage_text.passage_ocr.INSTALL_HINT)
+        print(f"ERROR: No readable words inside the crop rect — {why}. "
+              f"Turn karaoke off for this audio, or crop a passage that has "
+              f"text.", flush=True)
         sys.exit(1)
     print(f"Passage: {len(words)} words -> "
           f"{' '.join(w['text'] for w in words)}", flush=True)

@@ -17,6 +17,8 @@ ensure_runtime_deps()   # fitz
 import fitz
 
 from book_files import find_original_pdf   # one rule, shared (see book_files)
+# Only reached when a crop turns out to have no text layer; imports nothing heavy.
+import passage_ocr
 
 
 _NORM = re.compile(r"[^a-z0-9']")
@@ -50,8 +52,16 @@ def _is_spoken(text):
 # the spoken answer instead of resting on it. Two or more gap characters and
 # nothing else; a lone "…" is ordinary narrative punctuation and stays dropped.
 _GAP_RUN = re.compile(r"^[_.…․‥]{2,}$")
+# The gap does not always arrive alone in its token: the text layer glues the
+# punctuation that follows it on ("………………………,"), and such a token is neither a
+# word nor a gap run, so it used to be dropped as punctuation. '.' is left in
+# place deliberately -- it is a gap character itself, so a dotted gap ending in
+# a full stop already matches.
+_GAP_TAIL = re.compile(r"[,;:!?)\]}»”’'\"]+$")
 def _is_gap(text):
-    return "__" in text or bool(_GAP_RUN.match(text.strip()))
+    if "__" in text:
+        return True
+    return bool(_GAP_RUN.match(_GAP_TAIL.sub("", text.strip())))
 
 # A digit token: no letters, but a normalized form that is all digits ("30,",
 # "1874," -> "30", "1874"). Superscript cloze markers ("⁵") normalize to "" and
@@ -75,6 +85,31 @@ def _ends_sentence(text):
 def _is_enum_number(text, line_first, prev_text):
     return bool(line_first and _ENUM.match(text)
                 and (prev_text is None or _ends_sentence(prev_text)))
+
+
+# The third marker shape, and the one that survived both rules above: the
+# superscript numeral labelling a cloze gap mid-sentence ("...or ³ ……… , and").
+# It is not line-first, and the rule that drops a numeral sitting in front of a
+# gap only fires when the gap itself was recognised -- so whenever the typography
+# defeats the gap test, the marker is left behind AND inherits the answer's slot
+# in the audio, putting the highlight on a 7x14px digit. Size decides it with no
+# such dependency: a marker is set in a fraction of the body size (6.4pt against
+# 11pt in the book that prompted this), while every numeral the narrator really
+# reads -- a year, a price, a measurement -- is set in the body size.
+_MARKER_SIZE = 0.8      # of the passage's body size
+
+
+def _drop_marker_numbers(out):
+    """Delete the digit tokens that are set too small to be part of the text."""
+    sizes = sorted(w["_size"] for w in out
+                   if not w.get("num") and not w.get("blank") and w.get("_size"))
+    if not sizes:
+        return
+    body = sizes[len(sizes) // 2]
+    # A token whose size the PDF did not report is never judged by this rule.
+    out[:] = [w for w in out
+              if not (w.get("num") and w.get("_size")
+                      and w["_size"] < _MARKER_SIZE * body)]
 
 
 # ----- Saying numbers out loud ------------------------------------------------
@@ -210,24 +245,74 @@ def fills_for_page(book_dir, page_idx):
     return out
 
 
+def _same_line(b, box):
+    """Whether a word sits on the line an answer box was drawn on.
+
+    Decided on how much of the WORD the box covers vertically, not on the
+    distance between the two centres. An author draws the box by eye and by
+    taste: on the page that prompted this they are 35px tall against 17px of
+    text and sit a third of a line high, so their centre lands between two lines
+    and a centre test either claims both lines or neither. How much of a word
+    the box actually covers is unambiguous — half of it or more, and the word is
+    on that line."""
+    ov = min(b["y"] + b["h"], box["y"] + box["h"]) - max(b["y"], box["y"])
+    return ov >= 0.5 * b["h"]
+
+
+def _line_overlap(b, box):
+    """How much of a word the box covers vertically, as a fraction of the word."""
+    ov = min(b["y"] + b["h"], box["y"] + box["h"]) - max(b["y"], box["y"])
+    return ov / max(1.0, b["h"])
+
+
 def _reading_position(words, f):
     """Where this box falls in the passage's reading order.
 
-    The words are already in reading order, so walk them and stop at the first
-    one that comes after the box: further right on the same line, or on a line
-    below it. Same line is decided on vertical centres, which survives the
-    difference in height between a word and a drawn answer box."""
-    fcy = f["y"] + f["h"] / 2.0
+    Which LINE the box is on is settled first, and by a contest rather than a
+    threshold: the word it covers the most of wins. A threshold cannot do it.
+    The boxes are drawn by eye — twice the height of the text and sitting a third
+    of a line high on the page this was built for — so a word with a descender on
+    the line above ("enjoys", 22px to its neighbours' 17) clears any threshold
+    that the intended line also clears, and the blank lands a line early. Overlap
+    on the intended line is near 1.0 and on its neighbour near 0.5, every time,
+    so the maximum is never in doubt.
+
+    Then it is ordinary reading order within that line: before the first word to
+    the right of the box, or after the line if there is none."""
+    # Only real text can be the anchor. A blank carries the author's box, which
+    # is taller than the text and drawn high, so the blank placed for one gap
+    # overlaps the NEXT gap's box (0.91) better than that gap's own line of text
+    # does (0.83) — and two boxes on one line would then anchor the second one to
+    # the first and place it a line early.
+    best_i, best_ov = None, 0.0
     for i, w in enumerate(words):
-        b = w["bbox"]
-        wcy = b["y"] + b["h"] / 2.0
-        same_line = abs(wcy - fcy) < 0.6 * max(b["h"], f["h"])
-        if same_line:
-            if b["x"] > f["x"]:
+        if w.get("blank"):
+            continue
+        ov = _line_overlap(w["bbox"], f)
+        if ov > best_ov:
+            best_ov, best_i = ov, i
+    if best_i is None or best_ov < 0.25:
+        # The box is on no line of this passage — keep it in y order.
+        fcy = f["y"] + f["h"] / 2.0
+        for i, w in enumerate(words):
+            if w["bbox"]["y"] + w["bbox"]["h"] / 2.0 > fcy:
                 return i
-        elif wcy > fcy:
+        return len(words)
+    anchor = words[best_i]["bbox"]
+    acy = anchor["y"] + anchor["h"] / 2.0
+    on_line = [i for i, w in enumerate(words)
+               if abs(w["bbox"]["y"] + w["bbox"]["h"] / 2.0 - acy) < 0.6 * anchor["h"]]
+    if not on_line:                 # a zero-height anchor excludes even itself
+        return best_i
+    # Past the box's RIGHT edge, not its left. A sloppy text layer can glue the
+    # gap to the word after it ("_____________drawing"), and that token starts
+    # where the box does — testing its left edge puts the blank after the word it
+    # is supposed to precede.
+    for i in on_line:
+        b = words[i]["bbox"]
+        if b["x"] + b["w"] > f["x"] + f["w"]:
             return i
-    return len(words)
+    return on_line[-1] + 1
 
 
 def _box_overlap(a, b):
@@ -236,6 +321,22 @@ def _box_overlap(a, b):
     iy = max(0, min(a["y"] + a["h"], b["y"] + b["h"]) - max(a["y"], b["y"]))
     small = min(a["w"] * a["h"], b["w"] * b["h"]) or 1
     return (ix * iy) / small
+
+
+def _on_text_line(words, box):
+    """Whether an answer box sits inside a line of the passage's text.
+
+    A cloze gap is part of a sentence, so there is a word beside it on its own
+    line, a space or two away. A box with its line to itself belongs to some
+    other exercise the crop merely takes in."""
+    near = 2.0 * box["h"]          # a couple of characters, not a column away
+    for w in words:
+        if w.get("blank") or not _same_line(w["bbox"], box):
+            continue
+        b = w["bbox"]
+        if max(box["x"] - (b["x"] + b["w"]), b["x"] - (box["x"] + box["w"]), 0) <= near:
+            return True
+    return False
 
 
 def _insert_fill_blanks(out, fills, rect_px):
@@ -250,22 +351,27 @@ def _insert_fill_blanks(out, fills, rect_px):
     — it gains the answer and the exact box — rather than adding a second blank
     over the same gap.
 
-    Boxes are only allowed to CREATE blanks when the text layer found no gaps at
-    all in this crop. Being inside the crop does not make a box part of the
-    passage: a broad crop can take in a neighbouring exercise, and on two
-    MyEnglishPath pages it does — a dozen answer boxes sitting on their own
-    lines, nothing to do with the underscored sentences above them. Geometry
-    cannot reliably tell those apart, but it does not have to. Where the text
-    layer shows the gaps it already knows how many there are, so boxes there only
-    annotate; where it shows none, as in the book that prompted this, they are
-    the only evidence and are trusted completely. The rule cannot inflate the
-    count of a passage that already worked."""
+    Being inside the crop does not make a box part of the passage: a broad crop
+    can take in a neighbouring exercise, and on two MyEnglishPath pages it does —
+    a dozen answer boxes sitting on their own lines, nothing to do with the
+    underscored sentences above them. What separates the two is not how many gaps
+    the text layer happened to find, but where the box sits: a cloze gap is
+    embedded in a sentence, with a word beside it on its own line (_on_text_line).
+    An answer slot standing in a column of its own is not.
+
+    The count of gaps the text layer found used to be the gate instead — boxes
+    could only create blanks in a crop where it found none. That made every gap
+    depend on the typography after all: one gap the text layer missed in a
+    passage where it found the others (a run of dots glued to the comma after it)
+    was simply lost, answer and all, and the superscript numeral labelling it
+    took over the highlight. A crop with no text at all still trusts its boxes
+    completely — there is nothing else to go on."""
     cx0, cy0, cw, ch = rect_px
     cx1, cy1 = cx0 + cw, cy0 + ch
     inside = [f for f in fills
               if cx0 <= f["x"] + f["w"] / 2.0 <= cx1
               and cy0 <= f["y"] + f["h"] / 2.0 <= cy1]
-    may_create = not any(w.get("blank") for w in out)
+    no_text = all(w.get("blank") for w in out)      # nothing but boxes here
     claimed = set()
     added = merged = 0
     for f in sorted(inside, key=lambda f: (f["y"], f["x"])):
@@ -281,7 +387,7 @@ def _insert_fill_blanks(out, fills, rect_px):
             hit["bbox"] = dict(box)
             merged += 1
             continue
-        if not may_create:
+        if not (no_text or _on_text_line(out, box)):
             continue
         w = {
             "text": "______",       # what the page shows; `answer` is what is said
@@ -293,6 +399,15 @@ def _insert_fill_blanks(out, fills, rect_px):
         out.insert(_reading_position(out, f), w)
         claimed.add(id(w))
         added += 1
+    # Whatever was read inside an answer box IS the gap — a run of dots, or what
+    # OCR made of one (" ........0.0.............", which normalises to digits and
+    # would otherwise have gone to the aligner as a number). The author drew the
+    # box around it and said so; nothing else on the page is under one.
+    boxes = [w["fill"] for w in out if w.get("blank") and w.get("fill")]
+    if boxes:
+        out[:] = [w for w in out
+                  if w.get("blank") or _is_spoken(w["text"])
+                  or not any(_box_overlap(w["bbox"], b) > 0.6 for b in boxes)]
     return added, merged
 
 
@@ -307,7 +422,50 @@ _HL_CAP = 0.78     # top above caps/ascenders (cap height ≈ 0.70)
 _HL_DESC = 0.25    # bottom below the baseline to cover descenders (g, y, p)
 
 
-def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h, fills=None):
+def _classify(text, line_first, prev_text):
+    """What this token is: "word", "blank", "num", or None to drop it.
+
+    The one place the three kinds are decided, so a passage read off an image
+    is treated exactly like one read from a text layer."""
+    if _is_spoken(text):
+        return "word"
+    if _is_gap(text):
+        return "blank"
+    if _is_number(text) and not _is_enum_number(text, line_first, prev_text):
+        return "num"
+    return None
+
+
+def _ocr_crop(page, rect_px, png_w, png_h, lang):
+    """The crop's words read off the rendered page, classified like a text layer.
+
+    Returns [] when tesseract read nothing, and None when it is not installed —
+    the caller says so, because "this book needs a program you do not have" and
+    "this picture has no words in it" call for different answers."""
+    toks = passage_ocr.read_crop(page, rect_px, png_w, png_h, lang)
+    if toks is None:
+        return None
+    out = []
+    line, prev_text = None, None
+    for t in toks:
+        line_first = t["_line"] != line
+        if line_first:
+            line, prev_text = t["_line"], None
+        kind = _classify(t["text"], line_first, prev_text)
+        prev_text = t["text"]
+        if kind is None:
+            continue
+        entry = {"text": t["text"], "bbox": t["bbox"], "_size": t["_size"]}
+        if kind == "blank":
+            entry["blank"] = True
+        elif kind == "num":
+            entry["num"] = True
+        out.append(entry)
+    return out
+
+
+def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h, fills=None,
+                  lang=None):
     """Words whose center falls inside the crop rect, in reading order.
 
     Returns [{text, bbox:{x,y,w,h}}] with bbox in PNG pixel space. The box is
@@ -320,9 +478,17 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h, fills=None):
     happens to draw it.
     """
     doc = fitz.open(pdf_path)
-    if page_idx < 0 or page_idx >= len(doc):
+    # Count first, and name the file. Reading len(doc) into the message AFTER
+    # closing the document raised "ValueError: document closed" from inside the
+    # f-string, so the console showed that instead of the range error — and the
+    # range error is the one that matters, because the way to be out of range is
+    # to have been handed the wrong PDF (a one-page cover, when raw/ holds
+    # nothing but the cover and the answer key). Say which file it was.
+    n_pages = len(doc)
+    if page_idx < 0 or page_idx >= n_pages:
         doc.close()
-        raise IndexError(f"Page index {page_idx} out of range (0-{len(doc)-1})")
+        raise IndexError(f"Page index {page_idx} out of range (0-{n_pages - 1}) "
+                         f"in {os.path.basename(pdf_path)}")
     page = doc.load_page(page_idx)
     sx, sy = png_w / page.rect.width, png_h / page.rect.height
     cx0, cy0, cw, ch = rect_px
@@ -354,14 +520,8 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h, fills=None):
         # everything) and timed from the ASR gap instead, so their box lights up
         # while the answer / the number is spoken (see time_held_out + _is_spoken).
         # Question and page numbers are dropped, as is bare punctuation.
-        kind = None
-        if _is_spoken(text):
-            kind = "word"
-        elif _is_gap(text):
-            kind = "blank"
-        elif _is_number(text) and not _is_enum_number(text, was_first, was_prev):
-            kind = "num"
-        else:
+        kind = _classify(text, was_first, was_prev)
+        if kind is None:
             return
         x0 = min(c["bbox"][0] for c in run) * sx
         x1 = max(c["bbox"][2] for c in run) * sx
@@ -383,6 +543,7 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h, fills=None):
             "text": text,
             "bbox": {"x": round(x0), "y": round(y0),
                      "w": round(x1 - x0), "h": round(y1 - y0)},
+            "_size": size,          # dropped below; only _drop_marker_numbers reads it
         }
         if kind == "blank":
             entry["blank"] = True
@@ -425,7 +586,25 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h, fills=None):
                     run.append(c)
                     prev_x1 = c["bbox"][2]
                 emit(run, size)
+    # A crop with nothing to say is a crop the PDF draws as a picture: on Switch
+    # to CLIL p49 the paragraph is one grayscale image and this loop ends with
+    # nothing but the answer boxes to go on. Read it instead of shipping a
+    # passage that is six boxes and no words (see passage_ocr).
+    if not any(w.get("text") and _is_spoken(w["text"]) for w in out):
+        read = _ocr_crop(page, rect_px, png_w, png_h, lang)
+        if read is None:
+            print(f"  NOTE: no text layer under this crop and no OCR to read "
+                  f"the page image — {passage_ocr.INSTALL_HINT}", flush=True)
+        elif read:
+            print(f"  Read {len(read)} word(s) off the page image (no text "
+                  f"layer under this crop)", flush=True)
+            out = read
     doc.close()
+    # Before the boxes are placed, so a marker cannot be mistaken for the word a
+    # blank is inserted after, and before "_size" is stripped.
+    _drop_marker_numbers(out)
+    for w in out:
+        del w["_size"]
     # Before the lookahead below, so a gap the text layer failed to show still
     # gets its "(1)" label dropped: the label is only recognised by what follows
     # it, and what follows it is now a blank whatever the typography did.
@@ -443,7 +622,8 @@ def words_in_crop(pdf_path, page_idx, rect_px, png_w, png_h, fills=None):
     return out
 
 
-def words_in_crops(pdf_path, page_idx, rects_px, png_w, png_h, fills=None):
+def words_in_crops(pdf_path, page_idx, rects_px, png_w, png_h, fills=None,
+                   lang=None):
     """The passage as the author assembled it: each crop read in turn, in the
     order it was drawn, concatenated.
 
@@ -463,7 +643,8 @@ def words_in_crops(pdf_path, page_idx, rects_px, png_w, png_h, fills=None):
     """
     out = []
     for i, rect in enumerate(rects_px):
-        for w in words_in_crop(pdf_path, page_idx, rect, png_w, png_h, fills):
+        for w in words_in_crop(pdf_path, page_idx, rect, png_w, png_h, fills,
+                               lang):
             w["piece"] = i
             out.append(w)
     return out

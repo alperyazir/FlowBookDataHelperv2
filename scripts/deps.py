@@ -8,6 +8,13 @@ The dependency list is reused from _bootstrap so there is one source of truth.
 ffmpeg is reported too (whisperx needs it). It isn't a normal pip package, but
 passing the pseudo-name "ffmpeg" to install pulls the "imageio-ffmpeg" wheel
 (a bundled static build) and places its binary as a plain `ffmpeg` on PATH.
+
+tesseract is reported as well, and is the one entry here that is OPTIONAL: it is
+only ever run for a passage the PDF draws as a picture instead of text (see
+passage_ocr), which across the six books measured so far was one page in a
+hundred. Everything works without it; the dialog says so rather than showing a
+red cross, and "Install missing" leaves it alone — there is no wheel to install,
+it is a program the machine has to have.
 """
 import sys
 import os
@@ -62,11 +69,21 @@ def check():
             "heavy": pkg == "whisperx",   # pulls torch; large download
         })
     ff = shutil.which("ffmpeg")
+    # Asked of passage_ocr rather than looked up here, so the dialog and the
+    # aligner can never disagree about whether this machine has tesseract.
+    try:
+        import passage_ocr
+        tess = passage_ocr._binary()
+        hint = passage_ocr.INSTALL_HINT
+    except Exception:
+        tess, hint = shutil.which("tesseract"), None
     out = {
         "python": {"executable": sys.executable,
                    "version": sys.version.split()[0]},
         "deps": deps,
         "ffmpeg": {"name": "ffmpeg", "installed": bool(ff), "path": ff},
+        "tesseract": {"name": "tesseract", "installed": bool(tess),
+                      "path": tess, "optional": True, "hint": hint},
     }
     print("DEPS_JSON: " + json.dumps(out), flush=True)
     print("OK", flush=True)

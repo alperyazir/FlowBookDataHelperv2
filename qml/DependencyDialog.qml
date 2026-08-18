@@ -122,8 +122,9 @@ Dialog {
 
         Text {
             Layout.fillWidth: true
-            text: "Python packages the analysis & karaoke scripts need. "
-                  + "Missing ones can be installed here."
+            text: "What the analysis & karaoke scripts need. Missing pip "
+                  + "packages can be installed here; the binaries below are "
+                  + "listed separately."
             color: "#8aa0a8"; font.pixelSize: 12; wrapMode: Text.WordWrap
         }
 
@@ -189,6 +190,46 @@ Dialog {
                        ? "#3ecf8e" : "#ff6b6b"
                 font.pixelSize: 13
             }
+        }
+
+        // tesseract (external binary, OPTIONAL). Only ever run for a passage the
+        // PDF draws as a picture instead of text, so a machine without it is not
+        // a broken setup — hence a plain dash and the install hint rather than
+        // the red cross the required entries get. deps.py reports it outside
+        // `deps`, which is also what keeps "Install missing" from trying: there
+        // is no wheel for it.
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
+            visible: dependencyDialog.info.tesseract !== undefined
+            Text {
+                text: "tesseract"
+                color: "white"; font.pixelSize: 14
+                Layout.preferredWidth: 150
+            }
+            Text {
+                text: "optional — pages with no text layer"
+                color: "#8aa0a8"; font.pixelSize: 10
+            }
+            Item { Layout.fillWidth: true }
+            Text {
+                text: (dependencyDialog.info.tesseract && dependencyDialog.info.tesseract.installed)
+                      ? "✓ found"
+                      : "— not installed"
+                color: (dependencyDialog.info.tesseract && dependencyDialog.info.tesseract.installed)
+                       ? "#3ecf8e" : "#8aa0a8"
+                font.pixelSize: 13
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            visible: !!(dependencyDialog.info.tesseract
+                        && !dependencyDialog.info.tesseract.installed
+                        && dependencyDialog.info.tesseract.hint)
+            text: dependencyDialog.info.tesseract
+                  ? dependencyDialog.info.tesseract.hint : ""
+            color: "#8a7000"; font.pixelSize: 10; wrapMode: Text.WordWrap
         }
 
         Item { Layout.fillHeight: true }
