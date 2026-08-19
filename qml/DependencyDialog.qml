@@ -46,6 +46,16 @@ Dialog {
         return out;
     }
 
+    // tesseract and its language packs install one at a time, from their own
+    // buttons: neither is a pip package, and neither belongs in "Install
+    // missing" -- that button is for what the scripts cannot run without, and
+    // OCR is only ever reached by a passage the PDF drew as a picture.
+    function installOne(pkg) {
+        dependencyDialog.installing = true;
+        dependencyDialog.progress = "Starting…";
+        pdfProcess.installDependencies([pkg]);
+    }
+
     onOpened: refresh()
 
     Connections {
@@ -219,6 +229,52 @@ Dialog {
                 color: (dependencyDialog.info.tesseract && dependencyDialog.info.tesseract.installed)
                        ? "#3ecf8e" : "#8aa0a8"
                 font.pixelSize: 13
+            }
+            AppButton {
+                visible: !!(dependencyDialog.info.tesseract
+                            && !dependencyDialog.info.tesseract.installed)
+                text: "Install"
+                variant: "secondary"
+                Layout.preferredWidth: 78
+                Layout.preferredHeight: 26
+                enabled: !dependencyDialog.installing && !dependencyDialog.checking
+                onClicked: dependencyDialog.installOne("tesseract")
+            }
+        }
+
+        // Language packs. The Windows installer ships English and nothing else
+        // unless the user ticks the extras, and a German book handed to a
+        // tesseract without `deu` reads as "OCR found nothing" rather than as a
+        // missing 1.5MB file. These are plain data files, so unlike the binary
+        // they install with one click and no elevation.
+        Repeater {
+            model: (dependencyDialog.info.tesseract && dependencyDialog.info.tesseract.installed
+                    && dependencyDialog.info.tesseract.langs)
+                   ? dependencyDialog.info.tesseract.langs : []
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                spacing: 10
+                Text {
+                    text: "language · " + modelData.lang + "  (" + modelData.code + ")"
+                    color: "#8aa0a8"; font.pixelSize: 11
+                    Layout.preferredWidth: 134
+                }
+                Item { Layout.fillWidth: true }
+                Text {
+                    text: modelData.installed ? "✓" : "—"
+                    color: modelData.installed ? "#3ecf8e" : "#8aa0a8"
+                    font.pixelSize: 12
+                }
+                AppButton {
+                    visible: !modelData.installed
+                    text: "Install"
+                    variant: "secondary"
+                    Layout.preferredWidth: 78
+                    Layout.preferredHeight: 24
+                    enabled: !dependencyDialog.installing && !dependencyDialog.checking
+                    onClicked: dependencyDialog.installOne("tessdata:" + modelData.code)
+                }
             }
         }
 

@@ -56,6 +56,32 @@ _WINDOWS_GUESSES = (
 )
 
 
+def app_data_dir():
+    """Where the app keeps what it downloaded for itself, per platform.
+
+    Mirrors Qt's QStandardPaths::AppDataLocation, where the editor already
+    extracts its scripts. Computed here rather than derived from this file's own
+    location so it names the same directory whether the scripts run from the
+    extracted copy or from a source checkout (FLOWBOOK_SCRIPTS_DIR) — a language
+    pack downloaded once should not go missing because the author started the
+    app the other way."""
+    if os.name == "nt":
+        base = os.environ.get("APPDATA") or os.path.expanduser(r"~\AppData\Roaming")
+    elif sys.platform == "darwin":
+        base = os.path.expanduser("~/Library/Application Support")
+    else:
+        base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    return os.path.join(base, "FlowBookDataHelper")
+
+
+def tessdata_dir():
+    """Our own language-data directory. Packs land here rather than in the
+    tesseract installation, which on Windows sits under Program Files and would
+    need an elevation prompt to write to. deps.py writes it, this reads it, and
+    both ask this function so they cannot disagree about where it is."""
+    return os.path.join(app_data_dir(), "tessdata")
+
+
 def _binary():
     """Path to tesseract, or None. Cached on the function."""
     if not hasattr(_binary, "_cached"):
@@ -78,6 +104,50 @@ INSTALL_HINT = ("install tesseract — macOS: 'brew install tesseract', "
                 "Windows: the UB-Mannheim installer")
 
 
+def installed_langs():
+    """Language codes this machine can OCR with — ours and tesseract's own."""
+    if not available():
+        return set()
+    out = set()
+    try:
+        res = subprocess.run([_binary(), "--list-langs"],
+                             capture_output=True, text=True, timeout=30)
+        for line in res.stdout.splitlines()[1:]:
+            code = line.strip()
+            if code:
+                out.add(code)
+    except Exception:
+        pass
+    d = tessdata_dir()
+    if os.path.isdir(d):
+        out |= {f[:-len(".traineddata")] for f in os.listdir(d)
+                if f.endswith(".traineddata")}
+    return out
+
+
+def _resolve_lang(code):
+    """Where to read `code` from: (tessdata dir | None, code | None, note | None).
+
+    A missing language pack is the quiet failure this exists to prevent. The
+    Windows installer ships English and nothing else unless the user ticks the
+    extra languages, and a German book handed to a tesseract without `deu` does
+    not complain — it returns nothing, and the author reads that as "OCR could
+    not read the page" rather than "you are missing a 1.5MB file".
+
+    --tessdata-dir REPLACES the search path rather than adding to it, so it is
+    passed only when the language we want is in ours; one the tesseract
+    installation already has is read from there."""
+    if not code:
+        return None, None, None
+    d = tessdata_dir()
+    if os.path.exists(os.path.join(d, code + ".traineddata")):
+        return d, code, None
+    if code in installed_langs():
+        return None, code, None
+    return None, None, (f"'{code}' dil paketi kurulu degil — Ingilizce ile "
+                        f"okundu. Dependencies penceresinden yukleyebilirsiniz.")
+
+
 def _clean(toks):
     """Drop what is on the page but not in the passage.
 
@@ -94,13 +164,21 @@ def _clean(toks):
     return [t for t in toks if t["bbox"]["h"] >= _MIN_HEIGHT * body]
 
 
-def _run(png_path, lang):
+def _run(png_path, lang, data_dir=None):
     """tesseract's TSV for one image: [{text, conf, left, top, width, height,
     line}] . Empty when it fails — a passage that cannot be read is reported by
     the caller as no words, never as a crash."""
-    cmd = [_binary(), png_path, "stdout", "--psm", "6", "tsv"]
+    # TSV is asked for with -c rather than by naming the `tsv` config file: that
+    # file lives in the tesseract installation's tessdata/configs/, and
+    # --tessdata-dir points the whole search elsewhere. With our own language
+    # directory in play `tsv` stopped being found ("read_params_file: Can't open
+    # tsv") and the run quietly produced plain text, which parses to no words.
+    cmd = [_binary(), png_path, "stdout", "--psm", "6",
+           "-c", "tessedit_create_tsv=1"]
     if lang:
         cmd[3:3] = ["-l", lang]
+    if data_dir:
+        cmd[3:3] = ["--tessdata-dir", data_dir]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     except Exception as e:
@@ -158,10 +236,12 @@ def read_crop(page, rect_px, png_w, png_h, lang=None):
                           colorspace=fitz.csGRAY)
     tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
     tmp.close()
+    data_dir, code, note = _resolve_lang(_LANG.get((lang or "").lower()))
+    if note:
+        print(f"  WARNING: {note}", flush=True)
     try:
         pix.save(tmp.name)
-        toks = _clean(_to_png_space(_run(tmp.name, _LANG.get((lang or "").lower())),
-                                    x, y, sx, sy))
+        toks = _clean(_to_png_space(_run(tmp.name, code, data_dir), x, y, sx, sy))
     finally:
         try:
             os.unlink(tmp.name)
