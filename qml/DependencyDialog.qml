@@ -43,17 +43,16 @@ Dialog {
         var out = missingPkgs();
         if (info && info.ffmpeg && !info.ffmpeg.installed)
             out.push("ffmpeg");
+        var t = info ? info.tesseract : null;
+        if (t && !t.installed)
+            out.push("tesseract");
+        // Only once tesseract is there — deps.py cannot know which languages a
+        // machine has until it can ask tesseract.
+        if (t && t.installed && t.langs)
+            for (var i = 0; i < t.langs.length; i++)
+                if (!t.langs[i].installed)
+                    out.push("tessdata:" + t.langs[i].code);
         return out;
-    }
-
-    // tesseract and its language packs install one at a time, from their own
-    // buttons: neither is a pip package, and neither belongs in "Install
-    // missing" -- that button is for what the scripts cannot run without, and
-    // OCR is only ever reached by a passage the PDF drew as a picture.
-    function installOne(pkg) {
-        dependencyDialog.installing = true;
-        dependencyDialog.progress = "Starting…";
-        pdfProcess.installDependencies([pkg]);
     }
 
     onOpened: refresh()
@@ -132,9 +131,7 @@ Dialog {
 
         Text {
             Layout.fillWidth: true
-            text: "What the analysis & karaoke scripts need. Missing pip "
-                  + "packages can be installed here; the binaries below are "
-                  + "listed separately."
+            text: "What the analysis & karaoke scripts need."
             color: "#8aa0a8"; font.pixelSize: 12; wrapMode: Text.WordWrap
         }
 
@@ -202,12 +199,11 @@ Dialog {
             }
         }
 
-        // tesseract (external binary, OPTIONAL). Only ever run for a passage the
-        // PDF draws as a picture instead of text, so a machine without it is not
-        // a broken setup — hence a plain dash and the install hint rather than
-        // the red cross the required entries get. deps.py reports it outside
-        // `deps`, which is also what keeps "Install missing" from trying: there
-        // is no wheel for it.
+        // tesseract and its language packs. Rows only: they go into "Install
+        // missing" with everything else, so there is nothing here to explain and
+        // nothing to click. A machine without tesseract is not a broken setup —
+        // it is only reached by a passage the PDF drew as a picture — so it gets
+        // a plain dash rather than the red cross the required entries carry.
         RowLayout {
             Layout.fillWidth: true
             spacing: 10
@@ -216,10 +212,6 @@ Dialog {
                 text: "tesseract"
                 color: "white"; font.pixelSize: 14
                 Layout.preferredWidth: 150
-            }
-            Text {
-                text: "optional — pages with no text layer"
-                color: "#8aa0a8"; font.pixelSize: 10
             }
             Item { Layout.fillWidth: true }
             Text {
@@ -230,23 +222,11 @@ Dialog {
                        ? "#3ecf8e" : "#8aa0a8"
                 font.pixelSize: 13
             }
-            AppButton {
-                visible: !!(dependencyDialog.info.tesseract
-                            && !dependencyDialog.info.tesseract.installed)
-                text: "Install"
-                variant: "secondary"
-                Layout.preferredWidth: 78
-                Layout.preferredHeight: 26
-                enabled: !dependencyDialog.installing && !dependencyDialog.checking
-                onClicked: dependencyDialog.installOne("tesseract")
-            }
         }
 
-        // Language packs. The Windows installer ships English and nothing else
-        // unless the user ticks the extras, and a German book handed to a
-        // tesseract without `deu` reads as "OCR found nothing" rather than as a
-        // missing 1.5MB file. These are plain data files, so unlike the binary
-        // they install with one click and no elevation.
+        // The installer ships English and nothing else unless the user ticks the
+        // extras, and a German book handed to a tesseract without `deu` reads as
+        // "OCR found nothing" rather than as a missing 1.5MB file.
         Repeater {
             model: (dependencyDialog.info.tesseract && dependencyDialog.info.tesseract.installed
                     && dependencyDialog.info.tesseract.langs)
@@ -256,36 +236,17 @@ Dialog {
                 Layout.leftMargin: 16
                 spacing: 10
                 Text {
-                    text: "language · " + modelData.lang + "  (" + modelData.code + ")"
-                    color: "#8aa0a8"; font.pixelSize: 11
+                    text: modelData.lang + " · " + modelData.code
+                    color: "#8aa0a8"; font.pixelSize: 12
                     Layout.preferredWidth: 134
                 }
                 Item { Layout.fillWidth: true }
                 Text {
                     text: modelData.installed ? "✓" : "—"
                     color: modelData.installed ? "#3ecf8e" : "#8aa0a8"
-                    font.pixelSize: 12
-                }
-                AppButton {
-                    visible: !modelData.installed
-                    text: "Install"
-                    variant: "secondary"
-                    Layout.preferredWidth: 78
-                    Layout.preferredHeight: 24
-                    enabled: !dependencyDialog.installing && !dependencyDialog.checking
-                    onClicked: dependencyDialog.installOne("tessdata:" + modelData.code)
+                    font.pixelSize: 13
                 }
             }
-        }
-
-        Text {
-            Layout.fillWidth: true
-            visible: !!(dependencyDialog.info.tesseract
-                        && !dependencyDialog.info.tesseract.installed
-                        && dependencyDialog.info.tesseract.hint)
-            text: dependencyDialog.info.tesseract
-                  ? dependencyDialog.info.tesseract.hint : ""
-            color: "#8a7000"; font.pixelSize: 10; wrapMode: Text.WordWrap
         }
 
         Item { Layout.fillHeight: true }

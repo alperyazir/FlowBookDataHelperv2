@@ -198,6 +198,53 @@ def _install_tessdata(code):
         sys.exit(1)
 
 
+def _running(exe_name):
+    """Is a process by this image name still up? Windows only; True elsewhere so
+    the caller's other exit conditions decide."""
+    if os.name != "nt":
+        return True
+    try:
+        res = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {exe_name}"],
+                             capture_output=True, text=True, timeout=15)
+        return exe_name.lower() in res.stdout.lower()
+    except Exception:
+        return True          # cannot tell: do not cut the wait short on a guess
+
+
+def _await_binary(timeout_s, watch_exe=None):
+    """Wait until tesseract shows up, or until waiting stops making sense.
+
+    _binary() caches its answer on the function, so the cache is dropped before
+    every look — otherwise this would ask the same stale "no" over and over.
+
+    `watch_exe` is the installer's image name. Once it is gone and the binary
+    still is not there, the user closed or cancelled it, and there is nothing
+    left to wait for; without that check a cancelled install would hold the
+    dialog for the whole timeout."""
+    import time
+    waited = 0
+    gone_for = 0
+    while waited < timeout_s:
+        if hasattr(passage_ocr._binary, "_cached"):
+            del passage_ocr._binary._cached
+        found = passage_ocr._binary()
+        if found:
+            print(f"tesseract hazir: {found}", flush=True)
+            return True
+        if watch_exe and not _running(watch_exe):
+            gone_for += 2
+            if gone_for >= 10:      # a grace, so the elevated relaunch gap
+                return False        # is not mistaken for a cancelled install
+        else:
+            gone_for = 0
+        if waited and waited % 30 == 0:
+            print(f"  kurulum bekleniyor… ({waited // 60}:{waited % 60:02d})",
+                  flush=True)
+        time.sleep(2)
+        waited += 2
+    return False
+
+
 def _install_tesseract():
     """Get the tesseract binary onto this machine, the way the platform does it.
 
@@ -232,14 +279,30 @@ def _install_tesseract():
             print(f"ERROR: indirilemedi ({e}). Elle kurun: {TESSERACT_PAGE}",
                   flush=True)
             sys.exit(1)
-        print("Kurulum baslatiliyor. Pencerede 'Additional language data' "
-              "adimindan Almanca/Turkce/Ispanyolca'yi da secebilirsiniz.",
-              flush=True)
+        if os.path.getsize(dest) < 1 << 20:
+            print("ERROR: indirilen dosya bozuk gorunuyor. "
+                  f"Elle kurun: {TESSERACT_PAGE}", flush=True)
+            sys.exit(1)
+        print("Kurulum penceresi aciliyor. 'Additional language data' adiminda "
+              "Almanca/Turkce/Ispanyolca'yi da secebilirsiniz.", flush=True)
         try:
             subprocess.call([dest])
         except Exception as e:
             print(f"ERROR: kurulum baslatilamadi: {e}", flush=True)
             sys.exit(1)
+        # Waiting on that process is not waiting on the install. The installer
+        # asks for elevation, and Windows grants it by starting a SECOND process
+        # and letting the first one exit -- so subprocess.call comes back within
+        # a second or two, while the user has not even seen the first page yet.
+        # Checking for the binary right there reported "not installed" every
+        # time, which is exactly how a successful install looked like a failure.
+        # Watch for the binary instead, for as long as clicking through it
+        # plausibly takes.
+        if not _await_binary(600, os.path.basename(dest)):
+            print("Kurulum tamamlanmadi. Kurulumu bitirdiyseniz bu pencereyi "
+                  "kapatip tekrar acin.", flush=True)
+            sys.exit(1)
+        return
     elif sys.platform == "darwin":
         if not shutil.which("brew"):
             print(f"ERROR: Homebrew yok. Kurun ya da tesseract'i elle kurun: "
@@ -253,14 +316,11 @@ def _install_tesseract():
         print("ERROR: bu platformda paket yoneticinizden kurun "
               "(ornegin: sudo apt install tesseract-ocr)", flush=True)
         sys.exit(1)
-    # Cached from the first lookup in this process; the answer just changed.
-    if hasattr(passage_ocr._binary, "_cached"):
-        del passage_ocr._binary._cached
-    if passage_ocr.available():
-        print(f"tesseract hazir: {passage_ocr._binary()}", flush=True)
-    else:
-        print("Kurulum bitti ama tesseract hala bulunamadi — pencereyi "
-              "kapatip tekrar acin.", flush=True)
+    # brew and apt really are done when they exit, so a single look is enough.
+    if not _await_binary(4):
+        print("Kurulum bitti ama tesseract bulunamadi — pencereyi kapatip "
+              "tekrar acin.", flush=True)
+        sys.exit(1)
 
 
 def install(pkgs):
