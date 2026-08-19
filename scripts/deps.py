@@ -198,29 +198,114 @@ def _install_tessdata(code):
         sys.exit(1)
 
 
-def _running(exe_name):
-    """Is a process by this image name still up? Windows only; True elsewhere so
-    the caller's other exit conditions decide."""
-    if os.name != "nt":
-        return True
-    try:
-        res = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {exe_name}"],
-                             capture_output=True, text=True, timeout=15)
-        return exe_name.lower() in res.stdout.lower()
-    except Exception:
-        return True          # cannot tell: do not cut the wait short on a guess
+# Starting the installer. subprocess -- i.e. CreateProcess -- cannot do it: the
+# installer's manifest asks for "highestAvailable", and on a machine where this
+# user is a local administrator that means the process has to be elevated.
+# CreateProcess does not raise the consent dialog for that, it fails outright
+# with ERROR_ELEVATION_REQUIRED (740). No installer window, no UAC prompt, and
+# an install that reported itself failed a second after it was asked for.
+# ShellExecuteEx is the call that reads the manifest and prompts, and
+# SEE_MASK_NOCLOSEPROCESS makes it hand back a handle to the process it started,
+# so the wait afterwards is on the installer itself.
+_SEE_MASK_NOCLOSEPROCESS = 0x00000040
+_SW_SHOWNORMAL = 1
+_ERROR_CANCELLED = 1223
+_WAIT_OBJECT_0 = 0
 
 
-def _await_binary(timeout_s, watch_exe=None):
+def _start_elevated(path):
+    """Open `path` the way a double-click would, prompting if it needs to.
+
+    Returns a process handle to wait on, or None after saying why not.
+
+    No verb is passed rather than "runas": the manifest is what decides. Forcing
+    "runas" would demand an administrator password on a machine where this user
+    is not one, when that install could have gone into their own profile without
+    anybody being asked."""
+    import ctypes
+    from ctypes import wintypes
+
+    class SHELLEXECUTEINFOW(ctypes.Structure):
+        _fields_ = [("cbSize", wintypes.DWORD),
+                    ("fMask", ctypes.c_ulong),
+                    ("hwnd", wintypes.HWND),
+                    ("lpVerb", wintypes.LPCWSTR),
+                    ("lpFile", wintypes.LPCWSTR),
+                    ("lpParameters", wintypes.LPCWSTR),
+                    ("lpDirectory", wintypes.LPCWSTR),
+                    ("nShow", ctypes.c_int),
+                    ("hInstApp", wintypes.HINSTANCE),
+                    ("lpIDList", ctypes.c_void_p),
+                    ("lpClass", wintypes.LPCWSTR),
+                    ("hkeyClass", wintypes.HKEY),
+                    ("dwHotKey", wintypes.DWORD),
+                    ("hIcon", wintypes.HANDLE),
+                    ("hProcess", wintypes.HANDLE)]
+
+    info = SHELLEXECUTEINFOW()
+    info.cbSize = ctypes.sizeof(info)
+    info.fMask = _SEE_MASK_NOCLOSEPROCESS
+    info.lpFile = path
+    info.nShow = _SW_SHOWNORMAL
+
+    shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+    shell32.ShellExecuteExW.argtypes = [ctypes.POINTER(SHELLEXECUTEINFOW)]
+    shell32.ShellExecuteExW.restype = wintypes.BOOL
+    if not shell32.ShellExecuteExW(ctypes.byref(info)):
+        err = ctypes.get_last_error()
+        if err == _ERROR_CANCELLED:
+            print("ERROR: yonetici izni verilmedi — kurulum baslatilamadi. "
+                  "Tekrar deneyip UAC penceresinde 'Evet' secin.", flush=True)
+        else:
+            print(f"ERROR: kurulum baslatilamadi (WinError {err}). "
+                  f"Elle kurun: {TESSERACT_PAGE}", flush=True)
+        return None
+    if not info.hProcess:
+        # SEE_MASK_NOCLOSEPROCESS always yields a handle for an .exe; if this
+        # ever fires there is nothing to wait on, and hanging the dialog for ten
+        # minutes on a running installer we cannot observe is worse than saying
+        # so. The installer stays open either way.
+        print("ERROR: kurulum baslatildi ama izlenemiyor. Kurulumu bitirip bu "
+              "pencereyi kapatin ve tekrar acin.", flush=True)
+        return None
+    return info.hProcess
+
+
+def _exited(handle):
+    """Has the process behind this handle finished?"""
+    import ctypes
+    from ctypes import wintypes
+    k32 = ctypes.windll.kernel32
+    k32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    k32.WaitForSingleObject.restype = wintypes.DWORD
+    return k32.WaitForSingleObject(wintypes.HANDLE(handle), 0) == _WAIT_OBJECT_0
+
+
+def _close_handle(handle):
+    import ctypes
+    from ctypes import wintypes
+    k32 = ctypes.windll.kernel32
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    k32.CloseHandle(wintypes.HANDLE(handle))
+
+
+# How long to keep looking after the installer is gone. It writes the binary
+# before it exits, so the usual case is answered on the same pass; this covers
+# an antivirus holding the new file shut for a moment. Longer would only make a
+# cancelled install sit on the dialog.
+_GONE_GRACE = 10
+
+
+def _await_binary(timeout_s, proc=None):
     """Wait until tesseract shows up, or until waiting stops making sense.
 
     _binary() caches its answer on the function, so the cache is dropped before
     every look — otherwise this would ask the same stale "no" over and over.
 
-    `watch_exe` is the installer's image name. Once it is gone and the binary
-    still is not there, the user closed or cancelled it, and there is nothing
-    left to wait for; without that check a cancelled install would hold the
-    dialog for the whole timeout."""
+    `proc` is a handle to the installer. Once it has exited and the binary still
+    is not there, the user closed or cancelled it and there is nothing left to
+    wait for; without that check a cancelled install would hold the dialog for
+    the whole timeout."""
     import time
     waited = 0
     gone_for = 0
@@ -231,12 +316,10 @@ def _await_binary(timeout_s, watch_exe=None):
         if found:
             print(f"tesseract hazir: {found}", flush=True)
             return True
-        if watch_exe and not _running(watch_exe):
+        if proc is not None and _exited(proc):
             gone_for += 2
-            if gone_for >= 10:      # a grace, so the elevated relaunch gap
-                return False        # is not mistaken for a cancelled install
-        else:
-            gone_for = 0
+            if gone_for >= _GONE_GRACE:
+                return False
         if waited and waited % 30 == 0:
             print(f"  kurulum bekleniyor… ({waited // 60}:{waited % 60:02d})",
                   flush=True)
@@ -273,35 +356,41 @@ def _install_tesseract():
                   f"Elle kurun: {TESSERACT_PAGE}", flush=True)
             sys.exit(1)
         dest = os.path.join(tempfile.gettempdir(), asset["name"])
-        try:
-            _download(asset["browser_download_url"], dest, asset["name"])
-        except Exception as e:
-            print(f"ERROR: indirilemedi ({e}). Elle kurun: {TESSERACT_PAGE}",
-                  flush=True)
-            sys.exit(1)
+        # A 50MB download the machine already has is worth not doing again: a
+        # failed install is retried from this dialog, and the retry used to
+        # start by fetching the same bytes a second time.
+        want = int(asset.get("size") or 0)
+        if want and os.path.exists(dest) and os.path.getsize(dest) == want:
+            print(f"{asset['name']} zaten indirilmis.", flush=True)
+        else:
+            try:
+                _download(asset["browser_download_url"], dest, asset["name"])
+            except Exception as e:
+                print(f"ERROR: indirilemedi ({e}). Elle kurun: {TESSERACT_PAGE}",
+                      flush=True)
+                sys.exit(1)
         if os.path.getsize(dest) < 1 << 20:
             print("ERROR: indirilen dosya bozuk gorunuyor. "
                   f"Elle kurun: {TESSERACT_PAGE}", flush=True)
             sys.exit(1)
-        print("Kurulum penceresi aciliyor. 'Additional language data' adiminda "
-              "Almanca/Turkce/Ispanyolca'yi da secebilirsiniz.", flush=True)
+        print("Kurulum penceresi aciliyor — Windows yonetici izni soracak. "
+              "'Additional language data' adiminda Almanca/Turkce/Ispanyolca'yi "
+              "da secebilirsiniz.", flush=True)
+        proc = _start_elevated(dest)
+        if proc is None:
+            sys.exit(1)          # _start_elevated already said why
+        # Waiting is on the handle ShellExecuteEx handed back, which is the
+        # elevated installer itself. The old code waited on subprocess.call and
+        # then looked once: that call returns the moment the unelevated stub
+        # exits, long before the user has seen the first page, so a successful
+        # install read as "not installed" every time.
         try:
-            subprocess.call([dest])
-        except Exception as e:
-            print(f"ERROR: kurulum baslatilamadi: {e}", flush=True)
-            sys.exit(1)
-        # Waiting on that process is not waiting on the install. The installer
-        # asks for elevation, and Windows grants it by starting a SECOND process
-        # and letting the first one exit -- so subprocess.call comes back within
-        # a second or two, while the user has not even seen the first page yet.
-        # Checking for the binary right there reported "not installed" every
-        # time, which is exactly how a successful install looked like a failure.
-        # Watch for the binary instead, for as long as clicking through it
-        # plausibly takes.
-        if not _await_binary(600, os.path.basename(dest)):
-            print("Kurulum tamamlanmadi. Kurulumu bitirdiyseniz bu pencereyi "
-                  "kapatip tekrar acin.", flush=True)
-            sys.exit(1)
+            if not _await_binary(600, proc=proc):
+                print("Kurulum tamamlanmadi. Kurulumu bitirdiyseniz bu pencereyi "
+                      "kapatip tekrar acin.", flush=True)
+                sys.exit(1)
+        finally:
+            _close_handle(proc)
         return
     elif sys.platform == "darwin":
         if not shutil.which("brew"):

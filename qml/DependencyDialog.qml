@@ -20,6 +20,11 @@ Dialog {
     property bool checking: false
     property bool installing: false
     property string progress: ""
+    // The last ERROR the install script printed. Kept because the reason is the
+    // only useful thing about a failure and it used to be thrown away: the
+    // script says why on its last line, and "Install failed." overwrote it a
+    // moment later, leaving a red result with no cause anywhere on screen.
+    property string lastError: ""
 
     function refresh() {
         dependencyDialog.checking = true;
@@ -71,12 +76,17 @@ Dialog {
         }
         function onDependenciesInstalled(ok) {
             dependencyDialog.installing = false;
-            dependencyDialog.progress = ok ? "Done." : "Install failed.";
+            var why = dependencyDialog.lastError;
+            dependencyDialog.progress = ok ? "Done."
+                                           : (why !== "" ? why : "Install failed.");
             dependencyDialog.refresh();   // re-query status
         }
         function onLogMessage(msg) {
-            if (dependencyDialog.installing)
-                dependencyDialog.progress = msg;
+            if (!dependencyDialog.installing)
+                return;
+            dependencyDialog.progress = msg;
+            if (msg.indexOf("ERROR") !== -1)
+                dependencyDialog.lastError = msg;
         }
     }
 
@@ -106,6 +116,7 @@ Dialog {
                          && dependencyDialog.installTargets().length > 0
                 onClicked: {
                     dependencyDialog.installing = true;
+                    dependencyDialog.lastError = "";
                     dependencyDialog.progress = "Starting… (large packages can take several minutes)";
                     pdfProcess.installDependencies(dependencyDialog.installTargets());
                 }
@@ -264,7 +275,7 @@ Dialog {
                 Layout.fillWidth: true
                 text: dependencyDialog.checking ? "Checking…" : dependencyDialog.progress
                 color: "#cfe0e6"; font.pixelSize: 12; wrapMode: Text.WrapAnywhere
-                elide: Text.ElideRight; maximumLineCount: 2
+                elide: Text.ElideRight; maximumLineCount: 3
             }
         }
     }

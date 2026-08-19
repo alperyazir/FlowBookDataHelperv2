@@ -50,10 +50,20 @@ _MIN_CONF = -1.0
 # (_MARKER_SIZE); the image just measures it a different way.
 _MIN_HEIGHT = 0.6
 
-_WINDOWS_GUESSES = (
+# Where a Windows tesseract ends up. shutil.which() is tried first and usually
+# answers -- but not in the process that just ran the installer: PATH there is a
+# copy taken when that process started, and the entry the installer adds only
+# reaches processes started after it. So a fresh install has to be recognised by
+# looking, and the installer's "just for me" option puts it under LOCALAPPDATA
+# rather than in either Program Files.
+_WINDOWS_GUESSES = tuple(p for p in (
     r"C:\Program Files\Tesseract-OCR\tesseract.exe",
     r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-)
+    os.path.join(os.environ.get("LOCALAPPDATA") or "",
+                 "Programs", "Tesseract-OCR", "tesseract.exe"),
+    os.path.join(os.environ.get("LOCALAPPDATA") or "",
+                 "Tesseract-OCR", "tesseract.exe"),
+) if os.path.isabs(p))
 
 
 def app_data_dir():
@@ -82,12 +92,41 @@ def tessdata_dir():
     return os.path.join(app_data_dir(), "tessdata")
 
 
+def _registry_guesses():
+    """Where the UB-Mannheim installer recorded that it put itself.
+
+    The fixed guesses above cover the two usual directories; this covers the
+    rest, because the installer lets the user pick one. Its own uninstall key is
+    written wherever that was, so it is the one answer that is right for any
+    install -- and it costs nothing when tesseract is absent, because then the
+    key is absent too."""
+    if os.name != "nt":
+        return []
+    try:
+        import winreg
+    except Exception:
+        return []
+    key = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Tesseract-OCR"
+    out = []
+    for root in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+        for flag in (0, winreg.KEY_WOW64_64KEY, winreg.KEY_WOW64_32KEY):
+            try:
+                with winreg.OpenKey(root, key, 0, winreg.KEY_READ | flag) as k:
+                    loc = winreg.QueryValueEx(k, "InstallLocation")[0]
+            except Exception:
+                continue
+            if loc:
+                out.append(os.path.join(loc, "tesseract.exe"))
+    return out
+
+
 def _binary():
     """Path to tesseract, or None. Cached on the function."""
     if not hasattr(_binary, "_cached"):
         found = shutil.which("tesseract")
         if not found and os.name == "nt":
-            found = next((p for p in _WINDOWS_GUESSES if os.path.exists(p)), None)
+            found = next((p for p in list(_WINDOWS_GUESSES) + _registry_guesses()
+                          if os.path.exists(p)), None)
         if not found and sys.platform == "darwin":
             found = next((p for p in ("/opt/homebrew/bin/tesseract",
                                       "/usr/local/bin/tesseract")
