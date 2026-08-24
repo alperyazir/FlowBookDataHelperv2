@@ -204,16 +204,85 @@ def _held_out(w):
     return False
 
 
+def _answers_heard(words, asr):
+    """How much of each candidate answer the transcript holds: {word index: 0..1}.
+
+    Matching an answer as a single glued string (the check in
+    mark_spoken_answers) only ever works for an answer of a word or three; a
+    whole sentence written on the answer line never appears in the transcript as
+    one token run, however plainly the narrator reads it. So the answers are
+    matched the way the passage itself is located — as token SEQUENCES — but all
+    of them at once, and in place: the passage is laid out for difflib with each
+    candidate answer written in where its blank sits, and the score is the share
+    of an answer's tokens that the one alignment matched verbatim.
+
+    Scoring an answer on its own, against the whole transcript, is what this
+    avoids. A "write the questions" page carries nine variations of one
+    question, and a sentence long enough to be convincing is also long enough to
+    be nearly matched by its sibling: "What do you do in the morning", never
+    spoken, scores 0.86 on a spoken "…in the evening" and would be promoted —
+    putting words the clip does not contain into the forced text, which is the
+    harm this gate exists to prevent. In place it cannot, because a sequence
+    alignment only moves forwards: an answer taking its sibling's audio costs
+    the match on every page word between them, and difflib keeps the reading
+    that matches the most.
+
+    Scoring against a window cut between the blank's neighbours was the other
+    way to say "in place", and it is too literal a one — on p21 the words either
+    side of a blank ("…be a marine biologist." / "Why do you want to be a marine
+    biologist") are the answer's own words, the neighbours matched the answer's
+    audio, and the window between them closed to nothing."""
+    a, owner = [], []
+    for i, w in enumerate(words):
+        text = str(w.get("answer") or "") if w.get("blank") else w["text"]
+        for t in text.split():
+            n = norm(t)
+            if n:
+                a.append(n)
+                owner.append(i)
+    if not a:
+        return {}
+    total, hit = {}, {}
+    for i in owner:
+        total[i] = total.get(i, 0) + 1
+    b = [x["w"] for x in asr]
+    sm = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            for k in range(i1, i2):
+                hit[owner[k]] = hit.get(owner[k], 0) + 1
+    return {i: hit.get(i, 0) / n for i, n in total.items()}
+
+
+# How much of a multi-word answer the transcript has to reproduce before we take
+# it as spoken. The transcript is faster-whisper "base" and mishears a word here
+# and there, so exactness would reject sentences that are plainly read aloud;
+# three quarters of a sentence in place is not something an unspoken answer
+# reaches. Measured on SwitchToClil2Ab p21, where the narrator reads all nine
+# answers verbatim: every one scores 1.00, while the unspoken sibling of the
+# docstring above scores 0.00.
+_ANSWER_HEARD = 0.75
+
+
 def mark_spoken_answers(words, asr):
     """Flag the cloze answers the transcript actually heard. Returns the count.
 
     Worth being strict about: feeding the aligner a word that is not in the
     audio is precisely the damage the unrecognised "(1)" labels were doing, so a
-    blank is only promoted when its answer is really there. The check joins runs
-    of up to three transcript words before comparing, because an answer written
-    as one word is often heard as two ("easygoing" -> "easy going") and that is
-    a match, not a miss. Anything unconfirmed simply stays held out, which is
-    the behaviour that existed before."""
+    blank is only promoted when its answer is really there. A short answer is
+    confirmed by joining runs of up to three transcript words before comparing,
+    because an answer written as one word is often heard as two ("easygoing" ->
+    "easy going") and that is a match, not a miss. A longer one is confirmed by
+    _answers_heard, since no run of three tokens can ever spell a sentence.
+    Anything unconfirmed simply stays held out.
+
+    That sentence case is not exotic: a "write the questions" page has whole
+    questions on its answer lines. On SwitchToClil2Ab p21 the narrator reads
+    every one of them aloud, yet 103 of the book's 106 blanks — all those over
+    three words — went held out, so each answer was timed from an ASR gap while
+    the forced pass smeared the word before it across the answer's audio. The
+    highlight landed up to 2.5s off the voice, and on one question it lit the
+    box only after the narrator had finished asking it."""
     if not asr:
         return 0
     heard, ws = set(), [x["w"] for x in asr]
@@ -224,12 +293,13 @@ def mark_spoken_answers(words, asr):
                 break
             acc += ws[i + k]
             heard.add(acc)
+    scores = _answers_heard(words, asr)
     n = 0
-    for w in words:
+    for i, w in enumerate(words):
         if not w.get("blank"):
             continue
-        key = norm(w.get("answer") or "")
-        if key and key in heard:
+        key = norm(str(w.get("answer") or ""))
+        if key and (key in heard or scores.get(i, 0.0) >= _ANSWER_HEARD):
             w["_speak"] = True
             n += 1
     return n
@@ -251,10 +321,19 @@ def expand_for_align(words):
             continue
         if w.get("blank"):
             # A confirmed answer goes in as the words the narrator says, so the
-            # box lights up on the word itself rather than on a divided gap.
+            # box lights up on the word itself rather than on a divided gap. Its
+            # pieces get what a passage word gets: a numeral spelled out for a
+            # character aligner that cannot read digits, and a piece of pure
+            # punctuation dropped rather than handed over to align against
+            # nothing and sit in attach_timing's sequence as an empty string.
+            prev = None
             for t in str(w.get("answer") or "").split():
-                tokens.append(t)
-                owner.append(i)
+                said = say_number(t, prev) if _is_number(t) else None
+                for piece in (said or [t]):
+                    if norm(piece):
+                        tokens.append(piece)
+                        owner.append(i)
+                prev = t
             prev_text = None
             continue
         if w.get("num"):
@@ -505,21 +584,41 @@ def _spoken_text(w):
 
 
 def _map_to_asr(words, asr, exact_only):
-    """words-index -> asr-index for the force-aligned words, by sequence match
-    against the ASR timeline. exact_only keeps just the runs whose text matches
-    the transcript verbatim (used where a wrong pairing would move a correct
-    word); otherwise near-misses count too (enough to bracket a gap)."""
-    spoken = [i for i, w in enumerate(words) if not _held_out(w)]
-    a = [norm(_spoken_text(words[i])) for i in spoken]
+    """words-index -> (first, last) asr-index for the force-aligned words, by
+    sequence match against the ASR timeline. exact_only keeps just the runs
+    whose text matches the transcript verbatim (used where a wrong pairing would
+    move a correct word); otherwise near-misses count too (enough to bracket a
+    gap). Both lists hold None for a word the transcript did not place.
+
+    A word is matched by its pieces, not as one string, because a promoted cloze
+    answer is a whole sentence and the transcript has it as seven words. Glued
+    into one token it could never match any of them, so it took a single slot in
+    the pairing and pushed every later word one place off the transcript — and
+    where it did land, callers read the sentence's LAST word off the index of
+    its first. Hence first and last: a caller reaching backwards over a word
+    wants where it ended, one reaching forwards wants where it began."""
+    a, owner = [], []
+    for i, w in enumerate(words):
+        if _held_out(w):
+            continue
+        for t in _spoken_text(w).split():
+            n = norm(t)
+            if n:                     # a piece of pure punctuation matches nothing
+                a.append(n)
+                owner.append(i)
     b = [x["w"] for x in asr]
     sm = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
     tags = ("equal",) if exact_only else ("equal", "replace")
-    word_asr = [None] * len(words)
+    first = [None] * len(words)
+    last = [None] * len(words)
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
         if tag in tags:
             for k in range(min(i2 - i1, j2 - j1)):
-                word_asr[spoken[i1 + k]] = j1 + k
-    return word_asr
+                wi = owner[i1 + k]
+                if first[wi] is None:
+                    first[wi] = j1 + k
+                last[wi] = j1 + k
+    return first, last
 
 
 # How far a forced timestamp may sit from where the transcript heard the same
@@ -565,15 +664,17 @@ def repair_drift(words, asr):
     as a run rather than each word against a neighbour already moved."""
     if not asr:
         return 0
-    word_asr = _map_to_asr(words, asr, exact_only=True)
+    first, last = _map_to_asr(words, asr, exact_only=True)
     proposed = [None] * len(words)
     for i, w in enumerate(words):
-        if _held_out(w) or word_asr[i] is None or w["start"] is None:
+        if _held_out(w) or first[i] is None or w["start"] is None:
             continue
-        a = asr[word_asr[i]]
+        # first..last is one word for ordinary text and the whole sentence for a
+        # promoted answer, so the span re-anchors to all of what is spoken.
+        a, z = asr[first[i]], asr[last[i]]
         if abs(w["start"] - a["start"]) > _DRIFT_MAX:
             proposed[i] = (round(a["start"], 3),
-                           round(max(a["end"], a["start"]), 3))
+                           round(max(z["end"], a["start"]), 3))
     # Where each word would end up if every proposal were taken.
     final = [proposed[i][0] if proposed[i] else words[i]["start"]
              for i in range(len(words))]
@@ -677,7 +778,7 @@ def time_held_out(words, asr):
     if not asr:
         return
     # Map each force-aligned word (in reading order) to its ASR index.
-    word_asr = _map_to_asr(words, asr, exact_only=False)
+    first, last = _map_to_asr(words, asr, exact_only=False)
 
     bi = 0
     while bi < len(words):
@@ -691,11 +792,14 @@ def time_held_out(words, asr):
         while bj < len(words) and _held_out(words[bj]):
             bj += 1
         prev_sp = next((i for i in range(bi - 1, -1, -1)
-                        if word_asr[i] is not None), None)
+                        if last[i] is not None), None)
         next_sp = next((i for i in range(bj, len(words))
-                        if word_asr[i] is not None), None)
-        gs = asr[word_asr[prev_sp]]["end"] if prev_sp is not None else 0.0
-        ge = (asr[word_asr[next_sp]]["start"] if next_sp is not None
+                        if first[i] is not None), None)
+        # The gap opens where the word before it stopped being spoken and closes
+        # where the word after it starts — so a neighbour that is itself a
+        # promoted sentence is read at its far end, not at its first word.
+        gs = asr[last[prev_sp]]["end"] if prev_sp is not None else 0.0
+        ge = (asr[first[next_sp]]["start"] if next_sp is not None
               else (words[prev_sp]["end"] if prev_sp is not None else gs))
         # Clamp inside the neighbours' FORCED starts so reading-order start times
         # stay monotonic — the reader's active-word logic depends on that.
@@ -713,8 +817,8 @@ def time_held_out(words, asr):
         # as digits ("1874"), so we can time it exactly instead of by its share
         # of the gap; `pool` only moves forward so two numerals in one gap can't
         # match the same ASR word.
-        pool = list(range((word_asr[prev_sp] + 1) if prev_sp is not None else 0,
-                          word_asr[next_sp] if next_sp is not None else len(asr)))
+        pool = list(range((last[prev_sp] + 1) if prev_sp is not None else 0,
+                          first[next_sp] if next_sp is not None else len(asr)))
         n = bj - bi
         step = (ge - gs) / n
         cursor = gs
