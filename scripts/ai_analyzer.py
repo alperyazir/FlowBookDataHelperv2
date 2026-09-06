@@ -18,7 +18,8 @@ import fitz
 # Diff-based detection (answered vs original PDF) — falls back to the
 # legacy answer-color detection if the modules are missing.
 try:
-    from proto_audio import build_audio_sections, build_video_section
+    from proto_audio import (build_audio_sections, build_video_section,
+                             plan_videos, build_planned_video_sections)
     from proto_circle import build_circle_sections, build_markwithx_sections
     from proto_match import build_match_sections
     from proto_puzzle import build_puzzle_sections
@@ -992,6 +993,19 @@ def run_analysis(config_path, settings_path):
         print("Error: No pages found in config", flush=True)
         sys.exit(1)
 
+    # 5b. Video plan: unit-named files -> the module's watch pages.
+    video_dirname = next((d for d in ("video", "videos")
+                          if os.path.isdir(os.path.join(config_dir, d))), "videos")
+    video_plan = {}
+    if original_doc is not None:
+        try:
+            video_plan = plan_videos(original_doc, all_pages,
+                                     os.path.join(config_dir, video_dirname))
+            print(f"Video plan: {sum(len(v) for v in video_plan.values())} "
+                  f"button(s) on {len(video_plan)} page(s)", flush=True)
+        except Exception as e:
+            print(f"Video plan failed: {e}", flush=True)
+
     # 6. Analyze each page
     analyzed_count = 0
     next_video_no = 1
@@ -1151,26 +1165,15 @@ def run_analysis(config_path, settings_path):
                 original_page, scale_x, scale_y, page_num=page_num,
                 audio_dir=os.path.join(config_dir, "audio"),
                 audio_prefix=f"{book_prefix}/audio/"), [])
-            video_dirname = next((d for d in ("video", "videos")
-                                  if os.path.isdir(os.path.join(config_dir, d))),
-                                 "videos")
-            videos_dir = os.path.join(config_dir, video_dirname)
-            # No video assets in the book -> no video buttons. "Watch ..."
-            # instruction lines alone otherwise plant empty buttons in
-            # video-less books; re-run Analyze after adding the files.
-            has_videos = os.path.isdir(videos_dir) and safe(
-                "video-scan",
-                lambda: any(f.lower().endswith((".mp4", ".m4v", ".mov", ".webm"))
-                            for f in os.listdir(videos_dir)), False)
-            video = None
-            if has_videos:
-                video = safe("video", lambda: build_video_section(
-                    original_page, scale_x, scale_y, next_video_no,
-                    videos_dir=videos_dir,
-                    video_prefix=f"{book_prefix}/{video_dirname}/"), None)
-            if video is not None:
-                audio_cfg = audio_cfg + [video]
-                next_video_no += 1
+            # Videos are planned book-wide (files are named by unit, not
+            # page — see proto_audio.plan_videos); this page just emits its
+            # planned entries at its "Watch ..." lines.
+            entries = video_plan.get(page_num, [])
+            if entries:
+                vids = safe("video", lambda: build_planned_video_sections(
+                    original_page, scale_x, scale_y, entries,
+                    video_prefix=f"{book_prefix}/{video_dirname}/"), [])
+                audio_cfg = audio_cfg + vids
             circle_cfg = [] if unreliable else safe(
                 "circle", lambda: build_circle_sections(
                     original_page, pdf_page, page_num, images_dir,
@@ -1194,6 +1197,15 @@ def run_analysis(config_path, settings_path):
             # (it over-triggers); match activities are added manually instead.
             # proto_match.py is still used for manual add / --redetect.
             match_cfg = []
+            if os.environ.get("FB_MATCH", "1") != "0" and not unreliable:
+                # On by default since the 2026-09-06 blind eval: precision
+                # 0.90 over 13 books (the old "over-triggers" note predates
+                # the row-splitting/orientation fixes). FB_MATCH=0 disables.
+                match_cfg = safe("match", lambda: build_match_sections(
+                    original_page, pdf_page, page_num, images_dir,
+                    section_path_prefix, scale_x, scale_y), [])
+                if match_cfg:
+                    print(f"  MatchTheWords: {len(match_cfg)}", flush=True)
             cfg_sections = (fill_cfg + audio_cfg + dd_cfg + circle_cfg
                             + markx_cfg + puzzle_cfg + match_cfg)
             if audio_cfg:

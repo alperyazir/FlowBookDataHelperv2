@@ -58,6 +58,7 @@ owned_types = {"fill"}
 # real answer is not. Blank/tickbox-snapped fills and checkmarks are never
 # dropped.
 PROSE_WORDS = 3
+OPTION_LINE_RE = re.compile(r"^([a-hA-H])[.)](\s+\S|$)")
 
 _WS = re.compile(r"\s+")
 
@@ -84,6 +85,11 @@ def _clean_fills(original_page, pdf_page, scale_x, scale_y, secs):
         t = a.get("text", "")
         if t == "✓":
             return False            # tick answer
+        # A printed option line ("D) has improved / ...") re-typeset in the
+        # answer colour is the key marking a choice, never a written answer
+        # (Harvest/Authentic, 2026-09-06). proto_circle picks those up.
+        if OPTION_LINE_RE.match(t.strip()) and _norm(t) in orig:
+            return True
         suspect = (len(t.split()) >= PROSE_WORDS          # re-typeset prose
                    or (_norm(t) and _norm(t) in orig))    # short echo
         if not suspect:
@@ -131,6 +137,16 @@ def detect_fills(original_page, pdf_page, scale_x, scale_y):
                 taken.append([c["x"] / scale_x, c["y"] / scale_y,
                               (c["x"] + c["w"]) / scale_x,
                               (c["y"] + c["h"]) / scale_y])
+        # Rings the key drew around options are ink too — without this they
+        # come back as 55 "✓" fills per test book (Glory, 2026-09-06).
+        try:
+            from proto_inventory import diff_answer_drawings
+            from proto_circle import is_circle_drawing
+            taken = taken + [list(d["bbox"]) for d in
+                             diff_answer_drawings(original_page, pdf_page)
+                             if is_circle_drawing(d)]
+        except Exception:
+            pass
         ticks = tick_candidates(original_page, pdf_page, taken)
         if ticks:
             pad = 2.0

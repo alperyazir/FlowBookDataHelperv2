@@ -383,7 +383,7 @@ def process_pdf_with_config(config_file, dpi=150):
         "publisher_logo_path": "./publisher_logo/publisher_logo.png",
         "publisher_full_logo_path": "./rsc/images/publisher_full_logo.png",
         "book_title": book_title if book_title else pdf_name,
-        "book_cover": "./books/{pdf_name}/images/book_cover.png",
+        "book_cover": f"./books/{pdf_name}/images/book_cover.png",
         "language": language,
         "fullscreen": False,
         "books": [book_entry],

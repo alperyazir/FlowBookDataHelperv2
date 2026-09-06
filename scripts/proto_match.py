@@ -40,7 +40,10 @@ WORD_RE = re.compile(r"^(\d{1,2})[.)]?\s+\S")
 # Item labels can be ANY letter, upper or lower, and non-sequential: some
 # books spell a secret phrase with them (D, E, G, L, ...), so [a-h] is far
 # too narrow. Keys are normalized to lowercase everywhere below.
-ITEM_RE = re.compile(r"^([A-Za-z])[.)](\s|$)")
+ITEM_RE = re.compile(r"^([A-Za-z])[.)](?:\s|$)|^([a-z])\s+\S")
+ROW_GAP = 40.0             # wider gap on one baseline = a new column/row
+PUA_RE = re.compile("[\uE000-\uF8FF]")
+LABEL_START_RE = re.compile(r"^([a-z]|\d{1,2})[.)]?(\s|$)")
 BARE_LETTER_RE = re.compile(r"^[A-Za-z]\.?$")
 MIN_WORDS = 3
 MIN_PAIRS = 2
@@ -64,25 +67,41 @@ def _rows(page, rect):
             if not (x0 <= cx <= x1 and y0 <= cy <= y1):
                 continue
             ly0 = min(s["bbox"][1] for s in spans)
-            key = next((k for k in rows
-                        if abs(k[0] - ly0) < 4 and k[1] == round(cx / 250)),
-                       (ly0, round(cx / 250)))
+            key = next((k for k in rows if abs(k - ly0) < 4), ly0)
             rows.setdefault(key, []).extend(spans)
     out = []
     for key in sorted(rows):
-        seen, parts, bb = set(), [], None
+        # Same baseline: split into runs where the horizontal gap between
+        # neighbouring spans exceeds ROW_GAP (two columns of a match
+        # exercise sit on one baseline — "1 [] Is John thirsty?" and
+        # "a Yes, he does." must stay two rows, 2026-09-06).
+        seen, run, runs = set(), [], []
         for s in sorted(rows[key], key=lambda s: s["bbox"][0]):
             k = (s["text"].strip(), int(s["bbox"][0] / 3))
             if k in seen:
                 continue
             seen.add(k)
-            parts.append(s["text"].strip())
-            b = s["bbox"]
-            bb = b if bb is None else (min(bb[0], b[0]), min(bb[1], b[1]),
-                                       max(bb[2], b[2]), max(bb[3], b[3]))
-        text = re.sub(r"\s+", " ", " ".join(parts)).strip()
-        text = re.sub(r"\b(\S+)( \1)+\b", r"\1", text)
-        out.append({"text": text, "bbox": list(bb)})
+            gap = s["bbox"][0] - run[-1]["bbox"][2] if run else 0
+            if run and (gap > ROW_GAP or
+                        (gap > 8 and LABEL_START_RE.match(s["text"].strip()))):
+                runs.append(run)
+                run = []
+            run.append(s)
+        if run:
+            runs.append(run)
+        for run in runs:
+            parts, bb = [], None
+            for s in run:
+                t = PUA_RE.sub(" ", s["text"]).strip()   # icon glyphs (boxes)
+                if t:
+                    parts.append(t)
+                b = s["bbox"]
+                bb = b if bb is None else (min(bb[0], b[0]), min(bb[1], b[1]),
+                                           max(bb[2], b[2]), max(bb[3], b[3]))
+            text = re.sub(r"\s+", " ", " ".join(parts)).strip()
+            text = re.sub(r"\b(\S+)( \1)+\b", r"\1", text)
+            if text:
+                out.append({"text": text, "bbox": list(bb)})
     return out
 
 
@@ -112,11 +131,30 @@ def detect_match(po, pa, rect, lenient=False):
         if m and ".." not in r["text"]:
             # An answer-slot column may merge into the row: "a. long 1."
             sent = re.sub(r"\s+\d{1,2}[.)]?$", "", r["text"]).strip()
-            items.append({"letter": m.group(1).lower(), "sentence": sent,
+            items.append({"letter": (m.group(1) or m.group(2)).lower(), "sentence": sent,
                           "bbox": r["bbox"], "image": None, "word": ""})
 
     # Picture-label variant: items are LONE letters ("a", "b") next to
     # the pictures — row merging loses them, so fall back to tokens.
+    # Orientation: the match POOL is the short side. Brains-style pages
+    # number the questions and letter the short answers; the key writes
+    # letters into the boxes next to the numbers. Swap roles then.
+    def _avg_words(rs):
+        return sum(len(r.split()) for r in rs) / max(1, len(rs))
+    if len(items) >= 3:
+        # only the numbered rows interleaved with the lettered ones (the
+        # band may hold several exercises)
+        ys = [(it["bbox"][1] + it["bbox"][3]) / 2 for it in items]
+        lo, hi = min(ys) - 30, max(ys) + 30
+        num_in = [r for r in rows if WORD_RE.match(r["text"]) and ".." not in r["text"]
+                  and lo <= (r["bbox"][1] + r["bbox"][3]) / 2 <= hi]
+        if len(num_in) >= 3 and _avg_words([it["sentence"] for it in items]) < \
+                _avg_words([r["text"] for r in num_in]):
+            words = [{"no": it["letter"], "word": it["sentence"], "bbox": it["bbox"]}
+                     for it in items]
+            items = [{"letter": WORD_RE.match(r["text"]).group(1),
+                      "sentence": re.sub(r"^\d{1,2}[.)]?\s+", "", r["text"]).strip(),
+                      "bbox": r["bbox"], "image": None, "word": ""} for r in num_in]
     if len(items) < 2:
         x0_, y0_, x1_, y1_ = rect
         seen = set()
@@ -192,10 +230,11 @@ def detect_match(po, pa, rect, lenient=False):
         cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
         if not (x0 <= cx <= x1 and y0 <= cy <= y1):
             continue
-        if re.fullmatch(r"\d{1,2}", t) and t in by_no:
-            # written NUMBER: pairs the word with the slot's letter,
-            # else with the nearest item row.
-            sl = left_slot(b, slot_letters)
+        tl = t.lower()
+        if tl in by_no and tl not in by_letter:
+            # written POOL label: pairs the word with the slot's item
+            # label, else with the nearest item row.
+            sl = left_slot(b, slot_letters if not tl.isalpha() else slot_nums)
             it = by_letter.get(sl) if sl else None
             if it is None:
                 best, bd = None, 1e9
@@ -207,11 +246,11 @@ def detect_match(po, pa, rect, lenient=False):
                         best, bd = cand, d
                 it = best if bd < 200 else None
             if it is not None and not it["word"]:
-                it["word"] = by_no[t]["word"]
-        elif re.fullmatch(r"[A-Za-z]", t):
-            # written LETTER: pairs the slot's word number with that
+                it["word"] = by_no[tl]["word"]
+        elif tl in by_letter:
+            # written ITEM label: pairs the slot's pool label with that
             # item ("3. (a)" -> word 3 matches item a).
-            sl = left_slot(b, slot_nums)
+            sl = left_slot(b, slot_nums if not tl.isdigit() else slot_letters)
             wd = by_no.get(sl) if sl else None
             if wd is None:
                 best, bd = None, 1e9
@@ -222,7 +261,7 @@ def detect_match(po, pa, rect, lenient=False):
                     if d < bd:
                         best, bd = cand, d
                 wd = best if bd < 200 else None
-            it = by_letter.get(t.lower())
+            it = by_letter.get(tl)
             if wd is not None and it is not None and not it["word"]:
                 it["word"] = wd["word"]
 
@@ -307,6 +346,61 @@ def result_json(po, res, out_dir, base):
             "sentences": sentences}
 
 
+STICKER_RE = re.compile(r"(?i)\bsticker")
+
+
+def detect_sticker_rows(po, rect):
+    """Daumen Hoch "Hör zu und klebe die Sticker": a grid of numbered
+    picture slots. The editors model it as picture matchTheWords, one
+    section per ROW: match_words = "N.", items = the slot pictures with
+    word "N." (2026-09-06). Returns [[{letter, sentence, bbox, image,
+    word}], ...] rows, or []."""
+    x0, y0, x1, y1 = rect
+    if not any(STICKER_RE.search(s["text"]) and y0 <= s["bbox"][1] <= y1
+               for s in get_spans(po)):
+        return []
+    nums = [s for s in get_spans(po) if re.fullmatch(r"\d{1,2}", s["text"].strip())]
+    slots = []
+    for img in find_image_rects(po):
+        b = img["bbox"]
+        w, h = b[2] - b[0], b[3] - b[1]
+        if not (40 <= w <= 160 and 40 <= h <= 160 and abs(w - h) < 0.35 * max(w, h)):
+            continue
+        cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+        if not (x0 <= cx <= x1 and y0 <= cy <= y1):
+            continue
+        # number label on/next to the slot's top-left corner
+        lab = None
+        for n in nums:
+            nb = n["bbox"]
+            if b[0] - 8 <= nb[0] <= b[0] + w * 0.5 and b[1] - 8 <= nb[1] <= b[1] + h * 0.5:
+                lab = n["text"].strip()
+                break
+        if lab:
+            slots.append({"n": int(lab), "bbox": list(b)})
+    # dedupe nested/duplicate rects (same label)
+    by_n = {}
+    for sl in slots:
+        if sl["n"] not in by_n or (sl["bbox"][2] - sl["bbox"][0]) > (by_n[sl["n"]]["bbox"][2] - by_n[sl["n"]]["bbox"][0]):
+            by_n[sl["n"]] = sl
+    slots = sorted(by_n.values(), key=lambda s: (round(s["bbox"][1] / 30), s["bbox"][0]))
+    if len(slots) < 3:
+        return []
+    rows, cur = [], []
+    for sl in slots:
+        if cur and abs(sl["bbox"][1] - cur[-1]["bbox"][1]) > 30:
+            rows.append(cur)
+            cur = []
+        cur.append(sl)
+    if cur:
+        rows.append(cur)
+    out = []
+    for r in rows:
+        out.append([{"letter": f"{sl['n']}", "sentence": f"{sl['n']}.", "bbox": sl["bbox"],
+                     "image": sl["bbox"], "word": f"{sl['n']}."} for sl in r])
+    return out
+
+
 def build_match_sections(po, pa, page_num, images_dir, prefix, sx, sy):
     """Analyze path: one matchTheWords section per exercise band that
     holds a word list + lettered items + written/drawn pair evidence."""
@@ -316,6 +410,23 @@ def build_match_sections(po, pa, page_num, images_dir, prefix, sx, sy):
     for band in find_exercise_bands(po):
         res = detect_match(po, pa, band["rect"])
         if not res:
+            for row in detect_sticker_rows(po, band["rect"]):
+                k += 1
+                paths = save_item_crops(po, row, images_dir, f"p{page_num}match{k}")
+                sections.append({
+                    "activity": {
+                        "type": "matchTheWords",
+                        "match_words": [{"word": it["word"]} for it in row],
+                        "sentences": [{"sentence": it["sentence"], "word": it["word"],
+                                       "image_path": f"{prefix}{os.path.basename(p)}"}
+                                      for it, p in zip(row, paths)],
+                        "circleCount": 0,
+                        "markCount": 0,
+                        "coords": place_button(band["header"], occupied, po.rect.width, sx, sy),
+                        "headerText": "",
+                    },
+                    "audio_extra": {},
+                })
             continue
         k += 1
         data = result_json(po, res, images_dir, f"p{page_num}match{k}")
