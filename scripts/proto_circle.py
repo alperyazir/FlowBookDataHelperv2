@@ -34,6 +34,19 @@ OPTION_RE = re.compile(r"^([a-hA-H])[.)]$|^([a-hA-H])[.)]\s+\S")
 TF_RE = re.compile(r"^(T|F|TRUE|FALSE|YES|NO)$", re.IGNORECASE)
 HEADER_RE = re.compile(r"^\d{1,2}\.(\s+\S|$)")
 HEADER_X_MAX = 60.0        # exercise headers start at the page margin
+# Coursebooks number their exercises WITHOUT the dot ("1" beside the
+# instruction, not "1."). HEADER_RE missed every one of them, so
+# _build_exercise_bands returned a single full-page band and the whole
+# page collapsed into one merged exercise plus an uncropped catch-all
+# fill (Switch To CLIL p40: 3 human exercises -> 1 + a bucket holding
+# every answer on the page, 2026-09-07). A bare margin number counts as
+# a header only when an instruction line starts beside it on the same
+# baseline — that is what separates it from a page number, which sits
+# alone in the bottom margin.
+BARE_HEADER = os.environ.get("FB_BARE_HEADER", "1") != "0"
+BARE_RE = re.compile(r"^\d{1,2}$")
+BARE_GAP = 40.0            # instruction starts within this of the number
+BARE_BASELINE = 4.0        # same-baseline tolerance
 CROP_TARGET = 1000.0       # longer side of the crop render
 CROP_MIN_SCALE = 2.0
 BUTTON_SIZE = 44           # entry button size in page-image pixels
@@ -130,6 +143,27 @@ def find_exercise_bands(page):
     return _cached(page, "bands", lambda: _build_exercise_bands(page))
 
 
+def _bare_headers(spans):
+    """Dotless exercise numbers at the left margin ("1" then the
+    instruction beside it). The same-baseline neighbour is what makes
+    this safe: a page number has nothing to its right."""
+    out = []
+    for s in spans:
+        if not BARE_RE.match(s["text"].strip()):
+            continue
+        x1, y0 = s["bbox"][2], s["bbox"][1]
+        if s["bbox"][0] > HEADER_X_MAX:
+            continue
+        for o in spans:
+            if o is s or abs(o["bbox"][1] - y0) >= BARE_BASELINE:
+                continue
+            if x1 - 1 < o["bbox"][0] < x1 + BARE_GAP and any(
+                    ch.isalpha() for ch in o["text"]):
+                out.append(s)
+                break
+    return out
+
+
 def _build_exercise_bands(page):
     """Rect bands [{rect, header}], one per numbered unit.
 
@@ -145,6 +179,14 @@ def _build_exercise_bands(page):
     numbered = [s for s in spans
                 if HEADER_RE.match(s["text"].strip())
                 or re.fullmatch(r"[A-H]", s["text"].strip())]
+    # Fallback only: on a page that already prints dotted headers, adding
+    # bare numbers made things WORSE — a spurious anchor above a real one
+    # trips the 35pt rule in keep() and suppresses the real header (Glory
+    # p67/p70 lost an exercise each, 2026-09-07). Books that number with
+    # the dot never reach this branch; the dotless ones have nothing to
+    # lose because they had no margin header at all.
+    if BARE_HEADER and not any(s["bbox"][0] <= HEADER_X_MAX for s in numbered):
+        numbered = numbered + _bare_headers(spans)
 
     def row_count(s):
         return sum(1 for n in numbered
