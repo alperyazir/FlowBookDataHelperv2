@@ -458,6 +458,34 @@ Rectangle {
                 content.goNext();
             }
         }
+
+        // Jump to the next page the analysis flagged (orange outlines on the
+        // page show what exactly). Hidden when nothing in the book is flagged.
+        Button {
+            id: reviewJumpButton
+            anchors.verticalCenter: parent.verticalCenter
+            visible: content.anyReview
+            width: 132
+            height: parent.height
+            ToolTip.visible: hovered
+            ToolTip.text: "Go to the next page the analysis flagged for review"
+            background: Rectangle {
+                color: content.pages && content.pages[content.currentPageIndex]
+                       && content.pages[content.currentPageIndex].needsReview
+                       ? "#5a3a10" : "#232f34"
+                border.color: "#ff8c00"
+                border.width: 1
+                radius: 6
+            }
+            contentItem: Text {
+                text: "⚠ review ▸"
+                color: "#ff8c00"
+                font.bold: true
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            onClicked: content.goToNextReviewPage()
+        }
     }
 
     // Book title — a static label left of the nav. Anchored to pagesRow —

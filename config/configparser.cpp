@@ -203,6 +203,7 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
                 section->_type = sObj["type"].toString();
                 section->_audio_path = sObj["audio_path"].toString();
                 section->_karaoke = sObj["karaoke"].toBool(false);
+                section->_needsReview = sObj["needs_review"].toBool(false);
 
 
                 Video *video = new Video;
@@ -348,6 +349,7 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
                     answer->_lineEnd = QPoint(cObj["x"].toInt(), cObj["y"].toInt());
                     answer->_textColor = aObj["text_color"].toString();
                     answer->_isTextBold = aObj["is_text_bold"].toBool();
+                    answer->_needsReview = aObj["needs_review"].toBool(false);
                     answer->_imagePath = aObj["image_path"].toString();
                     section->_answers.push_back(answer);
                 }
