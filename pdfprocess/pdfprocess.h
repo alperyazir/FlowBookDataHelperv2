@@ -24,6 +24,17 @@ public:
     // names like "...Pg-12-..." or "4.mp3"); -1 if none. Used to jump to a
     // media page before cropping an icon template.
     Q_INVOKABLE int firstMediaPage(const QString &bookDir, const QString &kind);
+    // Create: read a raw source folder (the two PDFs, audio/, video/, a cover)
+    // and return what New Project needs as JSON — including the detected
+    // module table, so the author never types page ranges by hand. Runs
+    // inspect_source.py and blocks; it only reads the PDF outline and page
+    // edges, so it is a second or two even on a 120-page book.
+    Q_INVOKABLE QString inspectSourceFolder(const QString &folder);
+    // Check a finished book against the PDF it came from and return the
+    // findings as JSON. No ground truth and no model — it only compares what
+    // we built with what the page prints. With mark=true the flagged sections
+    // get needs_review, so the review button walks the author through them.
+    Q_INVOKABLE QString verifyBook(const QString &configPath, bool mark);
     Q_INVOKABLE QStringList getTestVersions() const;
     Q_INVOKABLE void copyBookToTestVersion(const QString &testVersion, const QString &currentBookName);
     Q_INVOKABLE bool launchTestFlowBook(const QString &testVersion);
@@ -145,6 +156,9 @@ signals:
     void logMessage(const QString &message);
     void aiAnalyzingChanged();
     void copyCompleted(bool success);
+    // New Project finished. bookDir is the folder it wrote (empty on failure),
+    // so Create can open the book and start Analyze without asking again.
+    void projectCreated(bool success, const QString &bookDir);
     void aiAnalysisCompleted(bool success);
     void cropCompleted(bool success, const QString &outputPath);
     void circleRedetectCompleted(bool success, const QString &resultJson,

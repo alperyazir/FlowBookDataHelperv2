@@ -398,6 +398,9 @@ def process_pdf_with_config(config_file, dpi=150):
     print(f"config.json dosyası oluşturuldu.", flush=True)
     print(f"PROGRESS:100%", flush=True)  # İşlem tamamlandı
     print(f"İşlem tamamlandı. Çıktı klasörü: {pdf_folder}", flush=True)
+    # Machine-readable: the Create flow chains Analyze onto this folder, and
+    # the localised line above is no contract.
+    print(f"BOOK_DIR:{pdf_folder}", flush=True)
 
 
 def create_sample_config():

@@ -34,6 +34,12 @@ Rectangle {
                 id: fileMenu
                 y: parent.height + 2
                 AppMenuItem { text: "New Project"; onTriggered: newProjectDialog.open() }
+                // One folder in, a finished book out: the PDFs, the modules,
+                // the media and the analysis, without filling in a form.
+                AppMenuItem {
+                    text: "Create…"
+                    onTriggered: mainwindow.startCreateFromFolder()
+                }
                 AppMenuItem {
                     text: "Open…"
                     onTriggered: {
@@ -156,6 +162,10 @@ Rectangle {
                 // state — so an abandoned crop can't poison a later activity
                 // crop, and normal activity crops are ignored here.
                 function onCropCompleted(success, outputPath) {
+                    // Create runs its own icon steps and must not have the
+                    // Analyze dialog pop up in the middle of them.
+                    if (mainwindow.createRunning)
+                        return;
                     var isAudio = outputPath.indexOf("icon_template_audio") !== -1;
                     var isVideo = outputPath.indexOf("icon_template_video") !== -1;
                     if (!isAudio && !isVideo)
@@ -169,6 +179,8 @@ Rectangle {
                     analyzeConfirmDialog.open();
                 }
                 function onAiAnalysisCompleted(success) {
+                    if (mainwindow.createRunning)
+                        return;               // Create chains its own icon pass
                     if (!analyzeConfirmDialog.runIconsAfterAnalyze)
                         return;
                     analyzeConfirmDialog.runIconsAfterAnalyze = false;

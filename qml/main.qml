@@ -4,6 +4,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtMultimedia
 import QtQuick.Controls.Basic
+import QtQuick.Dialogs
 
 ApplicationWindow {
     id: mainwindow
@@ -742,6 +743,291 @@ ApplicationWindow {
 
     ActivityDialog {
         id: activityDialog
+    }
+
+    // ===== Create: one folder in, a finished book out ========================
+    // The folder holds the two PDFs (original + answered), optionally a cover
+    // PDF and audio/ and video/ folders. inspect_source.py reads it and works
+    // out the modules, so nothing is typed by hand; then New Project runs and
+    // Analyze is chained onto it.
+    // Stage of the Create run, "" when idle. The icon steps need the book to
+    // exist first — a template is cropped off one of its rendered pages — so
+    // the order is: project, then templates, then Analyze, then the matcher.
+    //   project -> iconAudio -> iconVideo -> analyze -> icons -> ""
+    property string createStage: ""
+    property string createTitle: ""
+    property string createBookDir: ""
+    property bool createHasAudio: false
+    property bool createHasVideo: false
+    property string createAudioIcon: ""
+    property string createVideoIcon: ""
+    readonly property bool createRunning: createStage !== ""
+
+    function startCreateFromFolder() {
+        if (createRunning) {
+            flowProgress.open();
+            return;
+        }
+        createFolderDialog.open();
+    }
+
+    // Ask for one icon template: jump to a page that has that media and put
+    // the page into icon-crop mode. Skipped when the book has no such page.
+    function createRequestIcon(kind) {
+        var jumped = content.goToFirstMediaPage(kind);
+        if (!jumped) {
+            flowProgress.addLogMessage(
+                "No " + kind + " page found — skipping the " + kind + " icon.");
+            createAdvanceAfterIcon(kind);
+            return;
+        }
+        iconPrompt.kind = kind;
+        iconPrompt.open();
+        content.startIconCrop(kind);
+    }
+
+    function createAdvanceAfterIcon(kind) {
+        if (kind === "audio" && mainwindow.createHasVideo) {
+            mainwindow.createStage = "iconVideo";
+            createRequestIcon("video");
+            return;
+        }
+        mainwindow.createStage = "analyze";
+        flowProgress.reset();
+        flowProgress.statusText = "Analyzing…";
+        flowProgress.addLogMessage("Starting analysis…");
+        flowProgress.open();
+        pdfProcess.startAIAnalysis(mainwindow.createBookDir + "/config.json",
+                                   appPath + "settings.json");
+    }
+
+    // Non-modal: the author has to draw on the page behind it.
+    Dialog {
+        id: iconPrompt
+        property string kind: "audio"
+        modal: false
+        closePolicy: Popup.NoAutoClose
+        x: (parent.width - width) / 2
+        y: 60
+        width: 520
+        padding: 16
+        background: Rectangle {
+            color: "#1A2327"; border.color: "#00e6e6"; border.width: 1; radius: 4
+        }
+        // A plain Column with explicit widths: a ColumnLayout here made the
+        // dialog's implicitHeight depend on its own width and loop.
+        contentItem: Column {
+            spacing: 10
+            Label {
+                width: 470
+                text: "Drag a box around one " + iconPrompt.kind + " icon on this page"
+                color: "white"; font.bold: true; font.pixelSize: 15
+            }
+            Label {
+                width: 470
+                wrapMode: Text.WordWrap
+                color: "#9fb3bb"
+                text: "Every other " + iconPrompt.kind
+                      + " button in the book is placed from this one template. "
+                      + "Skip it and the buttons are parked in the corner for you to move."
+            }
+            Item {
+                width: 470
+                height: 34
+                Button {
+                    text: "Skip"
+                    anchors.right: parent.right
+                    onClicked: {
+                        iconPrompt.close();
+                        content.pageDetails.endCropMode();
+                        mainwindow.createAdvanceAfterIcon(iconPrompt.kind);
+                    }
+                }
+            }
+        }
+    }
+
+    FolderDialog {
+        id: createFolderDialog
+        title: "Pick the folder with the book's PDFs, audio and video"
+        onAccepted: mainwindow.createFromFolder(selectedFolder)
+    }
+
+    function createFromFolder(folderUrl) {
+        var path = folderUrl.toString().replace(/^file:\/\//, "");
+        path = decodeURIComponent(path);
+
+        flowProgress.reset();
+        flowProgress.statusText = "Reading the folder…";
+        flowProgress.addLogMessage("Create: " + path);
+        flowProgress.open();
+
+        var info;
+        try {
+            info = JSON.parse(pdfProcess.inspectSourceFolder(path));
+        } catch (e) {
+            flowProgress.statusText = "Could not read that folder";
+            flowProgress.addLogMessage("Create failed: " + e);
+            return;
+        }
+        if (!info.ok) {
+            flowProgress.statusText = "Could not read that folder";
+            flowProgress.addLogMessage("Create failed: " + info.error);
+            return;
+        }
+
+        flowProgress.addLogMessage("Book: " + info.title + " (" + info.pages + " pages)");
+        flowProgress.addLogMessage("Modules via " + info.modules_via + ": "
+                                   + info.modules.length);
+        for (var i = 0; i < info.modules.length; i++) {
+            var m = info.modules[i];
+            flowProgress.addLogMessage("   " + m.module_name
+                                       + " [" + m.start + "-" + m.end + "]");
+        }
+        for (var w = 0; w < info.warnings.length; w++)
+            flowProgress.addLogMessage("WARNING: " + info.warnings[w]);
+
+        mainwindow.createTitle = info.title;
+        mainwindow.createHasAudio = (info.audio !== "");
+        mainwindow.createHasVideo = (info.video !== "");
+        mainwindow.createAudioIcon = "";
+        mainwindow.createVideoIcon = "";
+        mainwindow.createBookDir = "";
+        mainwindow.createStage = "project";
+
+        pdfProcess.startProcessing(JSON.stringify({
+            "publisher_name": "",
+            "book_title": info.title,
+            "language": "en",
+            "book_type": "",
+            "book_pdf_path": info.original,
+            "book_cover_path": info.cover,
+            "audio_path": info.audio,
+            "video_path": info.video,
+            "modules": info.modules,
+            "output_path": appPath + "books"
+        }, null, 4));
+
+        flowProgress.statusText = "Creating the project…";
+    }
+
+    Connections {
+        target: pdfProcess
+
+        function onProjectCreated(success, bookDir) {
+            if (mainwindow.createStage !== "project")
+                return;                       // a plain New Project, not Create
+            if (!success || !bookDir) {
+                mainwindow.createStage = "";
+                flowProgress.statusText = "Project creation failed";
+                return;
+            }
+            mainwindow.createBookDir = bookDir;
+            flowProgress.addLogMessage("Project created: " + bookDir);
+            mainwindow.doOpenProjectPath(bookDir);
+
+            // Deferred: the book was opened a line ago and jumping to a media
+            // page reads the freshly loaded config.
+            if (mainwindow.createHasAudio) {
+                mainwindow.createStage = "iconAudio";
+                flowProgress.close();          // the author draws on the page now
+                Qt.callLater(function() { mainwindow.createRequestIcon("audio"); });
+            } else if (mainwindow.createHasVideo) {
+                mainwindow.createStage = "iconVideo";
+                flowProgress.close();
+                Qt.callLater(function() { mainwindow.createRequestIcon("video"); });
+            } else {
+                mainwindow.createAdvanceAfterIcon("");
+            }
+        }
+
+        // Icon templates write icon_template_<kind>.png; other crops are not
+        // ours. Only acts while Create is the one asking.
+        function onCropCompleted(success, outputPath) {
+            if (mainwindow.createStage !== "iconAudio"
+                    && mainwindow.createStage !== "iconVideo")
+                return;
+            var isAudio = outputPath.indexOf("icon_template_audio") !== -1;
+            var isVideo = outputPath.indexOf("icon_template_video") !== -1;
+            if (!isAudio && !isVideo)
+                return;
+            iconPrompt.close();
+            var kind = isAudio ? "audio" : "video";
+            if (success) {
+                if (isAudio)
+                    mainwindow.createAudioIcon = outputPath;
+                else
+                    mainwindow.createVideoIcon = outputPath;
+                flowProgress.addLogMessage(kind + " icon template: " + outputPath);
+            }
+            mainwindow.createAdvanceAfterIcon(kind);
+        }
+
+        function onAiAnalysisCompleted(success) {
+            if (mainwindow.createStage === "analyze") {
+                if (!success) {
+                    mainwindow.createStage = "";
+                    flowProgress.statusText = "Analysis failed";
+                    return;
+                }
+                if (mainwindow.createAudioIcon !== ""
+                        || mainwindow.createVideoIcon !== "") {
+                    mainwindow.createStage = "icons";
+                    flowProgress.statusText = "Placing the audio/video buttons…";
+                    flowProgress.addLogMessage("Matching icon templates…");
+                    // config.json on disk is what Analyze just wrote; the
+                    // in-memory model is still reloading, so do NOT save over it.
+                    pdfProcess.matchIcons(mainwindow.createBookDir + "/config.json",
+                                          mainwindow.createAudioIcon,
+                                          mainwindow.createVideoIcon);
+                    return;
+                }
+                mainwindow.createFinish();
+                return;
+            }
+            if (mainwindow.createStage === "icons")
+                mainwindow.createFinish();
+        }
+    }
+
+    function createFinish() {
+        mainwindow.createStage = "";
+
+        // Verify before opening: it compares what we built against what the
+        // pages print and marks anything doubtful with needs_review, so the
+        // toolbar's review button lands the author on those pages first.
+        flowProgress.statusText = "Checking the book…";
+        var summary = "";
+        try {
+            var v = JSON.parse(pdfProcess.verifyBook(
+                        mainwindow.createBookDir + "/config.json", true));
+            if (v.ok) {
+                summary = v.counts.high + " to look at, "
+                        + v.counts.medium + " maybe, " + v.counts.low + " minor";
+                flowProgress.addLogMessage(
+                    "Check: " + v.sections + " sections, " + summary
+                    + (v.marked > 0 ? " — " + v.marked + " flagged for review" : ""));
+                for (var i = 0; i < Math.min(v.findings.length, 25); i++) {
+                    var f = v.findings[i];
+                    flowProgress.addLogMessage(
+                        "   [" + f.severity + "] p" + f.page + " " + f.kind
+                        + ": " + f.detail);
+                }
+            } else {
+                flowProgress.addLogMessage("Check failed: " + v.error);
+            }
+        } catch (e) {
+            flowProgress.addLogMessage("Check failed: " + e);
+        }
+
+        flowProgress.statusText = "Done";
+        flowProgress.addLogMessage("Book ready: " + mainwindow.createBookDir);
+        // Reload so the page view shows everything Analyze, the matcher and
+        // the check wrote.
+        mainwindow.doOpenProjectPath(mainwindow.createBookDir);
+        flowProgress.close();
+        toast.show("\"" + mainwindow.createTitle + "\" is ready"
+                   + (summary !== "" ? " — " + summary : ""));
     }
 
     NewProjectDialog {
