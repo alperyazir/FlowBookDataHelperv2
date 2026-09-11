@@ -2081,6 +2081,108 @@ Item {
                         }
                     }
 
+                    // The page region this activity's image was cut from.
+                    // Shown while the activity is selected so the crop can be
+                    // judged in place, and adjusted there: drag the outline to
+                    // move it, the corner grip to resize, then it is re-cut
+                    // through the normal crop path. z:-1 keeps it under this
+                    // section's answers and its activity button, so those
+                    // still take their own clicks.
+                    Rectangle {
+                        id: activityCropRect
+                        z: -1
+                        visible: sideBar.activityVisible
+                                 && sideBar.activityModelData === modelData.activity
+                                 && modelData.activity.imageCoords.width > 0
+                                 && modelData.activity.imageCoords.height > 0
+
+                        // Live geometry in page-PNG pixels. Derived x/y/width
+                        // rather than dragged directly, so a grip never breaks
+                        // the binding back to the stored crop.
+                        property real pngX: modelData.activity.imageCoords.x
+                        property real pngY: modelData.activity.imageCoords.y
+                        property real pngW: modelData.activity.imageCoords.width
+                        property real pngH: modelData.activity.imageCoords.height
+                        readonly property real sx: picture.sourceSize.width > 0
+                                                   ? picture.paintedWidth / picture.sourceSize.width : 1
+                        readonly property real sy: picture.sourceSize.height > 0
+                                                   ? picture.paintedHeight / picture.sourceSize.height : 1
+
+                        color: "#1400e6e6"
+                        border.color: "#00e6e6"
+                        border.width: 2
+                        radius: 4
+                        x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + pngX * sx
+                        y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + pngY * sy
+                        width: pngW * sx
+                        height: pngH * sy
+
+                        function clampToPage() {
+                            pngW = Math.max(20, pngW);
+                            pngH = Math.max(20, pngH);
+                            pngX = Math.max(0, Math.min(pngX, picture.sourceSize.width - pngW));
+                            pngY = Math.max(0, Math.min(pngY, picture.sourceSize.height - pngH));
+                            pngW = Math.min(pngW, picture.sourceSize.width - pngX);
+                            pngH = Math.min(pngH, picture.sourceSize.height - pngY);
+                        }
+                        function commit() {
+                            clampToPage();
+                            root.recropActivity(modelData.activity,
+                                                Qt.rect(pngX, pngY, pngW, pngH));
+                        }
+
+                        // Drag the outline itself to move the crop. Sitting at
+                        // z:-1 this is under the section's answers and its
+                        // activity button, so they still take their own
+                        // clicks; the drag only starts on the bare parts of
+                        // the crop. A click that never moved re-cuts nothing.
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.SizeAllCursor
+                            property real pressX: 0
+                            property real pressY: 0
+                            property bool moved: false
+                            onPressed: (m) => { pressX = m.x; pressY = m.y; moved = false; }
+                            onPositionChanged: (m) => {
+                                if (!pressed)
+                                    return;
+                                moved = true;
+                                activityCropRect.pngX += (m.x - pressX) / activityCropRect.sx;
+                                activityCropRect.pngY += (m.y - pressY) / activityCropRect.sy;
+                            }
+                            onReleased: if (moved) activityCropRect.commit()
+                        }
+
+                        // Resize from the bottom-right corner.
+                        Rectangle {
+                            width: 15
+                            height: 15
+                            radius: 3
+                            z: 2
+                            color: resizeArea.pressed ? "#ffffff" : "#00e6e6"
+                            border.color: "#08343a"
+                            border.width: 1
+                            anchors.horizontalCenter: parent.right
+                            anchors.verticalCenter: parent.bottom
+                            MouseArea {
+                                id: resizeArea
+                                anchors.fill: parent
+                                anchors.margins: -5          // easier to grab
+                                cursorShape: Qt.SizeFDiagCursor
+                                property real pressX: 0
+                                property real pressY: 0
+                                onPressed: (m) => { pressX = m.x; pressY = m.y; }
+                                onPositionChanged: (m) => {
+                                    if (!pressed)
+                                        return;
+                                    activityCropRect.pngW += (m.x - pressX) / activityCropRect.sx;
+                                    activityCropRect.pngH += (m.y - pressY) / activityCropRect.sy;
+                                }
+                                onReleased: activityCropRect.commit()
+                            }
+                        }
+                    }
+
                     // activity
                     Rectangle {
                         id: activityRect
@@ -2333,6 +2435,28 @@ Item {
 
         // config.bookSets[0].saveToJson();
         print("Changes Are Saved Page Detail set status");
+    }
+
+    // Re-cut an activity's image to `pngRect` (page-PNG pixels) without the
+    // author having to draw a new crop: the grips on the selected activity's
+    // crop outline call this. Feeds the rect through the normal crop path in
+    // viewport coordinates, so the image, imageCoords and the circle/markwithx
+    // re-detect all happen exactly as they do for a hand-drawn crop.
+    function recropActivity(act, pngRect) {
+        if (!act || pngRect.width < 1 || pngRect.height < 1)
+            return;
+        var sx = picture.paintedWidth / picture.sourceSize.width;
+        var sy = picture.paintedHeight / picture.sourceSize.height;
+        var vx = (flick.contentWidth / 2 - picture.paintedWidth / 2)
+                 + pngRect.x * sx - flick.contentX;
+        var vy = (flick.contentHeight / 2 - picture.paintedHeight / 2)
+                 + pngRect.y * sy - flick.contentY;
+        startCropMode(act, "sectionPath");
+        root.cropStartX = vx;
+        root.cropStartY = vy;
+        root.cropEndX = vx + pngRect.width * sx;
+        root.cropEndY = vy + pngRect.height * sy;
+        executeCrop();
     }
 
     function startCropMode(targetObj, pathProperty) {

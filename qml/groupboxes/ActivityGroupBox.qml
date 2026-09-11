@@ -51,34 +51,13 @@ GroupBox {
     // Open the activity preview/editor dialog for the current activity.
     // Used by the "Activity" button and the Space shortcut.
     function openActivityDialog() {
-        // Coloring is authored entirely on the page (crop the outline); it has no
-        // interactive preview dialog, so don't pop an empty one. Ordering is
-        // authored as a plain sentence list (the reader builds the shuffled
-        // chips itself), so it has no editor-side preview either.
-        if (root.activityModelData.type === "coloring"
-                || root.activityModelData.type === "ordering")
+        // Populating the dialog lives in ActivityDialog.showActivity() so the
+        // ‹ › arrows inside it can swap activities without a close/reopen.
+        // It refuses the types authored entirely on the page — coloring (crop
+        // the outline) and ordering (a plain sentence list) have no preview,
+        // so don't pop an empty dialog for them.
+        if (!activityDialog.showActivity(root.activityModelData))
             return;
-
-        activityDialog.wordLists = root.activityModelData.words;
-        activityDialog.imageSource = root.activityModelData.sectionPath;
-        activityDialog.headerText = root.activityModelData.headerText;
-        activityDialog.answers = root.activityModelData.answers;
-        activityDialog.activityModelData = root.activityModelData;
-
-        if (root.activityModelData.type === "matchTheWords")
-            activityDialog.createActivityMatchTheWord();
-        else if (root.activityModelData.type === "dragdroppicture")
-            activityDialog.createActivityDragDropPicture();
-        else if (root.activityModelData.type === "dragdroppicturegroup")
-            activityDialog.createActivityDragDropPictureGroup();
-        else if (root.activityModelData.type === "fillpicture")
-            activityDialog.createActivityFillPicture();
-        else if (root.activityModelData.type === "puzzleFindWords")
-            activityDialog.createActivityFindPuzzle();
-        else if (root.activityModelData.type === "circle")
-            activityDialog.createActivityCircle();
-        else if (root.activityModelData.type === "markwithx")
-            activityDialog.createActivityMarkWithX();
 
         activityDialog.open();
     }
