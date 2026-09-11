@@ -387,6 +387,80 @@ Dialog {
         anchors.fill: parent
     }
 
+    // Previous / next activity. Siblings of mainContainer, never children:
+    // clearMainContainer() destroys everything inside it on every swap.
+    Repeater {
+        model: [{ dir: -1, glyph: "‹" }, { dir: 1, glyph: "›" }]
+        Rectangle {
+            width: 44
+            height: 64
+            radius: 6
+            z: 100
+            visible: content.activityCount() > 1
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: modelData.dir < 0 ? parent.left : undefined
+            anchors.right: modelData.dir > 0 ? parent.right : undefined
+            anchors.margins: 6
+            color: navArea.containsMouse ? "#2A3337" : "#CC1A2327"
+            border.color: "#009ca6"
+            border.width: 1
+            Text {
+                anchors.centerIn: parent
+                text: modelData.glyph
+                color: "white"
+                font.pixelSize: 30
+            }
+            MouseArea {
+                id: navArea
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: root.stepActivity(modelData.dir)
+            }
+            ToolTip.visible: navArea.containsMouse
+            ToolTip.text: modelData.dir < 0 ? "Previous activity" : "Next activity"
+        }
+    }
+
+    // Load one activity into the dialog. Split out of ActivityGroupBox so the
+    // arrows can swap activities without closing and reopening. Returns false
+    // for the types authored on the page, which have no preview to show.
+    function showActivity(act) {
+        if (!act || act.type === "coloring" || act.type === "ordering")
+            return false;
+
+        root.wordLists = act.words;
+        root.imageSource = act.sectionPath;
+        root.headerText = act.headerText;
+        root.answers = act.answers;
+        root.activityModelData = act;
+
+        if (act.type === "matchTheWords")
+            createActivityMatchTheWord();
+        else if (act.type === "dragdroppicture")
+            createActivityDragDropPicture();
+        else if (act.type === "dragdroppicturegroup")
+            createActivityDragDropPictureGroup();
+        else if (act.type === "fillpicture")
+            createActivityFillPicture();
+        else if (act.type === "puzzleFindWords")
+            createActivityFindPuzzle();
+        else if (act.type === "circle")
+            createActivityCircle();
+        else if (act.type === "markwithx")
+            createActivityMarkWithX();
+        else
+            clearMainContainer();     // unknown type: an empty dialog, not a stale one
+        return true;
+    }
+
+    // Walk to the neighbouring activity, turning the page underneath when it
+    // lives on a different one, and swap the dialog to it.
+    function stepActivity(delta) {
+        var act = content.stepActivity(delta);
+        if (act)
+            showActivity(act);
+    }
+
     function createActivityMatchTheWord() {
         clearMainContainer()
         var component = Qt.createComponent("activities/ActivityMatchTheWords.qml")

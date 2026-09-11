@@ -100,6 +100,69 @@ Rectangle {
         root.currentPageIndex = ni;
     }
 
+    // --- Activity-to-activity navigation (the dialog's ‹ › arrows) -----------
+    // Only the types the dialog can actually show; coloring and ordering are
+    // authored on the page, so stepping onto one would open an empty dialog.
+    function dialogActivity(sec) {
+        var a = sec ? sec.activity : null;
+        return (a && a.type !== "" && a.type !== "coloring" && a.type !== "ordering")
+                ? a : null;
+    }
+
+    // Every activity in the book, in page order then reading order.
+    function activityList() {
+        var out = [];
+        if (!pages) return out;
+        for (var p = 0; p < pages.length; p++) {
+            var secs = pages[p] ? pages[p].sections : null;
+            if (!secs) continue;
+            for (var s = 0; s < secs.length; s++)
+                if (dialogActivity(secs[s]))
+                    out.push({ pageIndex: p, sectionIndex: s });
+        }
+        return out;
+    }
+
+    function activityCount() {
+        return activityList().length;
+    }
+
+    // Put a page on screen and open one of its activities in the sidebar —
+    // the same state clicking that activity's button on the page produces.
+    function selectActivity(pageIndex, sectionIndex) {
+        if (!pages || pageIndex < 0 || pageIndex >= pages.length) return null;
+        var pg = pages[pageIndex];
+        var sec = (pg && pg.sections) ? pg.sections[sectionIndex] : null;
+        var act = dialogActivity(sec);
+        if (!act) return null;
+        if (pageIndex !== root.currentPageIndex)
+            root.currentPageIndex = pageIndex;      // turns the page underneath
+        sideBar.hideAllComponent();
+        sideBar.activityVisible = true;
+        sideBar.page = pg;
+        sideBar.sectionIndex = sectionIndex;
+        sideBar.activityModelData = act;
+        sideBar.sectionModelData = sec;
+        return act;
+    }
+
+    // Step `delta` activities from the one open in the sidebar. Wraps at the
+    // ends of the book so the arrows never dead-end. Returns the activity.
+    function stepActivity(delta) {
+        var list = activityList();
+        if (list.length === 0) return null;
+        var cur = -1;
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].pageIndex === root.currentPageIndex
+                    && list[i].sectionIndex === sideBar.sectionIndex) {
+                cur = i;
+                break;
+            }
+        }
+        var ni = (cur < 0) ? 0 : (cur + delta + list.length) % list.length;
+        return selectActivity(list[ni].pageIndex, list[ni].sectionIndex);
+    }
+
     function enableRightClick(enabled) {
         currentPageDetails.enableRightClick(enabled);
     }
