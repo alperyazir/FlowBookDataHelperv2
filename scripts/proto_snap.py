@@ -298,6 +298,7 @@ def _retypeset_echo_ids(po, pa, answers):
 
 
 SPACED_LETTERS_RE = re.compile(r"^(\S\s+){2,}\S$")     # "S   H   I   V"
+GRID_SINGLES = 4       # per-cell answers that prove the page is a letter grid
 
 
 def _split_spaced_letters(pa, answers):
@@ -309,7 +310,15 @@ def _split_spaced_letters(pa, answers):
     from proto_inventory import page_rawdict_ws
     need = [a for a in answers
             if SPACED_LETTERS_RE.match(a["text"]) and len(a["text"].split()) >= 2]
-    if len(need) < 2:
+    # Two spaced spans used to be the entry price, on the theory that a lone
+    # one is wide-tracked prose rather than a grid. That cost The Chase 6 p4:
+    # 78 of the crossword's letters came out of the diff as their own cells
+    # and only SPORTSFIELD arrived as one span, so `need` held exactly one
+    # entry and the whole word stayed a single 453px-wide box (2026-09-09).
+    # A page already answering in single characters IS a letter grid, so one
+    # span is enough there.
+    singles = sum(1 for a in answers if len(a["text"].strip()) == 1)
+    if len(need) < 2 and not (need and singles >= GRID_SINGLES):
         return answers
     by_text = {}
     for b in page_rawdict_ws(pa)["blocks"]:

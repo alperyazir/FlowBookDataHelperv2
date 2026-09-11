@@ -33,7 +33,18 @@ from proto_inventory import (diff_answer_drawings, find_image_rects,
 OPTION_RE = re.compile(r"^([a-hA-H])[.)]$|^([a-hA-H])[.)]\s+\S")
 TF_RE = re.compile(r"^(T|F|TRUE|FALSE|YES|NO)$", re.IGNORECASE)
 HEADER_RE = re.compile(r"^\d{1,2}\.(\s+\S|$)")
-HEADER_X_MAX = 60.0        # exercise headers start at the page margin
+# The Chase 6 prints its question numbers at x=63.2, just past the old 60pt
+# cutoff, so NO header was ever seen and the whole page collapsed into one
+# band — p11 became a single circle activity holding all 5 questions and 22
+# options (2026-09-09). 64 rescues it; 72 starts pulling in the item numbers
+# inside an exercise (p46 lists items at 68.7).
+HDR_FIX = os.environ.get("FB_HDR_FIX", "1") != "0"
+HEADER_X_MAX = 60.0
+HEADER_X_WIDE = 64.0       # per-page fallback, see _build_exercise_bands
+HEADER_X_ADAPTIVE = 96.0   # furthest in a header column may sit from the edge
+COL_FIX = os.environ.get("FB_COL_FIX", "1") != "0"
+GLYPH_GAP_X = 14.0         # neighbouring glyph of a letter-by-letter word
+GLYPH_GAP_Y = 10.0
 # Coursebooks number their exercises WITHOUT the dot ("1" beside the
 # instruction, not "1."). HEADER_RE missed every one of them, so
 # _build_exercise_bands returned a single full-page band and the whole
@@ -143,6 +154,27 @@ def find_exercise_bands(page):
     return _cached(page, "bands", lambda: _build_exercise_bands(page))
 
 
+def _is_logo_glyph(s, spans):
+    """One letter of a word drawn glyph by glyph, not an exercise label.
+
+    The Chase badge renders "THEME" as five single-letter spans 2-6pt apart
+    at the top margin, and the lone-capital rule (added for Goals' "A"/"B"
+    chips) read the H and the E as exercise headers on every page. A real
+    lettered header stands alone — Goals' A and B sit 225pt apart on the
+    same x — so a single capital with another single character touching it
+    horizontally is decoration."""
+    x0, y0, x1, _ = s["bbox"]
+    for o in spans:
+        if o is s or len(o["text"].strip()) != 1:
+            continue
+        ox0, oy0, ox1, _ = o["bbox"]
+        if abs(oy0 - y0) > GLYPH_GAP_Y:
+            continue
+        if min(abs(ox0 - x1), abs(x0 - ox1)) <= GLYPH_GAP_X:
+            return True
+    return False
+
+
 def _bare_headers(spans):
     """Dotless exercise numbers at the left margin ("1" then the
     instruction beside it). The same-baseline neighbour is what makes
@@ -178,7 +210,8 @@ def _build_exercise_bands(page):
     # ("A", "B" chips — Goals-style books letter their exercises).
     numbered = [s for s in spans
                 if HEADER_RE.match(s["text"].strip())
-                or re.fullmatch(r"[A-H]", s["text"].strip())]
+                or (re.fullmatch(r"[A-H]", s["text"].strip())
+                    and not (HDR_FIX and _is_logo_glyph(s, spans)))]
     # Fallback only: on a page that already prints dotted headers, adding
     # bare numbers made things WORSE — a spurious anchor above a real one
     # trips the 35pt rule in keep() and suppresses the real header (Glory
@@ -198,9 +231,32 @@ def _build_exercise_bands(page):
         if row_count(s) >= 3:
             return False
         above = [a for a in side if a["bbox"][1] < s["bbox"][1] - 2]
+        if COL_FIX:
+            # An anchor that is itself part of an item row is about to be
+            # dropped, so it must not suppress a real header below it: The
+            # Chase 6 p37 prints the five choice numbers 30pt above question
+            # 4's header, which killed the header and left the page single
+            # column (2026-09-09).
+            above = [a for a in above if row_count(a) < 3]
         return not above or s["bbox"][1] - max(a["bbox"][1] for a in above) > 35
 
-    left = sorted([s for s in numbered if s["bbox"][0] <= HEADER_X_MAX],
+    # Widen the margin only for a page where the strict cutoff finds nothing.
+    # Raising it for every page cost Brains 3 matchTheWords and Glory a circle
+    # (their headers sit inside 60pt, and the extra 4pt let item numbers in),
+    # while The Chase 6 prints at 63.2 and so saw no header at all.
+    xmax = HEADER_X_MAX
+    if HDR_FIX and not any(s["bbox"][0] <= xmax for s in numbered):
+        # Take the header column from the page instead of a constant. A book
+        # printed for binding indents its recto pages: The Chase 6 Practice
+        # Tests numbers questions at x=50 on even pages and x=71 on odd ones,
+        # and one fixed cutoff can only ever fit one of the two — 37 of its 95
+        # pages collapsed to a single band (2026-09-11). Only margin-ish
+        # candidates count, so a numbered item mid-column cannot become the
+        # column.
+        margin = [c["bbox"][0] for c in numbered
+                  if c["bbox"][0] <= HEADER_X_ADAPTIVE]
+        xmax = min(margin) + 4 if margin else HEADER_X_WIDE
+    left = sorted([s for s in numbered if s["bbox"][0] <= xmax],
                   key=lambda s: s["bbox"][1])
     right = sorted([s for s in numbered
                     if mid - 20 <= s["bbox"][0] <= mid + 80],
@@ -222,6 +278,18 @@ def _build_exercise_bands(page):
         xs = sorted(r["bbox"][0] for r in right)
         if xs[-1] - xs[0] <= 4:
             twin = True
+        elif COL_FIX:
+            # Requiring EVERY right anchor to share one x let a stray item
+            # number break the test: The Chase 6 p23 numbers the four choices
+            # inside question 3's box at x=333 while the real right-column
+            # headers sit at x=320, so the spread came to 12.8 and the page
+            # was read as one column — question 1 (left) and question 4
+            # (right) then landed in the same full-width band and became one
+            # activity (2026-09-09). Two anchors agreeing on an x is a column.
+            for i, x in enumerate(xs):
+                if sum(1 for o in xs if abs(o - x) <= 4) >= 2 and i + 1 < len(xs):
+                    twin = True
+                    break
 
     bands = []
     if not twin:
