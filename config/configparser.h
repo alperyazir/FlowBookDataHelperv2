@@ -172,6 +172,10 @@ struct Answer : public QObject {
     Q_PROPERTY(QPoint lineEnd READ lineEnd WRITE setLineEnd NOTIFY lineEndChanged)
     Q_PROPERTY(QString textColor READ textColor WRITE setTextColor NOTIFY textColorChanged)
     Q_PROPERTY(bool isTextBold READ isTextBold WRITE setIsTextBold NOTIFY isTextBoldChanged)
+    // Set by the analysis when it is unsure about this answer; the editor
+    // marks it so the reviewer knows where to look. Round-trips through
+    // save so the flag is not lost the first time the book is opened.
+    Q_PROPERTY(bool needsReview READ needsReview WRITE setNeedsReview NOTIFY needsReviewChanged)
     // Fill-with-color: optional image shown clipped inside the shape
     // (rect/round) instead of the flat color fill.
     Q_PROPERTY(QString imagePath READ imagePath WRITE setImagePath NOTIFY imagePathChanged)
@@ -207,6 +211,7 @@ public:
     QPoint _lineEnd;
     QString _textColor;
     bool _isTextBold;
+    bool _needsReview = false;
     QString _imagePath;
 
     // Mevcut getter/setter'lar...
@@ -408,6 +413,14 @@ public:
         }
     }
 
+    bool needsReview() const { return _needsReview; }
+    void setNeedsReview(bool needsReview) {
+        if (_needsReview != needsReview) {
+            _needsReview = needsReview;
+            emit needsReviewChanged();
+        }
+    }
+
     QString imagePath() const { return _imagePath; }
     void setImagePath(const QString &imagePath) {
         if (_imagePath != imagePath) {
@@ -538,6 +551,9 @@ public:
         if (_isTextBold) {
             answerObj["is_text_bold"] = _isTextBold;
         }
+        if (_needsReview) {
+            answerObj["needs_review"] = true;
+        }
 
         if (!_imagePath.isEmpty()) {
             answerObj["image_path"] = _imagePath;
@@ -572,6 +588,7 @@ signals:
     void lineEndChanged();
     void textColorChanged();
     void isTextBoldChanged();
+    void needsReviewChanged();
     void imagePathChanged();
 };
 
@@ -1443,6 +1460,9 @@ struct Section : public QObject {
     Q_PROPERTY(QVariant activity READ activity WRITE setActivity NOTIFY activityChanged)
     Q_PROPERTY(QString audioPath READ audioPath WRITE setAudioPath NOTIFY audioPathChanged)
     Q_PROPERTY(bool karaoke READ karaoke WRITE setKaraoke NOTIFY karaokeChanged)
+    // The analysis could not place/confirm this section (a parked audio or
+    // video button, an uncertain activity): the editor flags it for review.
+    Q_PROPERTY(bool needsReview READ needsReview WRITE setNeedsReview NOTIFY needsReviewChanged)
     Q_PROPERTY(QRect showAllAnswers READ showAllAnswers WRITE setShowAllAnswers NOTIFY showAllAnswersChanged)
     Q_PROPERTY(QRect lockScreen READ lockScreen WRITE setLockScreen NOTIFY lockScreenChanged)
     Q_PROPERTY(QVariant video READ video WRITE setVideo NOTIFY videoChanged)
@@ -1462,6 +1482,7 @@ public:
     Activity *_activity;
     QString _audio_path;
     bool _karaoke = false;   // audio section has word-level karaoke timing in audio/audio.json
+    bool _needsReview = false;
     QRect _show_all_answers;
     QRect _lock_screen;
     Video *_video;
@@ -1517,6 +1538,14 @@ public:
         if (_audio_path != audioPath) {
             _audio_path = audioPath;
             emit audioPathChanged();
+        }
+    }
+
+    bool needsReview() const { return _needsReview; }
+    void setNeedsReview(bool needsReview) {
+        if (_needsReview != needsReview) {
+            _needsReview = needsReview;
+            emit needsReviewChanged();
         }
     }
 
@@ -1676,6 +1705,10 @@ public:
             sectionObj["karaoke"] = true;
         }
 
+        if (_needsReview) {
+            sectionObj["needs_review"] = true;
+        }
+
         if (_video && !_video->_path.isEmpty()) {
             sectionObj["video_path"] = _video->_path;
         }
@@ -1774,6 +1807,7 @@ signals:
     void activityChanged();
     void audioPathChanged();
     void karaokeChanged();
+    void needsReviewChanged();
     void showAllAnswersChanged();
     void lockScreenChanged();
     void videoChanged();
@@ -1798,9 +1832,26 @@ struct Page : public QObject {
     // re-Analyze knows the section order is human-owned and must not be
     // auto-reordered over.
     Q_PROPERTY(bool manual_order READ manualOrder WRITE setManualOrder NOTIFY manualOrderChanged)
+    // True when anything on the page carries the analysis' needs_review flag
+    // (a parked media button, an answer it was unsure of). Lets the editor
+    // point the reviewer straight at the pages that need a human.
+    Q_PROPERTY(bool needsReview READ needsReview NOTIFY sectionsChanged)
 
 public:
     explicit Page(QObject *parent = nullptr) : QObject(parent), _page_number(0) {}
+
+    bool needsReview() const {
+        for (Section *s : _sections) {
+            if (!s) continue;
+            if (s->_needsReview) return true;
+            for (Answer *a : s->_answers)
+                if (a && a->_needsReview) return true;
+            if (s->_activity)
+                for (Answer *a : s->_activity->_answers)
+                    if (a && a->_needsReview) return true;
+        }
+        return false;
+    }
     int _page_number;
     QString _image_path;
     QVector<Section*> _sections;

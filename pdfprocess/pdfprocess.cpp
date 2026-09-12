@@ -177,11 +177,20 @@ void PdfProcess::startProcessing(const QString &pdfConfig)
     process->setProcessEnvironment(env);
     process->setProcessChannelMode(QProcess::MergedChannels);
 
+    // smartdatahelper prints BOOK_DIR:<path> when it is done; Create needs it
+    // to open the book and chain Analyze.
+    auto bookDir = QSharedPointer<QString>::create();
+
     // Connect to readyRead to capture output in real-time
-    connect(process, &QProcess::readyRead, [this, process]() {
+    connect(process, &QProcess::readyRead, [this, process, bookDir]() {
         //QString line = process->readAll();
         //qDebug() << "Process output:" << output;
         QString line = process->readLine().trimmed();
+
+        if (line.startsWith("BOOK_DIR:")) {
+            *bookDir = line.mid(9).trimmed();
+            return;
+        }
 
         // PROGRESS mesajlarını yakala
         if (line.startsWith("PROGRESS:")) {
@@ -200,7 +209,7 @@ void PdfProcess::startProcessing(const QString &pdfConfig)
 
     // Connect to finished to handle completion
     connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            [this, process, tempPath](int exitCode, QProcess::ExitStatus exitStatus) {
+            [this, process, tempPath, bookDir](int exitCode, QProcess::ExitStatus exitStatus) {
                 QByteArray remainingOutput = process->readAllStandardOutput();
                 if (!remainingOutput.isEmpty()) {
                     QString remainingText = QString::fromUtf8(remainingOutput);
@@ -213,6 +222,8 @@ void PdfProcess::startProcessing(const QString &pdfConfig)
                             bool ok;
                             int progressValue = progressStr.toInt(&ok);
                             setProgress(progressValue);
+                        } else if (line.startsWith("BOOK_DIR:")) {
+                            *bookDir = line.mid(9).trimmed();
                         } else {
                             // Log mesajı
                             setLogMessages(line);
@@ -221,16 +232,16 @@ void PdfProcess::startProcessing(const QString &pdfConfig)
                     }
                 }
 
-                if (exitStatus == QProcess::NormalExit && exitCode == 0) {
+                const bool ok = (exitStatus == QProcess::NormalExit && exitCode == 0);
+                if (ok) {
                     qDebug() << "PDF processing completed successfully";
                     setLogMessages("PDF processing completed successfully");
-                    //emit processingCompleted();
                 } else {
                     QString error = "Process failed with exit code: " + QString::number(exitCode);
                     qDebug() << error;
-                    //emit processingError(error);
                     setLogMessages(error);
                 }
+                emit projectCreated(ok, ok ? *bookDir : QString());
 
                 // Clean up
                 QFile::remove(tempPath);
@@ -537,6 +548,56 @@ void PdfProcess::setProgress(int newProgress)
 bool PdfProcess::aiAnalyzing() const
 {
     return _aiAnalyzing;
+}
+
+QString PdfProcess::inspectSourceFolder(const QString &folder)
+{
+    QProcess proc;
+    QStringList args;
+    args << "-u" << (scriptsDir() + "/inspect_source.py") << folder;
+    proc.start(pythonExecutable(), args);
+    if (!proc.waitForFinished(120000)) {          // module detection reads every page
+        proc.kill();
+        proc.waitForFinished(2000);
+        return QStringLiteral("{\"ok\":false,\"error\":\"inspect timed out\"}");
+    }
+    const QString out = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
+    if (out.isEmpty()) {
+        const QString err = QString::fromUtf8(proc.readAllStandardError()).trimmed();
+        qWarning() << "inspectSourceFolder: no output;" << err;
+        QJsonObject o;
+        o["ok"] = false;
+        o["error"] = err.isEmpty() ? QStringLiteral("inspect produced no output")
+                                   : err.right(400);
+        return QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));
+    }
+    return out;
+}
+
+QString PdfProcess::verifyBook(const QString &configPath, bool mark)
+{
+    QProcess proc;
+    QStringList args;
+    args << "-u" << (scriptsDir() + "/verify_book.py") << configPath << "--quiet";
+    if (mark)
+        args << "--mark";
+    proc.start(pythonExecutable(), args);
+    if (!proc.waitForFinished(300000)) {      // reads every page of the PDF
+        proc.kill();
+        proc.waitForFinished(2000);
+        return QStringLiteral("{\"ok\":false,\"error\":\"verify timed out\"}");
+    }
+    const QString out = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
+    if (out.isEmpty()) {
+        const QString err = QString::fromUtf8(proc.readAllStandardError()).trimmed();
+        qWarning() << "verifyBook: no output;" << err;
+        QJsonObject o;
+        o["ok"] = false;
+        o["error"] = err.isEmpty() ? QStringLiteral("verify produced no output")
+                                   : err.right(400);
+        return QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));
+    }
+    return out;
 }
 
 QStringList PdfProcess::getTestVersions() const {

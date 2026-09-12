@@ -27,11 +27,13 @@ def iter_pages(cfg):
 
 
 def section_type(s):
-    return s.get("type") or s.get("activity", {}).get("type") or "?"
+    # Older human configs wrap an activity in a type:"fill" section with an
+    # empty answer list — the activity's type is the real one.
+    return (s.get("activity") or {}).get("type") or s.get("type") or "?"
 
 
 def answers_of(s):
-    return s.get("answer") or s.get("activity", {}).get("answer") or []
+    return (s.get("activity") or {}).get("answer") or s.get("answer") or []
 
 
 def inventory(cfg):

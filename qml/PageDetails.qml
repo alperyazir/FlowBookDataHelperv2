@@ -1236,6 +1236,17 @@ Item {
                         y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.coords.y * (picture.paintedHeight / picture.sourceSize.height)
                         width: modelData.coords.width * (picture.paintedWidth / picture.sourceSize.width)
                         height: modelData.coords.height * (picture.paintedHeight / picture.sourceSize.height)
+                        // Parked / unconfirmed button: flag it for review.
+                        Rectangle {
+                            visible: modelData.needsReview
+                            anchors.centerIn: parent
+                            width: root.imageHeights + 10
+                            height: root.imageHeights + 10
+                            radius: 8
+                            color: "#33ff8c00"
+                            border.color: "#ff8c00"
+                            border.width: 2
+                        }
                         // Highlight when this audio is the one open in the sidebar.
                         Rectangle {
                             visible: sideBar.audioVisible && sideBar.audioModelData === modelData
@@ -1300,6 +1311,17 @@ Item {
                         y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.coords.y * (picture.paintedHeight / picture.sourceSize.height)
                         width: modelData.coords.width * (picture.paintedWidth / picture.sourceSize.width)
                         height: modelData.coords.height * (picture.paintedHeight / picture.sourceSize.height)
+                        // Parked / unconfirmed button: flag it for review.
+                        Rectangle {
+                            visible: modelData.needsReview
+                            anchors.centerIn: parent
+                            width: root.imageHeights + 10
+                            height: root.imageHeights + 10
+                            radius: 8
+                            color: "#33ff8c00"
+                            border.color: "#ff8c00"
+                            border.width: 2
+                        }
                         // Highlight when this video is the one open in the sidebar.
                         Rectangle {
                             visible: sideBar.videoVisible && sideBar.videoModelData === modelData
@@ -1375,7 +1397,6 @@ Item {
                                 visible: sectionType === "fill"
                                 number: index + 1
                                 total: sectionItem.sectionAnswers ? sectionItem.sectionAnswers.length : 0
-                                diameter: root.imageHeights * 0.85
                                 pillColor: "#E65100"          // fills: orange
                                 anchors.horizontalCenter: parent.left
                                 anchors.verticalCenter: parent.top
@@ -1419,8 +1440,12 @@ Item {
                                                           || root.isFillSelected(modelData)
 
                                 color: "#7bd5bd"
-                                border.color: isSelected ? "#00e6e6" : "black"
-                                border.width: isSelected ? 4 : 2
+                                // needs_review: the analysis was not sure about
+                                // this answer — orange outline so the reviewer
+                                // can find it without opening every blank.
+                                border.color: isSelected ? "#00e6e6"
+                                              : (modelData.needsReview ? "#ff8c00" : "black")
+                                border.width: isSelected ? 4 : (modelData.needsReview ? 3 : 2)
                                 radius: 5
                                 anchors.fill: parent
                                 opacity: isSelected ? 0.65 : 0.4
@@ -2224,7 +2249,6 @@ Item {
                         OrderBadge {
                             number: root.activityRank(sectionItem.sectionIndex)
                             total: root.activityTotal()
-                            diameter: root.imageHeights * 0.85
                             pillColor: "#1565C0"          // activities: blue
                             // Sit on the icon's top-left corner (half-overlap),
                             // the usual badge spot. The freeze was the sidebar

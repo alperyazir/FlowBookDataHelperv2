@@ -34,6 +34,12 @@ Rectangle {
                 id: fileMenu
                 y: parent.height + 2
                 AppMenuItem { text: "New Project"; onTriggered: newProjectDialog.open() }
+                // One folder in, a finished book out: the PDFs, the modules,
+                // the media and the analysis, without filling in a form.
+                AppMenuItem {
+                    text: "Create…"
+                    onTriggered: mainwindow.startCreateFromFolder()
+                }
                 AppMenuItem {
                     text: "Open…"
                     onTriggered: {
@@ -156,6 +162,10 @@ Rectangle {
                 // state — so an abandoned crop can't poison a later activity
                 // crop, and normal activity crops are ignored here.
                 function onCropCompleted(success, outputPath) {
+                    // Create runs its own icon steps and must not have the
+                    // Analyze dialog pop up in the middle of them.
+                    if (mainwindow.createRunning)
+                        return;
                     var isAudio = outputPath.indexOf("icon_template_audio") !== -1;
                     var isVideo = outputPath.indexOf("icon_template_video") !== -1;
                     if (!isAudio && !isVideo)
@@ -169,6 +179,8 @@ Rectangle {
                     analyzeConfirmDialog.open();
                 }
                 function onAiAnalysisCompleted(success) {
+                    if (mainwindow.createRunning)
+                        return;               // Create chains its own icon pass
                     if (!analyzeConfirmDialog.runIconsAfterAnalyze)
                         return;
                     analyzeConfirmDialog.runIconsAfterAnalyze = false;
@@ -457,6 +469,34 @@ Rectangle {
             onClicked: {
                 content.goNext();
             }
+        }
+
+        // Jump to the next page the analysis flagged (orange outlines on the
+        // page show what exactly). Hidden when nothing in the book is flagged.
+        Button {
+            id: reviewJumpButton
+            anchors.verticalCenter: parent.verticalCenter
+            visible: content.anyReview
+            width: 132
+            height: parent.height
+            ToolTip.visible: hovered
+            ToolTip.text: "Go to the next page the analysis flagged for review"
+            background: Rectangle {
+                color: content.pages && content.pages[content.currentPageIndex]
+                       && content.pages[content.currentPageIndex].needsReview
+                       ? "#5a3a10" : "#232f34"
+                border.color: "#ff8c00"
+                border.width: 1
+                radius: 6
+            }
+            contentItem: Text {
+                text: "⚠ review ▸"
+                color: "#ff8c00"
+                font.bold: true
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            onClicked: content.goToNextReviewPage()
         }
     }
 

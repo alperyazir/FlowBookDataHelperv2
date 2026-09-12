@@ -142,6 +142,7 @@ def span_key(s):
 # ---------------------------------------------------------------------------
 
 REG_MIN_PAIRS = 5      # text anchors needed for a trustworthy median
+REFLOW_TOL = 12.0      # same text+font+size within this = same print (per-block reflow)
 REG_COHERENCE = 0.6    # anchors agreeing with the median (else reflow)
 REG_PAIR_TOL = 1.0     # "agreeing" = within this many pt of the median
 REG_RESP_MIN = 0.4     # min phase-correlation response
@@ -264,12 +265,22 @@ def _build_diff_spans(orig_page, ans_page, tol, offset=None):
         dx, dy = offset
     by_text = {}
     for o in get_spans(orig_page):
-        by_text.setdefault(o["text"], []).append(o["bbox"])
+        by_text.setdefault(o["text"], []).append(o)
 
     def is_new(s):
-        for b in by_text.get(s["text"], ()):
-            if abs(b[0] + dx - s["bbox"][0]) <= tol and \
-               abs(b[1] + dy - s["bbox"][1]) <= tol:
+        for o in by_text.get(s["text"], ()):
+            b = o["bbox"]
+            ddx = abs(b[0] + dx - s["bbox"][0])
+            ddy = abs(b[1] + dy - s["bbox"][1])
+            if ddx <= tol and ddy <= tol:
+                return False
+            # Per-block reflow (Harvest: option blocks drift ~6pt while
+            # the headers stay put, so registration finds no rigid
+            # offset): the same text in the same font and size a few
+            # points away is still the printed span, not an answer.
+            if ddx <= REFLOW_TOL and ddy <= REFLOW_TOL and \
+               o.get("font") == s.get("font") and \
+               abs(o.get("size", 0) - s.get("size", 0)) < 0.5:
                 return False
         return True
 

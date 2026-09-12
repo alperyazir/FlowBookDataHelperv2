@@ -427,7 +427,7 @@ def build_dragdrop_sections(po, pa, page_num, images_dir, prefix, sx, sy,
         fname = f"p{page_num}s{start_idx + k}.png"
         opts = [{"bbox": z["rect"]} for z in ex["zones"]]
         rect, scale = crop_band(po, ex["band"], opts,
-                                os.path.join(images_dir, fname))
+                                os.path.join(images_dir, fname), ex.get("header"))
         groups = group_zones(ex["zones"]) if group_mode else None
         # The drop validates against the dragged chip, so the answer
         # text must be the POOL's spelling of the word ("middle aged"
@@ -471,7 +471,7 @@ def build_dragdrop_sections(po, pa, page_num, images_dir, prefix, sx, sy,
                 "circleCount": 0,
                 "markCount": 0,
                 "coords": place_button(ex["header"], occupied,
-                                       po.rect.width, sx, sy),
+                                       po.rect.width, sx, sy, rect),
                 "headerText": ex["header_text"],
                 "section_path": f"{prefix}{fname}",
                 "image_coords": image_coords_from_rect(rect, sx, sy),

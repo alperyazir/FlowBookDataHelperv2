@@ -387,6 +387,217 @@ Dialog {
         anchors.fill: parent
     }
 
+    // --- Stray answer zones --------------------------------------------------
+    // Analyze can leave zones behind that the preview never shows: a sliver a
+    // few pixels across, or a box sitting off the crop. They still count in the
+    // review stepper and still ship to the reader, but there is nothing on
+    // screen to click. Flag them so each can be brought into view or deleted.
+    readonly property int strayMinSize: 10   // crop px; anything thinner is unseen
+    property int strayRev: 0                 // bump to re-evaluate strayZones
+
+    // The crop's pixel size — the space the answer coords live in. Same URL as
+    // the activity component's own image, so it comes from the image cache.
+    Image {
+        id: strayProbe
+        visible: false
+        asynchronous: true
+        source: (root.activityModelData && root.activityModelData.sectionPath)
+                ? "file:" + appPath + root.activityModelData.sectionPath : ""
+    }
+
+    // Only the previews that draw answer zones can hide one.
+    readonly property bool drawsZones: {
+        var t = activityModelData ? activityModelData.type : "";
+        return t === "circle" || t === "markwithx" || t === "fillpicture"
+                || t === "dragdroppicture" || t === "dragdroppicturegroup";
+    }
+
+    readonly property var strayZones: {
+        root.strayRev;
+        var out = [];
+        var W = strayProbe.sourceSize.width;
+        var H = strayProbe.sourceSize.height;
+        if (!root.visible || !root.drawsZones || W <= 0 || H <= 0)
+            return out;
+        var list = root.activityModelData.answers || [];
+        for (var i = 0; i < list.length; i++) {
+            var c = list[i].coords;
+            var reason = "";
+            if (c.width < root.strayMinSize || c.height < root.strayMinSize) {
+                reason = "too small";
+            } else {
+                var ix = Math.max(0, Math.min(c.x + c.width, W) - Math.max(c.x, 0));
+                var iy = Math.max(0, Math.min(c.y + c.height, H) - Math.max(c.y, 0));
+                if (ix * iy < 0.5 * c.width * c.height)
+                    reason = "off the image";
+            }
+            if (reason !== "")
+                out.push({ index: i, answer: list[i], reason: reason });
+        }
+        return out;
+    }
+    onStrayZonesChanged: if (strayPopup.opened && strayZones.length === 0) strayPopup.close()
+
+    // A zone dragged or resized into view stops being stray without the answer
+    // list changing, so follow every answer's coords too.
+    Instantiator {
+        model: root.drawsZones ? root.activityModelData.answers : []
+        delegate: Connections {
+            target: modelData
+            function onCoordsChanged() { root.strayRev++; }
+        }
+    }
+
+    // Keep the zone where it is as far as the crop allows, grow it to something
+    // that can be seen and grabbed, and select it so it is found at once.
+    function showStray(a) {
+        var W = strayProbe.sourceSize.width;
+        var H = strayProbe.sourceSize.height;
+        var c = a.coords;
+        var w = Math.min(W, Math.max(c.width, 60));
+        var h = Math.min(H, Math.max(c.height, 40));
+        var x = Math.max(0, Math.min(c.x, W - w));
+        var y = Math.max(0, Math.min(c.y, H - h));
+        a.coords = Qt.rect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+        if (currentActivity && currentActivity.setSingleAnsSelection)
+            currentActivity.setSingleAnsSelection(a);
+    }
+
+    function deleteStray(zones) {
+        // The selection may hold these answers; drop it before they go.
+        if (currentActivity && currentActivity.clearAnsSelection)
+            currentActivity.clearAnsSelection();
+        // Highest index first, so the lower ones stay valid while removing.
+        var idx = zones.map(function (z) { return z.index; })
+                       .sort(function (p, q) { return q - p; });
+        for (var i = 0; i < idx.length; i++)
+            activityModelData.removeAnswer(idx[i]);
+        if (reviewIndex >= answerCount)
+            reviewIndex = answerCount - 1;
+    }
+
+    Rectangle {
+        z: 100
+        visible: root.strayZones.length > 0
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.margins: 12
+        width: strayLabel.implicitWidth + 24
+        height: 32
+        radius: 16
+        color: strayArea.containsMouse ? "#5a2a12" : "#3d1f10"
+        border.color: "#ff8c00"
+        border.width: 1
+        Text {
+            id: strayLabel
+            anchors.centerIn: parent
+            text: "⚠ " + root.strayZones.length
+                  + (root.strayZones.length === 1 ? " hidden answer zone" : " hidden answer zones")
+            color: "#ffb866"
+            font.pixelSize: 13
+            font.bold: true
+        }
+        MouseArea {
+            id: strayArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: strayPopup.open()
+        }
+    }
+
+    Popup {
+        id: strayPopup
+        modal: true
+        anchors.centerIn: parent
+        width: Math.min(480, root.width * 0.8)
+        padding: 14
+        // Not CloseOnEscape: the dialog's own Escape shortcut would close the
+        // whole dialog along with it.
+        closePolicy: Popup.CloseOnPressOutside
+        onOpened: root.strayRev++
+
+        background: Rectangle {
+            color: "#1A2327"
+            border.color: "#ff8c00"
+            border.width: 1
+            radius: 6
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 8
+
+            Text {
+                text: "Answer zones the preview can't show"
+                color: "white"
+                font.pixelSize: 15
+                font.bold: true
+            }
+            Text {
+                Layout.fillWidth: true
+                text: "Too small to see, or mostly outside the crop. Show moves one onto the image and selects it; Delete removes it."
+                color: "#8aa0a8"
+                font.pixelSize: 12
+                wrapMode: Text.WordWrap
+            }
+
+            Repeater {
+                model: root.strayZones
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Text {
+                        Layout.fillWidth: true
+                        text: "#" + (modelData.index + 1) + "   " + modelData.reason + "   "
+                              + modelData.answer.coords.x + ", " + modelData.answer.coords.y + "   "
+                              + modelData.answer.coords.width + " × " + modelData.answer.coords.height
+                        color: "#cfe8ea"
+                        font.pixelSize: 13
+                        elide: Text.ElideRight
+                    }
+                    AppButton {
+                        text: "Show"
+                        variant: "secondary"
+                        Layout.preferredWidth: 64
+                        Layout.preferredHeight: 28
+                        onClicked: {
+                            root.showStray(modelData.answer);
+                            strayPopup.close();
+                        }
+                    }
+                    AppButton {
+                        text: "Delete"
+                        variant: "danger"
+                        Layout.preferredWidth: 64
+                        Layout.preferredHeight: 28
+                        onClicked: root.deleteStray([modelData])
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 6
+                spacing: 8
+                Item { Layout.fillWidth: true }
+                AppButton {
+                    text: "Close"
+                    variant: "secondary"
+                    Layout.preferredWidth: 72
+                    Layout.preferredHeight: 30
+                    onClicked: strayPopup.close()
+                }
+                AppButton {
+                    text: "Delete all"
+                    variant: "danger"
+                    Layout.preferredWidth: 96
+                    Layout.preferredHeight: 30
+                    onClicked: root.deleteStray(root.strayZones)
+                }
+            }
+        }
+    }
+
     // Previous / next activity. Siblings of mainContainer, never children:
     // clearMainContainer() destroys everything inside it on every swap.
     Repeater {

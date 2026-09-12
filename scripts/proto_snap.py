@@ -297,6 +297,59 @@ def _retypeset_echo_ids(po, pa, answers):
     return set(echo)
 
 
+SPACED_LETTERS_RE = re.compile(r"^(\S\s+){2,}\S$")     # "S   H   I   V"
+GRID_SINGLES = 4       # per-cell answers that prove the page is a letter grid
+
+
+def _split_spaced_letters(pa, answers):
+    """Letter-grid keys write one word per span with wide letter spacing
+    ("S   H   I   V", Kidnapped p38 / Daumen Hoch p59, 2026-09-06); the
+    editors mark one fill per cell. Split such spans into per-character
+    answers using the answered page's char boxes (rawdict), keeping the
+    original-space shift the diff applied to the span."""
+    from proto_inventory import page_rawdict_ws
+    need = [a for a in answers
+            if SPACED_LETTERS_RE.match(a["text"]) and len(a["text"].split()) >= 2]
+    # Two spaced spans used to be the entry price, on the theory that a lone
+    # one is wide-tracked prose rather than a grid. That cost The Chase 6 p4:
+    # 78 of the crossword's letters came out of the diff as their own cells
+    # and only SPORTSFIELD arrived as one span, so `need` held exactly one
+    # entry and the whole word stayed a single 453px-wide box (2026-09-09).
+    # A page already answering in single characters IS a letter grid, so one
+    # span is enough there.
+    singles = sum(1 for a in answers if len(a["text"].strip()) == 1)
+    if len(need) < 2 and not (need and singles >= GRID_SINGLES):
+        return answers
+    by_text = {}
+    for b in page_rawdict_ws(pa)["blocks"]:
+        if b["type"] != 0:
+            continue
+        for l in b["lines"]:
+            for sp in l["spans"]:
+                txt = "".join(c["c"] for c in sp["chars"]).strip()
+                if SPACED_LETTERS_RE.match(txt):
+                    by_text.setdefault(txt, []).append(
+                        (sp["bbox"], [(c["c"], c["bbox"]) for c in sp["chars"] if c["c"].strip()]))
+    out, split = [], 0
+    for a in answers:
+        cands = by_text.get(a["text"]) if a in need else None
+        if not cands:
+            out.append(a)
+            continue
+        # nearest same-text span (answer bbox is original-space: shifted)
+        sb, chars = min(cands, key=lambda c: abs(c[0][0] - a["bbox"][0]) + abs(c[0][1] - a["bbox"][1]))
+        dx, dy = a["bbox"][0] - sb[0], a["bbox"][1] - sb[1]
+        for ch, cb in chars:
+            e = dict(a)
+            e["text"] = ch
+            e["bbox"] = [cb[0] + dx, cb[1] + dy, cb[2] + dx, cb[3] + dy]
+            out.append(e)
+        split += 1
+    if split:
+        print(f"  Letter grid: split {split} spaced-letter span(s)", flush=True)
+    return out
+
+
 def snap_page(po, pa, sx, sy, skip_rects=None, use_cv=True,
               drop_offset_echoes=False):
     """Full fill pipeline for one page: diff -> snap -> optional CV
@@ -328,6 +381,7 @@ def snap_page(po, pa, sx, sy, skip_rects=None, use_cv=True,
             answers = [a for a in answers if id(a) not in echo_ids]
             if not answers:
                 return [], {"retypeset_echoes": len(echo_ids)}
+    answers = _split_spaced_letters(pa, answers)
     # Diff-reliability guard. On pages where the student book stores its
     # printed text as outlines/raster (Trace pages, fully illustrated
     # pages) the original has NO text layer, so the answered page's
@@ -345,13 +399,34 @@ def snap_page(po, pa, sx, sy, skip_rects=None, use_cv=True,
     letters = [a for a in answers
                if len(a["text"].strip()) == 1 and a["text"].strip().isalpha()]
     if len(letters) >= 20:
-        cells = find_tick_boxes(po)
+        cells = list(find_tick_boxes(po))
+        # Crossword cells can be larger rounded squares (Brains: ~30pt)
+        # that the 22pt tick-box cap ignores — scan squares up to 44pt.
+        seen = set()
+        for d in page_drawings(po):
+            r = d["rect"]
+            if 8 <= r.width <= 44 and abs(r.width - r.height) <= 4:
+                k = (int(r.x0 / 4), int(r.y0 / 4))
+                if k not in seen:
+                    seen.add(k)
+                    cells.append([r.x0, r.y0, r.x1, r.y1])
         def on_cell(a):
             cx = (a["bbox"][0] + a["bbox"][2]) / 2
             cy = (a["bbox"][1] + a["bbox"][3]) / 2
             return any(b[0] - 2 <= cx <= b[2] + 2 and
                        b[1] - 2 <= cy <= b[3] + 2 for b in cells)
-        drop = {id(a) for a in letters if not on_cell(a)}
+        # A key letter with no printed twin nearby in the original is a
+        # genuine cell entry even when the grid is drawn with lines, not
+        # squares (Daumen Hoch p59, 2026-09-06); the drop targets
+        # re-typeset word-search grids, whose letters ARE printed nearby.
+        orig_letters = [(sp["text"].strip(), sp["bbox"]) for sp in get_spans(po)
+                        if len(sp["text"].strip()) == 1]
+        def near_echo(a):
+            cx = (a["bbox"][0] + a["bbox"][2]) / 2
+            cy = (a["bbox"][1] + a["bbox"][3]) / 2
+            return any(t == a["text"].strip() and abs((b[0] + b[2]) / 2 - cx) < 40
+                       and abs((b[1] + b[3]) / 2 - cy) < 40 for t, b in orig_letters)
+        drop = {id(a) for a in letters if not on_cell(a) and near_echo(a)}
         answers = [a for a in answers if id(a) not in drop]
     if not answers:
         return [], {"puzzle_letters": len(letters)}

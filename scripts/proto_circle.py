@@ -33,11 +33,36 @@ from proto_inventory import (diff_answer_drawings, find_image_rects,
 OPTION_RE = re.compile(r"^([a-hA-H])[.)]$|^([a-hA-H])[.)]\s+\S")
 TF_RE = re.compile(r"^(T|F|TRUE|FALSE|YES|NO)$", re.IGNORECASE)
 HEADER_RE = re.compile(r"^\d{1,2}\.(\s+\S|$)")
-HEADER_X_MAX = 60.0        # exercise headers start at the page margin
+# The Chase 6 prints its question numbers at x=63.2, just past the old 60pt
+# cutoff, so NO header was ever seen and the whole page collapsed into one
+# band — p11 became a single circle activity holding all 5 questions and 22
+# options (2026-09-09). 64 rescues it; 72 starts pulling in the item numbers
+# inside an exercise (p46 lists items at 68.7).
+HDR_FIX = os.environ.get("FB_HDR_FIX", "1") != "0"
+HEADER_X_MAX = 60.0
+HEADER_X_WIDE = 64.0       # per-page fallback, see _build_exercise_bands
+HEADER_X_ADAPTIVE = 96.0   # furthest in a header column may sit from the edge
+COL_FIX = os.environ.get("FB_COL_FIX", "1") != "0"
+GLYPH_GAP_X = 14.0         # neighbouring glyph of a letter-by-letter word
+GLYPH_GAP_Y = 10.0
+# Coursebooks number their exercises WITHOUT the dot ("1" beside the
+# instruction, not "1."). HEADER_RE missed every one of them, so
+# _build_exercise_bands returned a single full-page band and the whole
+# page collapsed into one merged exercise plus an uncropped catch-all
+# fill (Switch To CLIL p40: 3 human exercises -> 1 + a bucket holding
+# every answer on the page, 2026-09-07). A bare margin number counts as
+# a header only when an instruction line starts beside it on the same
+# baseline — that is what separates it from a page number, which sits
+# alone in the bottom margin.
+BARE_HEADER = os.environ.get("FB_BARE_HEADER", "1") != "0"
+BARE_RE = re.compile(r"^\d{1,2}$")
+BARE_GAP = 40.0            # instruction starts within this of the number
+BARE_BASELINE = 4.0        # same-baseline tolerance
 CROP_TARGET = 1000.0       # longer side of the crop render
 CROP_MIN_SCALE = 2.0
 BUTTON_SIZE = 44           # entry button size in page-image pixels
 MIN_TAP_PT = 16            # minimum tap-target side (PDF points)
+MAX_MARK_BOXES = 40        # more small squares than this in one band = artwork
 
 
 def is_circle_drawing(d):
@@ -129,6 +154,48 @@ def find_exercise_bands(page):
     return _cached(page, "bands", lambda: _build_exercise_bands(page))
 
 
+def _is_logo_glyph(s, spans):
+    """One letter of a word drawn glyph by glyph, not an exercise label.
+
+    The Chase badge renders "THEME" as five single-letter spans 2-6pt apart
+    at the top margin, and the lone-capital rule (added for Goals' "A"/"B"
+    chips) read the H and the E as exercise headers on every page. A real
+    lettered header stands alone — Goals' A and B sit 225pt apart on the
+    same x — so a single capital with another single character touching it
+    horizontally is decoration."""
+    x0, y0, x1, _ = s["bbox"]
+    for o in spans:
+        if o is s or len(o["text"].strip()) != 1:
+            continue
+        ox0, oy0, ox1, _ = o["bbox"]
+        if abs(oy0 - y0) > GLYPH_GAP_Y:
+            continue
+        if min(abs(ox0 - x1), abs(x0 - ox1)) <= GLYPH_GAP_X:
+            return True
+    return False
+
+
+def _bare_headers(spans):
+    """Dotless exercise numbers at the left margin ("1" then the
+    instruction beside it). The same-baseline neighbour is what makes
+    this safe: a page number has nothing to its right."""
+    out = []
+    for s in spans:
+        if not BARE_RE.match(s["text"].strip()):
+            continue
+        x1, y0 = s["bbox"][2], s["bbox"][1]
+        if s["bbox"][0] > HEADER_X_MAX:
+            continue
+        for o in spans:
+            if o is s or abs(o["bbox"][1] - y0) >= BARE_BASELINE:
+                continue
+            if x1 - 1 < o["bbox"][0] < x1 + BARE_GAP and any(
+                    ch.isalpha() for ch in o["text"]):
+                out.append(s)
+                break
+    return out
+
+
 def _build_exercise_bands(page):
     """Rect bands [{rect, header}], one per numbered unit.
 
@@ -143,7 +210,16 @@ def _build_exercise_bands(page):
     # ("A", "B" chips — Goals-style books letter their exercises).
     numbered = [s for s in spans
                 if HEADER_RE.match(s["text"].strip())
-                or re.fullmatch(r"[A-H]", s["text"].strip())]
+                or (re.fullmatch(r"[A-H]", s["text"].strip())
+                    and not (HDR_FIX and _is_logo_glyph(s, spans)))]
+    # Fallback only: on a page that already prints dotted headers, adding
+    # bare numbers made things WORSE — a spurious anchor above a real one
+    # trips the 35pt rule in keep() and suppresses the real header (Glory
+    # p67/p70 lost an exercise each, 2026-09-07). Books that number with
+    # the dot never reach this branch; the dotless ones have nothing to
+    # lose because they had no margin header at all.
+    if BARE_HEADER and not any(s["bbox"][0] <= HEADER_X_MAX for s in numbered):
+        numbered = numbered + _bare_headers(spans)
 
     def row_count(s):
         return sum(1 for n in numbered
@@ -155,9 +231,32 @@ def _build_exercise_bands(page):
         if row_count(s) >= 3:
             return False
         above = [a for a in side if a["bbox"][1] < s["bbox"][1] - 2]
+        if COL_FIX:
+            # An anchor that is itself part of an item row is about to be
+            # dropped, so it must not suppress a real header below it: The
+            # Chase 6 p37 prints the five choice numbers 30pt above question
+            # 4's header, which killed the header and left the page single
+            # column (2026-09-09).
+            above = [a for a in above if row_count(a) < 3]
         return not above or s["bbox"][1] - max(a["bbox"][1] for a in above) > 35
 
-    left = sorted([s for s in numbered if s["bbox"][0] <= HEADER_X_MAX],
+    # Widen the margin only for a page where the strict cutoff finds nothing.
+    # Raising it for every page cost Brains 3 matchTheWords and Glory a circle
+    # (their headers sit inside 60pt, and the extra 4pt let item numbers in),
+    # while The Chase 6 prints at 63.2 and so saw no header at all.
+    xmax = HEADER_X_MAX
+    if HDR_FIX and not any(s["bbox"][0] <= xmax for s in numbered):
+        # Take the header column from the page instead of a constant. A book
+        # printed for binding indents its recto pages: The Chase 6 Practice
+        # Tests numbers questions at x=50 on even pages and x=71 on odd ones,
+        # and one fixed cutoff can only ever fit one of the two — 37 of its 95
+        # pages collapsed to a single band (2026-09-11). Only margin-ish
+        # candidates count, so a numbered item mid-column cannot become the
+        # column.
+        margin = [c["bbox"][0] for c in numbered
+                  if c["bbox"][0] <= HEADER_X_ADAPTIVE]
+        xmax = min(margin) + 4 if margin else HEADER_X_WIDE
+    left = sorted([s for s in numbered if s["bbox"][0] <= xmax],
                   key=lambda s: s["bbox"][1])
     right = sorted([s for s in numbered
                     if mid - 20 <= s["bbox"][0] <= mid + 80],
@@ -171,6 +270,26 @@ def _build_exercise_bands(page):
     # and closes both columns.
     twin = any(abs(l["bbox"][1] - r["bbox"][1]) < 6
                for l in left for r in right)
+    # Staggered two-column tests (Authentic/Harvest: "9." at y=187 left,
+    # "13." at y=106 right — no shared baseline) still have a proper
+    # right-column anchor stack: two or more numbered headers aligned on
+    # one x just past the middle. Treat that as two columns too.
+    if not twin and left and len(right) >= 2:
+        xs = sorted(r["bbox"][0] for r in right)
+        if xs[-1] - xs[0] <= 4:
+            twin = True
+        elif COL_FIX:
+            # Requiring EVERY right anchor to share one x let a stray item
+            # number break the test: The Chase 6 p23 numbers the four choices
+            # inside question 3's box at x=333 while the real right-column
+            # headers sit at x=320, so the spread came to 12.8 and the page
+            # was read as one column — question 1 (left) and question 4
+            # (right) then landed in the same full-width band and became one
+            # activity (2026-09-09). Two anchors agreeing on an x is a column.
+            for i, x in enumerate(xs):
+                if sum(1 for o in xs if abs(o - x) <= 4) >= 2 and i + 1 < len(xs):
+                    twin = True
+                    break
 
     bands = []
     if not twin:
@@ -185,19 +304,33 @@ def _build_exercise_bands(page):
 
     split_x = min(r["bbox"][0] for r in right) - 6
 
-    def right_flow_at(y):
-        """Is the right column mid-question at this latitude? True when
-        right-column text or artwork sits beside/below the anchor row."""
+    def right_flow_between(y0, y1):
+        """Is the right column busy anywhere over [y0, y1)? A left anchor
+        spans the full width only when the right column is empty for its
+        WHOLE height — checking just the first 40pt mistook a gap between
+        two right-column questions for a full-width row and truncated the
+        left question to that gap (victory_6 p7 lost question 2 entirely,
+        2026-09-06)."""
         for s in spans:
-            if s["bbox"][0] > split_x - 8 and y - 4 <= s["bbox"][1] <= y + 40:
+            if s["bbox"][0] > split_x - 8 and y0 - 4 <= s["bbox"][1] < y1:
                 return True
         for img in find_image_rects(page):
             ib = img["bbox"]
-            if ib[0] > split_x - 8 and ib[1] <= y + 40 and ib[3] >= y - 4:
+            if ib[0] > split_x - 8 and ib[1] < y1 and ib[3] >= y0 - 4:
                 return True
         return False
 
-    full = [h for h in left if not right_flow_at(h["bbox"][1])]
+    full = []
+    for i, h in enumerate(left):
+        y0 = h["bbox"][1]
+        nxt_left = [a["bbox"][1] for a in left[i + 1:]]
+        y1 = min(nxt_left) if nxt_left else H
+        # A right-column question STARTING inside this band proves the band
+        # is not full width, however empty the right column looks above it.
+        if any(y0 + 4 < a["bbox"][1] < y1 for a in right):
+            continue
+        if not right_flow_between(y0, y1):
+            full.append(h)
     col_left = [h for h in left if h not in full]
     full_ys = [h["bbox"][1] - 4 for h in full]
 
@@ -245,6 +378,53 @@ def _separate(opts):
             opts[i]["bbox"], opts[j]["bbox"] = tuple(a), tuple(b)
 
 
+def colour_marked_options(po, pa, tol=24.0):
+    """Answer keys that mark the correct option by printing it in the
+    answer colour instead of drawing a ring (Harvest / Authentic practice
+    tests, 2026-09-06). An option line that is answer-coloured in the
+    answered PDF and body-coloured in the original is a mark; it is
+    returned as a pseudo ring around the option's letter glyph so the
+    ring-based matching below treats it like a drawn circle. Matching is
+    text-based with a loose position tolerance: these publishers re-typeset
+    the option block with several points of drift."""
+    def _key(t):
+        # the key re-typesets "E)  Kids" with doubled spaces (Harvest p7)
+        return re.sub(r"\s+", " ", t).strip().lower()
+
+    by_text = {}
+    for o in get_spans(po):
+        t = o["text"].strip()
+        if option_letter(t):
+            by_text.setdefault(_key(t), []).append(o)
+    marks = []
+    for s in get_spans(pa):
+        t = s["text"].strip()
+        if not option_letter(t) or not _is_answer_colour(_span_rgb(s)):
+            continue
+        best, bd = None, tol
+        cands = by_text.get(_key(t))
+        if not cands:
+            # wrapped differently: same letter + same first words
+            k = _key(t)[:14]
+            cands = [o for kk, os_ in by_text.items() if kk[:14] == k for o in os_]
+        for o in cands:
+            if _span_rgb(o) == _span_rgb(s) or _is_answer_colour(_span_rgb(o)):
+                continue
+            d = abs(o["bbox"][0] - s["bbox"][0]) + abs(o["bbox"][1] - s["bbox"][1])
+            if d < bd:
+                best, bd = o, d
+        if best is None:
+            continue
+        b = best["bbox"]
+        size = best.get("size", b[3] - b[1])
+        pad = max(3.0, size * 0.4)
+        # ring around the letter glyph only (the option text may be long)
+        marks.append({"bbox": (b[0] - pad, b[1] - pad,
+                               min(b[2], b[0] + size * 1.2) + pad, b[3] + pad),
+                      "colour_mark": True})
+    return marks
+
+
 def detect_circle_exercises(po, pa, bands_override=None):
     """Returns a list of exercises:
     {band, header, options: [{letter, bbox, isCorrect}], counts}
@@ -253,6 +433,7 @@ def detect_circle_exercises(po, pa, bands_override=None):
     e.g. a crop area the user adjusted by hand in the editor."""
     circles = merge_circle_parts(
         [d for d in diff_answer_drawings(po, pa) if is_circle_drawing(d)])
+    circles += colour_marked_options(po, pa)
     if not circles:
         return []
     spans = get_spans(po)
@@ -694,33 +875,77 @@ def ordering(raw_dir, page_no, rect_px, png_size):
     return 0
 
 
-def crop_band(po, band, options, out_path):
-    """Crop the exercise area from the original PDF; returns (rect, scale).
+CROP_GAP = 20.0        # vertical gap that still belongs to the same exercise
+CROP_SIDE_GAP = 18.0   # horizontal gap for side-by-side content
+FOOTER_FRAC = 0.94     # below this share of the page height = page furniture
 
-    The band rect is only the search region — the crop hugs the actual
-    content inside it: text spans, embedded images and the options."""
+
+def _footer_like(b, page_h, page_w):
+    """Page number / running footer: small, low, and not full width."""
+    return b[1] > FOOTER_FRAC * page_h and (b[2] - b[0]) < 0.5 * page_w
+
+
+def crop_rect(po, band, options, header=None):
+    """The exercise's visual extent inside `band`.
+
+    Top/left/right follow the band's content (an exercise starts at its
+    numbered header and fills the column). The BOTTOM is the end of the
+    last content cluster that still holds an option: a band runs down to
+    the next header — or to the page bottom — so the plain bounding box
+    swept up footers, page numbers and the next exercise's stray lines.
+    Measured 2026-09-06 over 781 human crops: the bottom edge was wrong
+    on 41% of activities, more than twice any other edge."""
     bx0, by0, bx1, by1 = band
+    H, W = po.rect.height, po.rect.width
 
-    def inside(b):
+    def centre_in(b):
         cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
         return bx0 <= cx < bx1 and by0 <= cy < by1
 
-    content = [o["bbox"] for o in options]
-    content += [s["bbox"] for s in get_spans(po) if inside(s["bbox"])]
-    content += [i["bbox"] for i in find_image_rects(po) if inside(i["bbox"])]
+    content = [list(s["bbox"]) for s in get_spans(po) if centre_in(s["bbox"])]
+    content += [list(i["bbox"]) for i in find_image_rects(po) if centre_in(i["bbox"])]
+    content = [c for c in content if not _footer_like(c, H, W)]
+    opts = [list(o["bbox"]) for o in options]
+    if header is not None and header.get("bbox"):
+        content.append(list(header["bbox"]))
+    content += opts
+    if not content:
+        return None
 
-    xs0 = min(b[0] for b in content)
-    ys0 = min(b[1] for b in content)
-    xs1 = max(b[2] for b in content)
-    ys1 = max(b[3] for b in content)
-    # Artwork whose center is in the band may stick out over the band
-    # top (decorative headers): let the crop follow it a little.
+    # Vertical clusters: content separated by more than CROP_GAP belongs to
+    # something else. Keep everything down to the last cluster with an option.
+    content.sort(key=lambda b: b[1])
+    clusters = []
+    for c in content:
+        if clusters and c[1] - clusters[-1][1] <= CROP_GAP:
+            cl = clusters[-1]
+            cl[0] = min(cl[0], c[0]); cl[1] = max(cl[1], c[3])
+            cl[2] = min(cl[2], c[0]); cl[3] = max(cl[3], c[2])
+            cl[4].append(c)
+        else:
+            clusters.append([c[0], c[3], c[0], c[2], [c]])
+    def has_option(cl):
+        return any(any(abs(m[0] - o[0]) < 0.5 and abs(m[1] - o[1]) < 0.5 for o in opts)
+                   for m in cl[4])
+    last = max((i for i, cl in enumerate(clusters) if has_option(cl)), default=len(clusters) - 1)
+    kept = [m for cl in clusters[:last + 1] for m in cl[4]]
+
+    xs0 = min(b[0] for b in kept); ys0 = min(b[1] for b in kept)
+    xs1 = max(b[2] for b in kept); ys1 = max(b[3] for b in kept)
     img_top = min((i["bbox"][1] for i in find_image_rects(po)
-                   if inside(i["bbox"])), default=by0)
+                   if centre_in(i["bbox"])), default=by0)
     top_limit = max(0.0, min(by0, img_top), by0 - 14)
     pad = 6
-    rect = fitz.Rect(max(bx0, xs0 - pad), max(top_limit, ys0 - pad),
+    return fitz.Rect(max(bx0, xs0 - pad), max(top_limit, ys0 - pad),
                      min(bx1, xs1 + pad), min(by1, ys1 + pad))
+
+
+def crop_band(po, band, options, out_path, header=None):
+    """Crop the exercise area from the original PDF; returns (rect, scale)."""
+    rect = crop_rect(po, band, options, header)
+    if rect is None:
+        bx0, by0, bx1, by1 = band
+        rect = fitz.Rect(bx0, by0, bx1, by1)
     longer = max(rect.width, rect.height)
     scale = max(CROP_TARGET / longer, CROP_MIN_SCALE) if longer > 0 else CROP_MIN_SCALE
     pix = po.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=rect)
@@ -755,9 +980,35 @@ def _save_pixmap(pix, out_path, retries=2):
             time.sleep(0.2)
 
 
-def place_button(header, occupied, page_w, sx, sy):
-    """Entry button: under the exercise number, shifted into free space.
-    Returns page-image pixel coords."""
+def place_button(header, occupied, page_w, sx, sy, rect=None):
+    """Entry button in page-image pixels.
+
+    Preferred rule (derived from 828 human placements, 2026-09-06): the
+    button sits in the MARGIN beside the activity's crop — left of it for a
+    left-column exercise, right of it for a right-column one — level with
+    the crop's top. Matching the human's side from the crop's position on
+    the page holds on 100% of Glory/Harvest and 74% of Chase activities;
+    the gap to the crop edge is 10-27px, and the button overlaps the crop's
+    edge slightly on the left side.
+
+    `rect` is the crop rect in PDF points. Without it (callers that have no
+    crop) fall back to the old rule: under the exercise number, nudged into
+    free space.
+    """
+    if rect is not None:
+        page_w_px = page_w * sx
+        x0, y0 = rect.x0 * sx, rect.y0 * sy
+        x1 = rect.x1 * sx
+        wide = (x1 - x0) > 0.7 * page_w_px
+        left_side = wide or ((x0 + x1) / 2 < page_w_px / 2)
+        if left_side:
+            bx = x0 - BUTTON_SIZE + 12
+        else:
+            bx = x1 + 16
+        bx = max(2.0, min(bx, page_w_px - BUTTON_SIZE - 2))
+        return {"x": int(bx), "y": int(max(0.0, y0 + 12)),
+                "w": BUTTON_SIZE, "h": BUTTON_SIZE}
+
     if header is None:
         return {"x": 0, "y": 0, "w": BUTTON_SIZE, "h": BUTTON_SIZE}
     hb = header["bbox"]
@@ -784,7 +1035,7 @@ def build_circle_sections(po, pa, page_num, images_dir, prefix, sx, sy,
     for k, ex in enumerate(detect_circle_exercises(po, pa)):
         fname = f"p{page_num}s{start_idx + k}.png"
         rect, scale = crop_band(po, ex["band"], ex["options"],
-                                os.path.join(images_dir, fname))
+                                os.path.join(images_dir, fname), ex.get("header"))
         answers = []
         for o in ex["options"]:
             ob = o["bbox"]
@@ -806,7 +1057,7 @@ def build_circle_sections(po, pa, page_num, images_dir, prefix, sx, sy,
                 "answer": answers,
                 "circleCount": ex["circleCount"],
                 "markCount": 0,
-                "coords": place_button(ex["header"], occupied, po.rect.width, sx, sy),
+                "coords": place_button(ex["header"], occupied, po.rect.width, sx, sy, rect),
                 "headerText": "",
                 "section_path": f"{prefix}{fname}",
                 "image_coords": image_coords_from_rect(rect, sx, sy),
@@ -917,6 +1168,12 @@ def detect_markwithx_exercises(po, pa, bands_override=None):
         corr = [i for i in idxs if i in marked]
         if not corr or len(idxs) < 2:
             continue
+        # Still dozens of same-sized squares = artwork / a writing grid
+        # (Kapitaen Koko emitted 114-622 "boxes" per section, 2026-09-06),
+        # never a checkbox exercise. Applied after the size filter so a
+        # real 12-box exercise sharing a band with decor survives.
+        if len(idxs) > MAX_MARK_BOXES:
+            continue
         # Rows of equal box counts with exactly one mark each = "mark
         # one per question" (markCount = boxes per row); anything else
         # is free multi-select (markCount -1, Alper 2026-06-12).
@@ -955,16 +1212,76 @@ def detect_markwithx_exercises(po, pa, bands_override=None):
     return out
 
 
+def detect_tick_tables(po, pa):
+    """Tick tables without printed boxes (Goals "Yes/No" columns,
+    2026-09-06): the key stamps a ✓ glyph in one of >=2 columns per row.
+    Cells are inferred from the ✓ grid — one box per row x column, sized
+    by the row/column pitch. Returns the same shape as
+    detect_markwithx_exercises."""
+    from proto_inventory import diff_answer_spans
+    ticks = [s["bbox"] for s in diff_answer_spans(po, pa) if s["is_checkmark"]]
+    if len(ticks) < 3:
+        return []
+    # cluster x into columns, y into rows
+    def cluster(vals, tol):
+        out = []
+        for v in sorted(vals):
+            if out and v - out[-1][-1] <= tol:
+                out[-1].append(v)
+            else:
+                out.append([v])
+        return [sum(c) / len(c) for c in out]
+    xs = cluster([(t[0] + t[2]) / 2 for t in ticks], 12.0)
+    ys = cluster([(t[1] + t[3]) / 2 for t in ticks], 8.0)
+    if len(xs) < 2 or len(ys) < 3:
+        return []
+    col_pitch = min(b - a for a, b in zip(xs, xs[1:]))
+    row_pitch = min(b - a for a, b in zip(ys, ys[1:]))
+    if not (20 <= col_pitch <= 200 and 10 <= row_pitch <= 60):
+        return []
+    # every tick must sit on a (row, col) node
+    def node(t):
+        cx, cy = (t[0] + t[2]) / 2, (t[1] + t[3]) / 2
+        r = min(range(len(ys)), key=lambda i: abs(ys[i] - cy))
+        c = min(range(len(xs)), key=lambda i: abs(xs[i] - cx))
+        return (r, c) if abs(ys[r] - cy) <= 6 and abs(xs[c] - cx) <= 8 else None
+    marked = {node(t) for t in ticks}
+    if None in marked:
+        return []
+    per_row = [sum(1 for (r, c) in marked if r == ri) for ri in range(len(ys))]
+    if any(n == 0 for n in per_row):
+        return []          # a row without a mark: not a full table read
+    w, h = col_pitch - 6, min(row_pitch - 3, 26)
+    boxes = []
+    for ri, y in enumerate(ys):
+        for ci, x in enumerate(xs):
+            boxes.append({"bbox": [x - w / 2, y - h / 2, x + w / 2, y + h / 2],
+                          "isCorrect": (ri, ci) in marked})
+    mark_count = len(xs) if all(n == 1 for n in per_row) else -1
+    band = (max(0.0, xs[0] - col_pitch * 1.5), max(0.0, ys[0] - row_pitch * 1.5),
+            min(po.rect.width, xs[-1] + col_pitch * 0.8), min(po.rect.height, ys[-1] + row_pitch * 0.8))
+    # header: the exercise band that contains the table's top-left
+    header = None
+    for b in find_exercise_bands(po):
+        bx0, by0, bx1, by1 = b["rect"]
+        if by0 <= ys[0] < by1 and bx0 <= xs[0] < bx1:
+            header = b["header"]
+            band = (bx0, band[1], bx1, band[3])
+            break
+    return [{"band": band, "header": header, "boxes": boxes, "markCount": mark_count}]
+
+
 def build_markwithx_sections(po, pa, page_num, images_dir, prefix, sx, sy,
                              start_idx=1):
     """Emit editor-format markwithx sections (and write crop images)."""
     sections = []
     occupied = [s["bbox"] for s in get_spans(po)]
-    for k, ex in enumerate(detect_markwithx_exercises(po, pa)):
+    exercises = detect_markwithx_exercises(po, pa) or detect_tick_tables(po, pa)
+    for k, ex in enumerate(exercises):
         fname = f"p{page_num}s{start_idx + k}.png"
         opts = [{"bbox": b["bbox"]} for b in ex["boxes"]]
         rect, scale = crop_band(po, ex["band"], opts,
-                                os.path.join(images_dir, fname))
+                                os.path.join(images_dir, fname), ex.get("header"))
         answers = []
         for b in ex["boxes"]:
             bb = b["bbox"]
@@ -987,7 +1304,7 @@ def build_markwithx_sections(po, pa, page_num, images_dir, prefix, sx, sy,
                 "circleCount": 0,
                 "markCount": ex["markCount"],
                 "coords": place_button(ex["header"], occupied,
-                                       po.rect.width, sx, sy),
+                                       po.rect.width, sx, sy, rect),
                 "headerText": "",
                 "section_path": f"{prefix}{fname}",
                 "image_coords": image_coords_from_rect(rect, sx, sy),
