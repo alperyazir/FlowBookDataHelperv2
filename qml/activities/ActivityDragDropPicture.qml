@@ -419,7 +419,6 @@ Rectangle {
                                 OrderBadge {
                                     number: index + 1
                                     total: activityModelData.answers ? activityModelData.answers.length : 0
-                                    diameter: Math.max(16, Math.min(answerRect.width, answerRect.height) * 0.6)
                                     pillColor: "#E65100"
                                     anchors.horizontalCenter: parent.left
                                     anchors.verticalCenter: parent.top

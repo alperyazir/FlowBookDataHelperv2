@@ -1397,7 +1397,6 @@ Item {
                                 visible: sectionType === "fill"
                                 number: index + 1
                                 total: sectionItem.sectionAnswers ? sectionItem.sectionAnswers.length : 0
-                                diameter: root.imageHeights * 0.85
                                 pillColor: "#E65100"          // fills: orange
                                 anchors.horizontalCenter: parent.left
                                 anchors.verticalCenter: parent.top
@@ -2250,7 +2249,6 @@ Item {
                         OrderBadge {
                             number: root.activityRank(sectionItem.sectionIndex)
                             total: root.activityTotal()
-                            diameter: root.imageHeights * 0.85
                             pillColor: "#1565C0"          // activities: blue
                             // Sit on the icon's top-left corner (half-overlap),
                             // the usual badge spot. The freeze was the sidebar

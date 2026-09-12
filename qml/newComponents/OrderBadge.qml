@@ -5,14 +5,16 @@ import QtQuick.Controls
 // the item's reading-order position and, on click, lets you type a new one;
 // `reorderRequested(int)` fires with the 1-based target so the host can call
 // the matching move (page.moveSection for activities, page.moveAnswer for
-// fill blanks). `diameter` is driven by the caller from the page zoom so the
-// badge grows and shrinks with the artwork.
+// fill blanks). `diameter` is a fixed on-screen size, not tied to the zoom:
+// blanks sit shoulder to shoulder at every zoom, and a badge that grew with
+// the artwork covered its neighbours and took their clicks. Keeping it small
+// means zooming in opens room between badges instead of scaling the crowd.
 Item {
     id: badge
 
     property int number: 0        // 1-based position to display
     property int total: 0         // count of siblings (input cap)
-    property real diameter: 18    // scales with zoom; caller feeds imageHeights
+    property real diameter: 18    // on-screen px, independent of the zoom
     property color pillColor: "#1565C0"   // stream color (activities vs fills)
     property bool editable: true          // false = show the number only
 

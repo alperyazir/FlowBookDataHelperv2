@@ -312,7 +312,6 @@ Rectangle {
                                 OrderBadge {
                                     number: index + 1
                                     total: root.sentences ? root.sentences.length : 0
-                                    diameter: Math.max(16, dropRect.height * 0.7)
                                     pillColor: "#E65100"
                                     editable: false
                                     anchors.horizontalCenter: parent.left
