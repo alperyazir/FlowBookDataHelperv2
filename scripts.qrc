@@ -9,6 +9,8 @@
         <file>scripts/align_audio.py</file>
         <file>scripts/audio_cbr.py</file>
         <file>scripts/book_files.py</file>
+        <file>scripts/flowbook_normalize.py</file>
+        <file>scripts/package_book.py</file>
         <file>scripts/passage_text.py</file>
         <file>scripts/passage_ocr.py</file>
         <file>scripts/compress_pdf.py</file>

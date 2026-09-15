@@ -732,26 +732,31 @@ bool PdfProcess::removeDir(const QString &dirPath) {
 // Entries that must never end up inside a packaged book: editor/AI work
 // artifacts, backups, and OS/app junk. Applied only to the book-data copy
 // (not the FlowBook runtime, which may legitimately ship .ini/settings.json).
-static bool isExcludedFromPackage(const QString &name, bool isDir) {
+static bool isExcludedFromPackage(const QString &name, bool isDir, bool atRoot) {
     const QString lower = name.toLower();
-    // raw/ is excluded wholesale here; the package step copies just the
-    // original PDF back as raw/original.pdf, so the answered PDF and other
-    // raw artifacts still stay out of the package. .pkgcache is a leftover of
-    // the old PDF-optimize cache — never ship it.
+    // raw/ is excluded wholesale here; the package step copies original.pdf
+    // and answered.pdf back from the normalized export, so any other raw
+    // artifact stays out of the package. .pkgcache is the PDF-optimize cache
+    // — never ship it.
+    // Folder names count only at the book's root, where the editor writes
+    // them: further down they are the publisher's content — Next Level 1-3
+    // keep real pages in images/Review/. package_book.py follows the same rule.
     if (isDir)
-        return name == "raw" || name == "review" || name == "temp"
-            || name == ".pkgcache";
+        return atRoot && (name == "raw" || lower == "review" || lower == "temp"
+                          || lower == "tmp" || name == ".pkgcache");
     // macOS / Windows junk
     if (name == ".DS_Store" || name.startsWith("._")
         || lower == "thumbs.db" || lower == "desktop.ini")
         return true;
-    // book-processing artifacts
-    if (name == "ai_overrides.json" || name == "audit_log.jsonl")
+    // book-processing artifacts, written next to config.json
+    if (atRoot && (name == "ai_overrides.json" || name == "audit_log.jsonl"))
         return true;
-    // app / config junk
-    if (name == "settings.json" || lower.endsWith(".ini"))
+    // app / config junk — ignoring case: a copy that went through Windows can
+    // come back as Settings.json or FBINF. fbinf is the editor's encrypted
+    // install/lock state and must never ship.
+    if (lower == "settings.json" || lower.endsWith(".ini"))
         return true;
-    if (name == "fbinf" || lower.endsWith(".fbinf"))
+    if (lower == "fbinf" || lower.endsWith(".fbinf"))
         return true;
     // any backup (config.json.bak, .bak.audit, .bak.safe, ...)
     if (name.contains(".bak"))
@@ -761,7 +766,8 @@ static bool isExcludedFromPackage(const QString &name, bool isDir) {
 
 // Helper function to recursively copy a directory. When filterBookData is
 // true, editor artifacts / backups / OS junk are skipped (see above).
-bool PdfProcess::copyDir(const QString &srcPath, const QString &dstPath, bool filterBookData) {
+bool PdfProcess::copyDir(const QString &srcPath, const QString &dstPath, bool filterBookData,
+                         bool atBookRoot) {
     QDir srcDir(srcPath);
     QDir dstDir(dstPath);
 
@@ -773,14 +779,14 @@ bool PdfProcess::copyDir(const QString &srcPath, const QString &dstPath, bool fi
 
     bool success = true;
     for (const QFileInfo &info : srcDir.entryInfoList(QDir::NoDotAndDotDot | QDir::System | QDir::Hidden  | QDir::AllDirs | QDir::Files, QDir::DirsFirst)) {
-        if (filterBookData && isExcludedFromPackage(info.fileName(), info.isDir()))
+        if (filterBookData && isExcludedFromPackage(info.fileName(), info.isDir(), atBookRoot))
             continue;
 
         QString srcItemPath = srcPath + "/" + info.fileName();
         QString dstItemPath = dstPath + "/" + info.fileName();
 
         if (info.isDir()) {
-            success = copyDir(srcItemPath, dstItemPath, filterBookData);
+            success = copyDir(srcItemPath, dstItemPath, filterBookData, false);
         } else {
             success = QFile::copy(srcItemPath, dstItemPath);
         }
@@ -987,24 +993,294 @@ QString PdfProcess::getLatestFlowBookVersion(const QString &platformPath) const 
     return entries.isEmpty() ? QString() : entries.first();
 }
 
-bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNames)
+QString PdfProcess::runPackageScript(const QStringList &args, int timeoutMs, int *exitCode)
 {
-    setProgress(0);
+    QProcess proc;
+    proc.setProcessChannelMode(QProcess::MergedChannels);
+    proc.start(pythonExecutable(),
+               QStringList() << "-u" << (scriptsDir() + "/package_book.py") << args);
+    int code = 2;
+    QJsonObject result;
+    if (!proc.waitForFinished(timeoutMs)) {
+        const QString why = proc.errorString();
+        proc.kill();
+        proc.waitForFinished(2000);
+        result["hata"] = QStringLiteral("package_book.py did not finish: ") + why;
+    } else {
+        const QString output = QString::fromUtf8(proc.readAll());
+        const QStringList lines = output.split('\n');
+        for (auto it = lines.crbegin(); it != lines.crend(); ++it) {
+            const QString t = it->trimmed();
+            if (t.startsWith("RESULT_JSON:")) {
+                result = QJsonDocument::fromJson(t.mid(12).trimmed().toUtf8()).object();
+                break;
+            }
+        }
+        if (result.isEmpty()) {
+            qWarning() << "package_book.py: no result;" << output.right(1000);
+            result["hata"] = extractScriptError(output, proc.exitCode());
+        } else if (proc.exitStatus() == QProcess::NormalExit) {
+            code = proc.exitCode();
+        }
+    }
+    if (exitCode)
+        *exitCode = code;
+    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+}
 
-    // One package may bundle several books (e.g. a paired Student Book +
-    // Workbook); they all go under data/books/. The package is named after
-    // the joined book names.
-    const QString packageName = bookNames.join(" + ");
-    qDebug() << "package() bookNames:" << bookNames << "platforms:" << platforms;
+QString PdfProcess::checkBookForPackage(const QString &book)
+{
+    return runPackageScript(QStringList() << "check" << (booksDir() + book), 120000, nullptr);
+}
 
-    if (bookNames.isEmpty()) {
+QString PdfProcess::packageFolderPreview(const QString &title, const QString &publisher)
+{
+    // "--opt=value": a title that starts with "-" must not read as an option.
+    return runPackageScript(QStringList() << "title" << ("--baslik=" + title)
+                                          << ("--yayinevi=" + publisher),
+                            30000, nullptr);
+}
+
+// Everything the normalizer changed or noticed, in the package log — nothing
+// about the book leaves silently.
+void PdfProcess::logNormalizeReport(const QJsonObject &r)
+{
+    const auto log = [this](const QString &s) { setLogMessages("       " + s); };
+    const auto names = [](const QJsonValue &v) {
+        QStringList out;
+        for (const QJsonValue &x : v.toArray())
+            out << x.toString();
+        return out;
+    };
+
+    log(QString("→ book_export/%1   (%2 MB)")
+            .arg(r.value("klasor").toString()).arg(r.value("mb").toDouble()));
+    if (r.value("geri_yazildi").toBool())
+        log("✎  title and publisher saved to the project's config.json");
+    for (const QString &w : names(r.value("baslik_uyari")))
+        log("⚠  title: " + w);
+
+    const QJsonObject ad = r.value("ad").toObject();
+    if (ad.value("sayi").toInt() > 0)
+        log(QString("renamed %1 file(s)/folder(s)").arg(ad.value("sayi").toInt()));
+    for (const QJsonValue &v : ad.value("cakisma").toArray()) {
+        const QJsonObject c = v.toObject();
+        log(c.contains("hata")
+                ? QString("⚠  could not rename %1: %2").arg(c.value("kaynak").toString(),
+                                                           c.value("hata").toString())
+                : QString("⚠  name clash, kept both: %1 → %2").arg(c.value("kaynak").toString(),
+                                                                  c.value("verilen").toString()));
+    }
+
+    const QJsonObject ref = r.value("referans").toObject();
+    if (ref.value("onarilan").toInt() > 0)
+        log(QString("✓  repaired %1 broken path(s) in config.json").arg(ref.value("onarilan").toInt()));
+    for (const QString &p : names(ref.value("belirsiz")))
+        log("⚠  ambiguous path left as it was: " + p);
+
+    const QJsonObject txt = r.value("bozuk_metin").toObject();
+    if (txt.value("kurtarilamaz").toInt() > 0)
+        log(QString("⚠  %1 corrupt text value(s) could not be recovered (now empty)")
+                .arg(txt.value("kurtarilamaz").toInt()));
+    if (txt.value("dokunma").toInt() > 0)
+        log(QString("⚠  %1 corrupt text value(s) left untouched").arg(txt.value("dokunma").toInt()));
+
+    const QJsonObject img = r.value("gorsel").toObject();
+    if (img.value("degisen").toInt() > 0)
+        log(QString("assets/: %1 image(s) downscaled (%2 → %3 MB)")
+                .arg(img.value("degisen").toInt())
+                .arg(img.value("once_mb").toDouble()).arg(img.value("sonra_mb").toDouble()));
+    if (img.value("durum").toString().contains("kurulu degil"))
+        log("⚠  " + img.value("durum").toString());
+    // Editor leftovers under images/ that no JSON refers to (the module's rule;
+    // images/ only — the reader loads subtitles, audio.json and raw/ by name).
+    const QJsonObject unref = r.value("referanssiz_gorsel").toObject();
+    if (unref.value("silinen").toInt() > 0)
+        log(QString("images/: %1 unreferenced image(s) left out (%2 MB)")
+                .arg(unref.value("silinen").toInt()).arg(unref.value("mb").toDouble()));
+    if (unref.contains("durum"))
+        log("⚠  unreferenced images kept: " + unref.value("durum").toString());
+
+    const QJsonObject pdf = r.value("pdf").toObject();
+    for (const QString &k : {QStringLiteral("original.pdf"), QStringLiteral("answered.pdf")}) {
+        const QJsonObject o = pdf.value(k).toObject();
+        if (o.contains("birlestirildi"))
+            log(QString("%1 merged from: %2").arg(k, names(o.value("birlestirildi")).join(", ")));
+        if (o.contains("durum"))
+            log(QString("⚠  %1: %2").arg(k, o.value("durum").toString()));
+    }
+    if (r.contains("answered_kaynak"))
+        log("answered.pdf: " + r.value("answered_kaynak").toString());
+
+    const QJsonObject raw = r.value("raw").toObject();
+    for (const QString &n : names(raw.value("silinen_kopya")))
+        log("removed duplicate from raw/: " + n);
+    for (const QString &n : names(raw.value("ek")))
+        log("⚠  extra file in raw/, kept out of the package: " + n);
+    const QStringList editorFiles = names(r.value("editor_dosyalari"));
+    if (!editorFiles.isEmpty())
+        log("removed editor/OS files: " + editorFiles.join(", "));
+
+    // audio/audio.json keys, renamed by the module along with the audio files.
+    const QJsonObject k = r.value("audio_json").toObject();
+    if (k.value("yeniden_adlandirilan").toInt() > 0)
+        log(QString("karaoke: %1 audio id(s) renamed with their files")
+                .arg(k.value("yeniden_adlandirilan").toInt()));
+    for (const QString &n : names(k.value("cakisma")))
+        log("⚠  karaoke: id clash, kept as it was: " + n);
+    if (k.value("kopuk_sayi").toInt() > 0)
+        log(QString("⚠  karaoke: %1 id(s) have no audio file, e.g. %2")
+                .arg(k.value("kopuk_sayi").toInt())
+                .arg(names(k.value("kopuk")).value(0)));
+    if (k.contains("hata"))
+        log("⚠  karaoke: " + k.value("hata").toString());
+
+    if (!r.value("sayfa_uyari").toString().isEmpty())
+        log("⚠  " + r.value("sayfa_uyari").toString());
+    if (!r.value("logo_uyari").toString().isEmpty())
+        log("⚠  " + r.value("logo_uyari").toString());
+}
+
+// Project ▸ Optimize leaves a compressed original.pdf in the PROJECT's
+// .pkgcache, and the normalizer deletes .pkgcache from its copy as junk — so
+// the optimized PDF is carried into the export here, after normalizing. Only
+// while the export's original.pdf is still the file that cache was built from
+// (same size as the project's original): if the normalizer merged parts or
+// picked another PDF, the cache belongs to something else and the full-size
+// PDF ships instead.
+bool PdfProcess::applyOptimizedPdf(const QString &book, const QString &exportDir)
+{
+    const QString status = originalPdfStatus(book);
+    if (status != "ready") {
+        if (status != "none")
+            setLogMessages(QString("       ⚠  original.pdf is not optimized — "
+                                   "it ships full size"));
+        return true;
+    }
+    const QString cache = booksDir() + book + "/.pkgcache/original.pdf";
+    const QString projectPdf = findOriginalPdf(booksDir() + book + "/raw");
+    const QString dst = exportDir + "/raw/original.pdf";
+    if (projectPdf.isEmpty() || QFileInfo(projectPdf).size() != QFileInfo(dst).size()) {
+        setLogMessages("       ⚠  the optimized PDF was made from a different original "
+                       "than the one exported — original.pdf ships full size");
+        return true;
+    }
+    const QString tmp = dst + ".optimized";
+    QFile::remove(tmp);
+    if (!QFile::copy(cache, tmp)) {
+        setLogMessages("✖  Could not copy the optimized original.pdf into the export.");
+        return false;
+    }
+    QFile::remove(dst);
+    if (!QFile::rename(tmp, dst)) {
+        setLogMessages("✖  Could not replace original.pdf with the optimized copy.");
+        return false;
+    }
+    setLogMessages(QString("       original.pdf: optimized copy (%1 MB → %2 MB)")
+                       .arg(QFileInfo(projectPdf).size() / 1048576)
+                       .arg(QFileInfo(dst).size() / 1048576));
+    return true;
+}
+
+// Every book is normalized into book_export/<Folder>/ first: the package is
+// built from that export, never from the project folder, and Export Book stops
+// here. The project itself is only read — apart from its title and publisher,
+// which are written back on purpose.
+bool PdfProcess::normalizeBooks(const QVariantList &books, QStringList &folders,
+                                QStringList &exportDirs, int progressFrom, int progressTo)
+{
+    if (books.isEmpty()) {
         setLogMessages("✖  No books selected.");
         return false;
     }
-    setLogMessages(QString("📦  Packaging  \"%1\"   (%2 book%3, %4 platform%5)")
-                       .arg(packageName)
-                       .arg(bookNames.size()).arg(bookNames.size() == 1 ? "" : "s")
-                       .arg(platforms.size()).arg(platforms.size() == 1 ? "" : "s"));
+
+    setProgress(progressFrom);
+    setLogMessages("📚  Verifying books…");
+    for (const QVariant &v : books) {
+        const QString book = v.toMap().value("book").toString();
+        if (book.isEmpty() || !QDir(booksDir() + book).exists()) {
+            setLogMessages("✖  Book not found: " + book);
+            qDebug() << "Source book not found:" << (booksDir() + book);
+            return false;
+        }
+    }
+
+    const QString exportRoot = QDir::cleanPath(booksDir() + "../book_export");
+    QDir().mkpath(exportRoot);
+    for (int i = 0; i < books.size(); ++i) {
+        const QVariantMap b = books[i].toMap();
+        const QString book = b.value("book").toString();
+        const QString publisher = b.value("publisher").toString();
+        const QString answered = b.value("answered").toString();
+        setProgress(progressFrom + (progressTo - progressFrom) * i / books.size());
+        setLogMessages(QString("🧾  Normalizing  %1 …").arg(book));
+
+        QStringList args;
+        args << "normalize" << (booksDir() + book) << exportRoot
+             << ("--baslik=" + b.value("title").toString());
+        // An empty publisher is the dialog's "None": clear it rather than keep
+        // whatever the project had.
+        if (publisher.isEmpty())
+            args << "--yayinevi-yok";
+        else
+            args << ("--yayinevi=" + publisher);
+        args << "--geri-yaz";
+        if (answered == "original")
+            args << "--answered-original";
+        else if (!answered.isEmpty())
+            args << ("--answered=" + answered);
+
+        int code = 2;
+        const QJsonObject r = QJsonDocument::fromJson(
+            runPackageScript(args, 60 * 60 * 1000, &code).toUtf8()).object();
+        if (code == 2 || r.contains("hata")) {
+            setLogMessages(QString("✖  %1: %2").arg(book, r.value("hata").toString()));
+            return false;
+        }
+        logNormalizeReport(r);
+
+        const QJsonObject check = r.value("dogrulama").toObject();
+        const int broken = check.value("kirik_referans").toInt();
+        if (code != 0 || broken > 0) {
+            // Every one, with its module and page, so nobody has to go looking.
+            // Counted from that list (one line per path per page), not the
+            // module's per-occurrence number, so the header matches the lines.
+            const QJsonArray detail = r.value("kirik_detay").toArray();
+            setLogMessages(QString("✖  %1: %2 path(s) in config.json point at files that "
+                                   "don't exist — stopped.")
+                               .arg(book).arg(detail.isEmpty() ? broken : detail.size()));
+            for (const QJsonValue &v : detail)
+                setLogMessages("       " + v.toObject().value("metin").toString());
+            if (detail.isEmpty())
+                for (const QJsonValue &p : check.value("ornek").toArray())
+                    setLogMessages("       " + p.toString());
+            return false;
+        }
+
+        const QString folder = r.value("klasor").toString();
+        if (folders.contains(folder)) {
+            setLogMessages(QString("✖  Two books export to book_export/%1 — give them "
+                                   "different titles.").arg(folder));
+            return false;
+        }
+        const QString exportDir = r.value("hedef").toString();
+        if (!applyOptimizedPdf(book, exportDir))
+            return false;
+        folders << folder;
+        exportDirs << exportDir;
+    }
+    setProgress(progressTo);
+    return true;
+}
+
+bool PdfProcess::package(const QStringList &platforms, const QVariantList &books)
+{
+    setProgress(0);
+    qDebug() << "package() books:" << books << "platforms:" << platforms;
+
+    QStringList folders, exportDirs;
+    if (!normalizeBooks(books, folders, exportDirs, 0, 36))
+        return false;
 
     // Get application directory
     QString appDir = QGuiApplication::applicationDirPath();
@@ -1014,8 +1290,17 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
     appDir += "/../";
 #endif
 
+    // One package may bundle several books (e.g. a paired Student Book +
+    // Workbook); they all go under data/books/. The package is named after
+    // the exported folders.
+    const QString packageName = folders.join(" + ");
+    setLogMessages(QString("📦  Packaging  \"%1\"   (%2 book%3, %4 platform%5)")
+                       .arg(packageName)
+                       .arg(folders.size()).arg(folders.size() == 1 ? "" : "s")
+                       .arg(platforms.size()).arg(platforms.size() == 1 ? "" : "s"));
+
     // Create/Clean release directory for the book
-    setProgress(5);
+    setProgress(38);
     QString releaseBookPath = appDir + "release/" + packageName;
     QDir releaseDir(releaseBookPath);
 
@@ -1033,21 +1318,10 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
         return false;
     }
 
-    // Source book path
-    setProgress(10);
-    setLogMessages("📚  Verifying books…");
-    for (const QString &book : bookNames) {
-        if (!QDir(appDir + "books/" + book).exists()) {
-            setLogMessages("✖  Book not found: " + book);
-            qDebug() << "Source book not found:" << (appDir + "books/" + book);
-            return false;
-        }
-    }
-
     int totalPlatforms = platforms.length();
     int currentPlatform = 0;
-    // Her platform için progress aralığı (10-100 arası)
-    int progressPerPlatform = 90 / totalPlatforms; // 90 = 100 - 10 (önceki işlemler)
+    // Progress span per platform (40-100; normalizing took the first 40)
+    int progressPerPlatform = 60 / totalPlatforms;
 
     // Process each selected platform
     for (const QString &platform : platforms) {
@@ -1057,7 +1331,7 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
                              platform == "macos" ? "macOS" : platform;
 
         // Platform başlangıç progress'i
-        int baseProgress = 10 + (currentPlatform - 1) * progressPerPlatform;
+        int baseProgress = 40 + (currentPlatform - 1) * progressPerPlatform;
         
         setProgress(baseProgress);
         setLogMessages(QString("▸  %1   (%2/%3)").arg(platformName).arg(currentPlatform).arg(totalPlatforms));
@@ -1099,12 +1373,13 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
             continue;
         }
 
-        // Book data kopyalama (her seçili kitap data/books/ altına, filtreli)
+        // Book data: each normalized export under data/books/<Folder>/ (filtered)
         setProgress(baseProgress + progressPerPlatform * 0.6); // %60
         setLogMessages(QString("    %1 · adding books…").arg(platformName));
         bool bookCopyOk = true;
-        for (const QString &book : bookNames) {
-            QString srcBook = appDir + "books/" + book;
+        for (int b = 0; b < exportDirs.size(); ++b) {
+            const QString &book = folders[b];
+            const QString &srcBook = exportDirs[b];
             QString dstBook = targetPath + "/data/books/" + book;
             qDebug() << "copying book" << srcBook << "->" << dstBook;
             if (!copyDir(srcBook, dstBook, true)) {
@@ -1123,21 +1398,20 @@ bool PdfProcess::package(const QStringList &platforms, const QStringList &bookNa
                 setLogMessages(QString("       ⚠  %1 · %2 is variable bitrate — "
                                        "seeking will drift; re-run karaoke on it "
                                        "to convert").arg(book, clip));
-            // raw/ is excluded above; copy the book's original PDF back as
-            // raw/original.pdf — the optimized (compressed) cache if the user
-            // ran Optimize, otherwise the source original as-is.
-            QString srcPdf;
-            if (originalPdfStatus(book) == "ready")
-                srcPdf = booksDir() + book + "/.pkgcache/original.pdf";
-            else
-                srcPdf = findOriginalPdf(srcBook + "/raw");
-            if (!srcPdf.isEmpty()) {
-                const QString dst = dstBook + "/raw/original.pdf";
-                QDir().mkpath(dstBook + "/raw");
+            // raw/ is excluded above; ship exactly the export's two canonical
+            // PDFs (original.pdf is already the optimized copy if there is one).
+            QDir().mkpath(dstBook + "/raw");
+            for (const QString &pdf : {QStringLiteral("original.pdf"), QStringLiteral("answered.pdf")}) {
+                const QString dst = dstBook + "/raw/" + pdf;
                 QFile::remove(dst);
-                if (!QFile::copy(srcPdf, dst))
-                    qDebug() << "Failed to copy original.pdf to" << dst;
+                if (!QFile::copy(srcBook + "/raw/" + pdf, dst)) {
+                    setLogMessages(QString("    ✖  Failed to add raw/%1 for %2").arg(pdf, book));
+                    bookCopyOk = false;
+                    break;
+                }
             }
+            if (!bookCopyOk)
+                break;
         }
         if (!bookCopyOk)
             continue;
@@ -1998,7 +2272,7 @@ void PdfProcess::extractOrderingSentences(const QString &rawDir, int pageNumber,
     process->start(pythonExecutable(), arguments);
 }
 
-bool PdfProcess::packageForPlatforms(const QStringList &platforms, const QStringList &bookNames) {
+bool PdfProcess::packageForPlatforms(const QStringList &platforms, const QVariantList &books) {
     // Don't allow a second packaging run to start while one is in flight
     // (overlapping threads would interleave their progress/log output).
     if (!_isPackaging.testAndSetOrdered(0, 1)) {
@@ -2006,13 +2280,69 @@ bool PdfProcess::packageForPlatforms(const QStringList &platforms, const QString
         return false;
     }
     QThread* thread = QThread::create([=]() {
-        this->package(platforms, bookNames);  // sınıf metodu
+        this->package(platforms, books);  // sınıf metodu
         _isPackaging.storeRelease(0);
     });
     qDebug() << "stack size " << thread->stackSize();
     connect(thread, &QThread::finished, thread, &QThread::deleteLater);
 
     //thread->setStackSize(8 * 1024 * 1024);
+    thread->start();
+    return true;
+}
+
+bool PdfProcess::exportBooks(const QVariantList &books) {
+    // Shares the packaging guard: both write book_export/.
+    if (!_isPackaging.testAndSetOrdered(0, 1)) {
+        setLogMessages("⏳  A package or export is already running — please wait.");
+        return false;
+    }
+    QThread* thread = QThread::create([=]() {
+        QStringList folders, exportDirs;
+        if (this->normalizeBooks(books, folders, exportDirs, 0, 70)) {
+            QStringList zips;
+            bool ok = true;
+            for (int i = 0; i < exportDirs.size(); ++i) {
+                setProgress(70 + 30 * i / exportDirs.size());
+                setLogMessages(QString("🗜  Zipping  %1 …").arg(folders[i]));
+                int code = 2;
+                const QJsonObject z = QJsonDocument::fromJson(
+                    runPackageScript(QStringList() << "zip" << exportDirs[i] << "--klasoru-sil",
+                                     60 * 60 * 1000, &code).toUtf8()).object();
+                if (code != 0 || z.contains("hata")) {
+                    setLogMessages(QString("✖  %1: %2").arg(folders[i], z.value("hata").toString()));
+                    ok = false;
+                    break;
+                }
+                setLogMessages(QString("       → book_export/%1.zip   (%2 files, %3 MB)")
+                                   .arg(folders[i]).arg(z.value("dosya").toInt())
+                                   .arg(z.value("mb").toDouble()));
+                const int skipped = z.value("atlanan_sayi").toInt();
+                if (skipped > 0) {
+                    QStringList names;
+                    for (const QJsonValue &v : z.value("atlanan").toArray())
+                        names << v.toString();
+                    setLogMessages(QString("       left out of the zip: %1 file(s) — %2%3")
+                                       .arg(skipped).arg(names.join(", "))
+                                       .arg(skipped > names.size() ? ", …" : ""));
+                }
+                // The folder goes once the zip is verified; say so if it stayed,
+                // rather than leave a stray copy next to the zip unmentioned.
+                if (!z.value("klasor_silindi").toBool())
+                    setLogMessages(QString("       ⚠  book_export/%1/ could not be removed after "
+                                           "zipping — the zip is complete; delete the folder by hand")
+                                       .arg(folders[i]));
+                zips << folders[i] + ".zip";
+            }
+            if (ok) {
+                setProgress(100);
+                setLogMessages(QString("✨  Done — book_export/%1")
+                                   .arg(zips.join(", book_export/")));
+            }
+        }
+        _isPackaging.storeRelease(0);
+    });
+    connect(thread, &QThread::finished, thread, &QThread::deleteLater);
     thread->start();
     return true;
 }
