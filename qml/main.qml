@@ -380,7 +380,10 @@ ApplicationWindow {
         // Not while cropping: PageDetails has its own Escape for leaving crop
         // mode, and a crop always has a side panel open, so both would be live
         // on the same key at once.
+        // Nor while the Package dialog's full-size cover is up: it closes on
+        // its own Escape, and two live shortcuts on one key fire neither.
         enabled: !activityDialog.visible
+                 && !packageDialog.coverOpen
                  && !content.pageDetails.cropMode
                  && (sideBar.audioVisible || sideBar.videoVisible || sideBar.activityVisible
                      || sideBar.fillVisible || sideBar.circleVisible
@@ -994,8 +997,8 @@ ApplicationWindow {
         mainwindow.createStage = "";
 
         // Verify before opening: it compares what we built against what the
-        // pages print and marks anything doubtful with needs_review, so the
-        // toolbar's review button lands the author on those pages first.
+        // pages print and marks anything doubtful with needs_review, which the
+        // page outlines in orange for the author.
         flowProgress.statusText = "Checking the book…";
         var summary = "";
         try {

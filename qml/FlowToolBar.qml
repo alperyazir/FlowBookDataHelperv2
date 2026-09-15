@@ -36,10 +36,12 @@ Rectangle {
                 AppMenuItem { text: "New Project"; onTriggered: newProjectDialog.open() }
                 // One folder in, a finished book out: the PDFs, the modules,
                 // the media and the analysis, without filling in a form.
-                AppMenuItem {
-                    text: "Create…"
-                    onTriggered: mainwindow.startCreateFromFolder()
-                }
+                // Hidden for now (mainwindow.startCreateFromFolder stays). Left
+                // out of the menu rather than visible: false, which leaves a gap.
+                // AppMenuItem {
+                //     text: "Create…"
+                //     onTriggered: mainwindow.startCreateFromFolder()
+                // }
                 AppMenuItem {
                     text: "Open…"
                     onTriggered: {
@@ -74,6 +76,17 @@ Rectangle {
                     text: "Package"
                     onTriggered: {
                         packageDialog.currentProject = openProject.currentProject;
+                        packageDialog.exportOnly = false;
+                        packageDialog.open();
+                    }
+                }
+                // The same dialog without platforms: normalize into
+                // book_export/ and stop there.
+                AppMenuItem {
+                    text: "Export Book…"
+                    onTriggered: {
+                        packageDialog.currentProject = openProject.currentProject;
+                        packageDialog.exportOnly = true;
                         packageDialog.open();
                     }
                 }
@@ -469,34 +482,6 @@ Rectangle {
             onClicked: {
                 content.goNext();
             }
-        }
-
-        // Jump to the next page the analysis flagged (orange outlines on the
-        // page show what exactly). Hidden when nothing in the book is flagged.
-        Button {
-            id: reviewJumpButton
-            anchors.verticalCenter: parent.verticalCenter
-            visible: content.anyReview
-            width: 132
-            height: parent.height
-            ToolTip.visible: hovered
-            ToolTip.text: "Go to the next page the analysis flagged for review"
-            background: Rectangle {
-                color: content.pages && content.pages[content.currentPageIndex]
-                       && content.pages[content.currentPageIndex].needsReview
-                       ? "#5a3a10" : "#232f34"
-                border.color: "#ff8c00"
-                border.width: 1
-                radius: 6
-            }
-            contentItem: Text {
-                text: "⚠ review ▸"
-                color: "#ff8c00"
-                font.bold: true
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-            onClicked: content.goToNextReviewPage()
         }
     }
 

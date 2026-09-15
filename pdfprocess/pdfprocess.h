@@ -6,6 +6,7 @@
 #include <QVariantMap>
 
 class QProcess;
+class QJsonObject;
 
 
 class PdfProcess: public QObject {
@@ -38,7 +39,24 @@ public:
     Q_INVOKABLE QStringList getTestVersions() const;
     Q_INVOKABLE void copyBookToTestVersion(const QString &testVersion, const QString &currentBookName);
     Q_INVOKABLE bool launchTestFlowBook(const QString &testVersion);
-    Q_INVOKABLE bool packageForPlatforms(const QStringList &platforms, const QStringList &bookNames);
+    // Package ▸ book details: the read-only pre-flight check for one book
+    // (package_book.py check) as JSON — title/publisher on disk, broken
+    // references, raw/ PDFs, whether an answered PDF exists, page and logo
+    // warnings. Blocks; nothing is written.
+    Q_INVOKABLE QString checkBookForPackage(const QString &book);
+    // The book_export folder a title turns into plus the title warnings, as
+    // JSON ({klasor, baslik_uyari} or {hata}). The same function the export
+    // uses, so the preview can't disagree with the folder that gets written.
+    Q_INVOKABLE QString packageFolderPreview(const QString &title, const QString &publisher);
+    // books: [{book, title, publisher, answered}] — publisher "" means the book
+    // has none; answered is "" (the book has one), "original" (no answer key:
+    // ship a copy of original.pdf) or the path of the PDF to use.
+    Q_INVOKABLE bool packageForPlatforms(const QStringList &platforms, const QVariantList &books);
+    // Project ▸ Export Book: the normalize step of packaging, then each book
+    // zipped to book_export/<Folder>.zip (junk left out; the folder is removed
+    // once the zip is verified). No app. Same books shape as
+    // packageForPlatforms; runs on a worker thread.
+    Q_INVOKABLE bool exportBooks(const QVariantList &books);
     Q_INVOKABLE void copyAdditionalFiles(const QStringList &filePaths);
     Q_INVOKABLE void cropSectionFromPdf(const QString &pdfPath, int pageIndex,
                                          double x, double y, double w, double h,
@@ -137,7 +155,10 @@ public:
     QString logMessages() const;
     void setLogMessages(const QString &newLogMessages);
     bool removeDir(const QString &dirPath);
-    bool copyDir(const QString &srcPath, const QString &dstPath, bool filterBookData = false);
+    // atBookRoot: srcPath is the book folder itself (the filter's folder rules
+    // apply only there); the recursion passes false.
+    bool copyDir(const QString &srcPath, const QString &dstPath, bool filterBookData = false,
+                 bool atBookRoot = true);
     bool zipFolder(const QString &sourceDir, const QString &zipFilePath);
     // Names of clips under <bookDir>/audio whose MP3 bitrate varies. Such a
     // file plays correctly but cannot be seeked accurately, which desyncs the
@@ -208,7 +229,19 @@ private:
     QProcess *_passageProcess = nullptr;
     bool _passageCanceled = false;
 
-    bool package(const QStringList &platforms, const QStringList &bookNames);
+    bool package(const QStringList &platforms, const QVariantList &books);
+    // Normalize every book into book_export/; fills the exported folder names
+    // and paths. Shared by package() and exportBooks().
+    bool normalizeBooks(const QVariantList &books, QStringList &folders,
+                        QStringList &exportDirs, int progressFrom, int progressTo);
+    // Runs scripts/package_book.py; returns its result object as JSON and the
+    // exit code (0 clean, 1 broken references, 2 error — a script that dies
+    // without a result comes back as {"hata": ...} with 2).
+    static QString runPackageScript(const QStringList &args, int timeoutMs, int *exitCode);
+    // The normalizer's report as package log lines.
+    void logNormalizeReport(const QJsonObject &report);
+    // Put the project's optimized original.pdf (.pkgcache) into the export.
+    bool applyOptimizedPdf(const QString &book, const QString &exportDir);
     // The original (non-answered) PDF in a book's raw/ dir, or "" if none.
     // Prefers an 'original'/'soru' name, skips answer keys and obvious covers.
     QString findOriginalPdf(const QString &rawDir) const;

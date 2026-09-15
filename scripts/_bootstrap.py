@@ -31,6 +31,9 @@ _DEPS = (
     ("PIL", "Pillow"),
     ("numpy", "numpy"),
     ("cv2", "opencv-python"),
+    # Package-time normalization merges a book's split PDFs (and Pillow above
+    # downsizes assets/). Both optional there -- a missing one skips its step.
+    ("pypdf", "pypdf"),
 )
 
 

@@ -10,9 +10,6 @@ Rectangle {
     property bool outlineEnabled
     property var currentPageDetails
     property int currentPageIndex: 0
-    // Re-evaluated whenever the book reloads (e.g. after Analyze): does this
-    // book have any page the analysis flagged for review?
-    property bool anyReview: (pages && pages.length > 0) ? hasAnyReviewPage() : false
     property alias pageDetails: pageDetails
     height: parent.height
     width: parent.width
@@ -89,28 +86,6 @@ Rectangle {
                 return true;
             }
         }
-        return false;
-    }
-
-    // Jump to the next page the analysis flagged for review (wraps around).
-    // Returns false when the book has nothing flagged.
-    function goToNextReviewPage() {
-        if (!pages || pages.length === 0) return false;
-        for (var k = 1; k <= pages.length; k++) {
-            var i = (root.currentPageIndex + k) % pages.length;
-            if (pages[i] && pages[i].needsReview) {
-                sideBar.hideAllComponent();
-                root.currentPageIndex = i;
-                return true;
-            }
-        }
-        return false;
-    }
-
-    function hasAnyReviewPage() {
-        if (!pages) return false;
-        for (var i = 0; i < pages.length; i++)
-            if (pages[i] && pages[i].needsReview) return true;
         return false;
     }
 
