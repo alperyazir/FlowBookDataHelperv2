@@ -16,6 +16,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import flowbook_normalize as fn
 
+# Windows'un varsayilan konsolu cp1252: asagidaki ✓/✗ isaretleri UnicodeEncodeError
+# veriyordu (PYTHONIOENCODING=utf-8 ile calisiyordu). Modul etkilenmiyor, yalnizca
+# bu test cikti basiyor.
+for _akis in (sys.stdout, sys.stderr):
+    if hasattr(_akis, "reconfigure"):
+        try:
+            _akis.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError, OSError):
+            pass
+
 GECTI, KALDI = [], []
 
 

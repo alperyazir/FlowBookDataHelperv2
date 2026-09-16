@@ -36,6 +36,7 @@ Prints one "RESULT_JSON: {...}" line. Exit 0 clean, 1 broken references
 remain, 2 error ("hata" holds a message for the user).
 """
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -60,6 +61,20 @@ def emit(result, code):
     return code
 
 
+def error_text(exc):
+    """The message the editor shows for an unexpected failure.
+
+    A path over 260 characters is refused by Windows unless LongPathsEnabled
+    is set, and the bare OSError says only "cannot find the path specified".
+    """
+    text = f"{type(exc).__name__}: {exc}"
+    path = str(getattr(exc, "filename", "") or "")
+    if isinstance(exc, OSError) and len(path) > 240:
+        text += (f"  (that path is {len(path)} characters; Windows refuses paths over 260 "
+                 f"unless LongPathsEnabled is on)")
+    return text
+
+
 def raw_pdfs(raw):
     """The PDFs place_pdfs() picks from, split the way it splits them.
 
@@ -75,6 +90,19 @@ def raw_pdfs(raw):
              and not fn.COVER_RE.search(f.stem)]
     cevapli = [f for f in hepsi if fn.ANS_RE.search(f.name) and not fn.NEG_RE.search(f.name)]
     return [f for f in hepsi if f not in cevapli], cevapli
+
+
+def pypdf_warning(parts, have_pypdf):
+    """Multi-part PDFs need pypdf; without it original.pdf stays one part.
+
+    The module skips the merge and says so, but by then the book is already
+    exported. Everything else pypdf touches is optional -- this is the one
+    case that silently costs pages, so the dialog asks first.
+    """
+    if have_pypdf or parts < 2:
+        return ""
+    return (f"pypdf is not installed and raw/ has {parts} PDFs to merge into one — "
+            f"install it from Help > Dependencies, or the book ships one part only")
 
 
 def pdf_pages(pdf):
@@ -251,6 +279,13 @@ def cmd_check(a):
         kaynak = [raw / "original.pdf"]
     else:
         kaynak = fn.dedupe_pdfs(duz)[0] if duz else []
+    # How many files each canonical PDF would be merged from (after the
+    # module's own de-duplication), and whether pypdf is there to do it.
+    cevapli_tekil = fn.dedupe_pdfs(cevapli)[0] if cevapli else []
+    parca = max(len(kaynak), len(cevapli_tekil))
+    r["pdf_parca"] = parca
+    r["pypdf"] = importlib.util.find_spec("pypdf") is not None
+    r["pypdf_uyari"] = pypdf_warning(parca, r["pypdf"])
     sayilar = [pdf_pages(f) for f in kaynak]
     r["pdf_sayfa"] = sum(sayilar) if sayilar and None not in sayilar else None
     r["config_sayfa_son"] = config_last_page(conf)
@@ -441,8 +476,11 @@ def cmd_zip(a):
 
 
 def main(argv=None):
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
+    # stderr too: a Windows console is cp1252, and a traceback carrying a
+    # Turkish path would fail to print there.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description="Package-time book normalization.")
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("check")
@@ -469,10 +507,13 @@ def main(argv=None):
         return {"check": cmd_check, "title": cmd_title, "normalize": cmd_normalize,
                 "zip": cmd_zip}[a.cmd](a)
     except Exception as exc:
-        # Exit 1 tells the editor "broken references"; nothing unexpected may
-        # read as that.
+        # The result line FIRST: printing a traceback can itself fail on a
+        # console that can't encode the path in it, and the editor would then
+        # have no result to show. Exit 1 tells the editor "broken references";
+        # nothing unexpected may read as that.
+        code = emit({"hata": error_text(exc)}, 2)
         traceback.print_exc()
-        return emit({"hata": f"{type(exc).__name__}: {exc}"}, 2)
+        return code
 
 
 if __name__ == "__main__":
