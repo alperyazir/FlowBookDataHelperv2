@@ -735,9 +735,9 @@ bool PdfProcess::removeDir(const QString &dirPath) {
 static bool isExcludedFromPackage(const QString &name, bool isDir, bool atRoot) {
     const QString lower = name.toLower();
     // raw/ is excluded wholesale here; the package step copies original.pdf
-    // and answered.pdf back from the normalized export, so any other raw
-    // artifact stays out of the package. .pkgcache is the PDF-optimize cache
-    // — never ship it.
+    // back from the normalized export (the answer key stays in book_export),
+    // so every other raw artifact stays out of the package. .pkgcache is the
+    // PDF-optimize cache — never ship it.
     // Folder names count only at the book's root, where the editor writes
     // them: further down they are the publisher's content — Next Level 1-3
     // keep real pages in images/Review/. package_book.py follows the same rule.
@@ -996,6 +996,9 @@ QString PdfProcess::getLatestFlowBookVersion(const QString &platformPath) const 
 QString PdfProcess::runPackageScript(const QStringList &args, int timeoutMs, int *exitCode)
 {
     QProcess proc;
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");   // book titles and paths are not ASCII
+    proc.setProcessEnvironment(env);
     proc.setProcessChannelMode(QProcess::MergedChannels);
     proc.start(pythonExecutable(),
                QStringList() << "-u" << (scriptsDir() + "/package_book.py") << args);
@@ -1398,20 +1401,19 @@ bool PdfProcess::package(const QStringList &platforms, const QVariantList &books
                 setLogMessages(QString("       ⚠  %1 · %2 is variable bitrate — "
                                        "seeking will drift; re-run karaoke on it "
                                        "to convert").arg(book, clip));
-            // raw/ is excluded above; ship exactly the export's two canonical
-            // PDFs (original.pdf is already the optimized copy if there is one).
+            // raw/ is excluded above; ship only original.pdf (already the
+            // optimized copy if there is one). The answer key stays behind in
+            // book_export/<Folder>/raw/: the reader only ever opens the
+            // original (PdfCropper::findOriginalPdf) and answers come from
+            // config.json, so a delivered package has no use for it.
             QDir().mkpath(dstBook + "/raw");
-            for (const QString &pdf : {QStringLiteral("original.pdf"), QStringLiteral("answered.pdf")}) {
-                const QString dst = dstBook + "/raw/" + pdf;
-                QFile::remove(dst);
-                if (!QFile::copy(srcBook + "/raw/" + pdf, dst)) {
-                    setLogMessages(QString("    ✖  Failed to add raw/%1 for %2").arg(pdf, book));
-                    bookCopyOk = false;
-                    break;
-                }
-            }
-            if (!bookCopyOk)
+            const QString dstPdf = dstBook + "/raw/original.pdf";
+            QFile::remove(dstPdf);
+            if (!QFile::copy(srcBook + "/raw/original.pdf", dstPdf)) {
+                setLogMessages(QString("    ✖  Failed to add raw/original.pdf for %1").arg(book));
+                bookCopyOk = false;
                 break;
+            }
         }
         if (!bookCopyOk)
             continue;

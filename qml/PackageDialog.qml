@@ -157,7 +157,7 @@ Dialog {
                   && (d.title || "").trim() && d.publisherIndex >= 0
                   && d.folder && !d.titleError
                   && !(c.ref_kayip > 0) && !((c.kirik_detay || []).length > 0)
-                  && c.original !== "yok"
+                  && c.original !== "yok" && !c.pypdf_uyari
                   && (c.answered !== "yok" || d.answered));
     }
 
@@ -217,6 +217,8 @@ Dialog {
             out.push({ level: "info", text: c.ref_onarilabilir + " broken path(s) will be repaired" });
         if (c.original === "yok")
             out.push({ level: "error", text: "raw/ has no original PDF" });
+        if (c.pypdf_uyari)
+            out.push({ level: "error", text: c.pypdf_uyari });
         if (c.referanssiz_gorsel > 0)
             out.push({ level: "info", text: c.referanssiz_gorsel + " image(s) in images/ that nothing uses will be left out"
                                             + ((c.referanssiz_ornek || []).length ? " (e.g. " + c.referanssiz_ornek[0] + ")" : "") });
