@@ -57,6 +57,16 @@ public:
     // once the zip is verified). No app. Same books shape as
     // packageForPlatforms; runs on a worker thread.
     Q_INVOKABLE bool exportBooks(const QVariantList &books);
+    // Package ▸ Book Details ▸ Optimize videos: converts every video in the book
+    // the Windows reader can't play (scripts/video_compat.py) into the book's
+    // .pkgcache/videos/, which normalize then swaps into book_export/. The
+    // project's own videos are left as they are. Progress arrives on
+    // videoOptimizeProgress, the end on videoOptimizeFinished. One run at a
+    // time; false if one is already running.
+    Q_INVOKABLE bool optimizeVideos(const QString &book);
+    // Stops a running optimizeVideos(): the video being converted is dropped,
+    // the ones already finished stay. Safe to call when nothing runs.
+    Q_INVOKABLE void cancelVideoOptimize();
     Q_INVOKABLE void copyAdditionalFiles(const QStringList &filePaths);
     Q_INVOKABLE void cropSectionFromPdf(const QString &pdfPath, int pageIndex,
                                          double x, double y, double w, double h,
@@ -203,6 +213,12 @@ signals:
     // empty with `error` set. Each word carries `piece`, the index of the crop
     // it came from, so the panel can keep the pieces visibly apart.
     void passageWordsReady(const QVariantList &words, const QString &error);
+    // optimizeVideos() moving along. json: {i (0-based), n (videos to convert),
+    // dosya (book-relative path), pct (0-99, of that video)}.
+    void videoOptimizeProgress(const QString &book, const QString &json);
+    // optimizeVideos() done. resultJson: {donusen: [{dosya, sorun, mb}],
+    // basarisiz: [{dosya, hata}]}, plus iptal (stopped) or hata (nothing ran).
+    void videoOptimizeFinished(const QString &book, bool ok, const QString &resultJson);
     void dependenciesChecked(bool ok, const QString &json);
     void dependenciesInstalled(bool ok);
     // A Python helper script failed — carries a short, user-readable reason
@@ -228,6 +244,8 @@ private:
     // flag so the finished handler can tell a user cancel from a real failure.
     QProcess *_passageProcess = nullptr;
     bool _passageCanceled = false;
+    // The running optimizeVideos() process, nullptr when idle.
+    QProcess *_videoProcess = nullptr;
 
     bool package(const QStringList &platforms, const QVariantList &books);
     // Normalize every book into book_export/; fills the exported folder names

@@ -8,6 +8,7 @@
         <file>scripts/stage_fill.py</file>
         <file>scripts/align_audio.py</file>
         <file>scripts/audio_cbr.py</file>
+        <file>scripts/video_compat.py</file>
         <file>scripts/book_files.py</file>
         <file>scripts/flowbook_normalize.py</file>
         <file>scripts/package_book.py</file>

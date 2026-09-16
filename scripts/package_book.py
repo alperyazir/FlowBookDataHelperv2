@@ -8,7 +8,8 @@ copied over. This file adds only what belongs to the editor:
   check <book_dir>
       check_book() (touches nothing) plus what the Package dialog has to ask
       about before anything is written: is there an answered PDF, do the
-      config's pages fit the PDF, the publisher logo path.
+      config's pages fit the PDF, the publisher logo path, and which videos
+      won't play on Windows.
 
   title --baslik T [--yayinevi P]
       The folder the title becomes and the title warnings, for the dialog's
@@ -24,8 +25,18 @@ copied over. This file adds only what belongs to the editor:
           any other extra is kept and reported, never silently dropped
         * the editor's own files (fbinf, settings.json, review/, *.ini, ...)
           removed from the export, whatever their letter case
+        * every video the Windows reader can't play replaced by its optimized
+          copy from the project's .pkgcache/videos/; stops if one has none
         * --geri-yaz: book_title/publisher_name written back to the project's
           config.json, those two fields and nothing else
+
+  videos <book_dir> [--stdin-stop]
+      Converts the book's videos the Windows reader can't play into the
+      project's .pkgcache/videos/ (video_compat.py) — Book Details' Optimize.
+      Prints "PROGRESS: {i, n, dosya, pct}" lines as it goes; --stdin-stop ends
+      the run when stdin closes, which is how the editor stops it (killing
+      Python would leave ffmpeg running on Windows). Exit 0 all converted,
+      1 some failed, 2 error, 3 stopped.
 
   zip <export_dir> [--klasoru-sil]
       <export_dir>.zip with the book under one top-level folder, leaving out
@@ -42,12 +53,14 @@ import os
 import re
 import shutil
 import sys
+import threading
 import traceback
 import zipfile
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import flowbook_normalize as fn
+import video_compat
 
 # How many more pages the PDF may have than the config reaches before it is
 # worth a word (a trailing blank or back cover is normal). The other way round
@@ -294,6 +307,7 @@ def cmd_check(a):
     r["logo_uyari"] = logo_warning(conf)
     r["kapak_yolu"] = cover_path(src, conf, r.get("kapak"))
     r["kirik_detay"] = broken_refs(src)
+    r["video"] = video_compat.check_book(src)
     return emit(r, 1 if r.get("ref_kayip") or r["kirik_detay"] else 0)
 
 
@@ -346,6 +360,10 @@ def cmd_normalize(a):
 
     rapor["raw"] = clean_raw(raw)
     rapor["editor_dosyalari"] = strip_editor_files(dest)
+    rapor["video"] = video_compat.apply_to_export(dest, video_compat.cache_dir(src),
+                                                  rapor["klasor"])
+    if "hata" in rapor["video"]:
+        return emit({**rapor, "hata": rapor["video"]["hata"]}, 2)
     conf = json.loads((dest / "config.json").read_text(encoding="utf-8"))
     if a.yayinevi_yok and conf.get("publisher_name"):
         # normalize_book writes a publisher only when given one, so "None"
@@ -421,6 +439,29 @@ def final_check(book, folder):
             if len(parts) != 2 or parts[0] != folder or not (book / parts[1]).exists():
                 kalan.append(yol)
     return {"kirik_referans": len(kalan), "ornek": kalan[:10]}
+
+
+def cmd_videos(a):
+    src = Path(a.book_dir)
+    if not (src / "config.json").is_file():
+        return emit({"hata": f"Not a book (no config.json): {src}"}, 2)
+    stopped = threading.Event()
+    if a.stdin_stop:
+        def watch():
+            sys.stdin.buffer.read()          # returns when the editor closes it
+            stopped.set()
+        threading.Thread(target=watch, daemon=True).start()
+
+    def progress(i, n, dosya, pct):
+        print("PROGRESS: " + json.dumps({"i": i, "n": n, "dosya": dosya, "pct": pct},
+                                        ensure_ascii=False), flush=True)
+
+    r = video_compat.optimize_book(src, progress, stopped.is_set)
+    if "hata" in r:
+        return emit(r, 2)
+    if r.get("iptal"):
+        return emit(r, 3)
+    return emit(r, 1 if r["basarisiz"] else 0)
 
 
 # Already compressed: deflating them costs time and saves nothing.
@@ -499,13 +540,16 @@ def main(argv=None):
     g.add_argument("--answered")
     g.add_argument("--answered-original", action="store_true")
     n.add_argument("--geri-yaz", action="store_true")
+    v = sub.add_parser("videos")
+    v.add_argument("book_dir")
+    v.add_argument("--stdin-stop", action="store_true")
     zp = sub.add_parser("zip")
     zp.add_argument("export_dir")
     zp.add_argument("--klasoru-sil", action="store_true")
     a = ap.parse_args(argv)
     try:
         return {"check": cmd_check, "title": cmd_title, "normalize": cmd_normalize,
-                "zip": cmd_zip}[a.cmd](a)
+                "videos": cmd_videos, "zip": cmd_zip}[a.cmd](a)
     except Exception as exc:
         # The result line FIRST: printing a traceback can itself fail on a
         # console that can't encode the path in it, and the editor would then
