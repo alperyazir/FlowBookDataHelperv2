@@ -73,6 +73,10 @@ Rectangle {
                     onTriggered: optimizeDialog.open()
                 }
                 AppMenuItem {
+                    text: "Videos…"
+                    onTriggered: videosDialog.open()
+                }
+                AppMenuItem {
                     text: "Package"
                     onTriggered: {
                         packageDialog.currentProject = openProject.currentProject;
@@ -567,6 +571,58 @@ Rectangle {
             x: parent.width - width            // right-aligned, opens leftward
             AppMenuItem { text: "Clear Page"; danger: true; onTriggered: clearPageConfirmDialog.open() }
             AppMenuItem { text: "Clear Book"; danger: true; onTriggered: clearConfirmDialog.open() }
+        }
+    }
+
+    // Optimize videos running in the background (videoOptimizer, main.qml):
+    // how far it is, whatever dialog started it has closed. Click for Videos.
+    Rectangle {
+        id: videoOptimizeChip
+        anchors.right: clearQuick.left
+        anchors.rightMargin: 10
+        anchors.verticalCenter: parent.verticalCenter
+        visible: videoOptimizer.running
+        height: 28
+        width: Math.min(videoChipLabel.implicitWidth + 24, 260)
+        radius: 14
+        color: videoChipArea.containsMouse ? "#2b2618" : "#221f16"
+        border.color: "#e0a32e"
+        border.width: 1
+        clip: true
+
+        // The share done, as a fill behind the label.
+        Rectangle {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: parent.width * videoOptimizer.overall
+            radius: parent.radius
+            color: "#3a3120"
+        }
+        Text {
+            id: videoChipLabel
+            anchors.centerIn: parent
+            width: parent.width - 18
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
+            font.pixelSize: 12
+            color: "#e0a32e"
+            text: {
+                var p = videoOptimizer.progress;
+                if (videoOptimizer.stopping)
+                    return "Stopping video optimize…";
+                if (!(p.n > 0))
+                    return "Optimizing videos…";
+                return "Optimizing videos " + (p.i + 1) + "/" + p.n + " · "
+                       + Math.round(videoOptimizer.overall * 100) + "%";
+            }
+        }
+        MouseArea {
+            id: videoChipArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: videosDialog.open()
         }
     }
 

@@ -103,6 +103,7 @@ ApplicationWindow {
         config.initialize(true, projectDir);
         gamesParser.loadFromFile(projectDir);
         refreshBaselineAfterLoad();
+        warnAboutVideos(name);
         console.log("Switched book ->", projectDir);
     }
 
@@ -123,7 +124,101 @@ ApplicationWindow {
         config.initialize(true, path);
         gamesParser.loadFromFile(path);
         refreshBaselineAfterLoad();
+        warnAboutVideos(openProject.currentProject
+                        || path.replace(/[\\\/]+$/, "").split(/[\\\/]/).pop());
         console.log("Project loaded ->", path);
+    }
+
+    // A book's videos are checked in the background once it has opened, and a
+    // red toast says so when one won't play on Windows: nothing in the editor
+    // looks wrong (a Mac plays HEVC), and Test copies the files as they are.
+    // The check waits a moment so the book draws first; switching again
+    // before it starts checks only the book that ends up open.
+    property string videoWarnBook: ""
+    function warnAboutVideos(name) {
+        if (!name)
+            return;
+        videoWarnBook = name;
+        videoWarnTimer.restart();
+    }
+    Timer {
+        id: videoWarnTimer
+        interval: 2000
+        onTriggered: {
+            if (mainwindow.videoWarnBook && mainwindow.videoWarnBook === openProject.currentProject)
+                pdfProcess.checkVideos(mainwindow.videoWarnBook);
+        }
+    }
+
+    // Optimize videos, owned by the window rather than by a dialog: it runs
+    // in the background, carries on when the dialog that started it closes,
+    // and shows in the toolbar while it does. Project ▸ Videos and Package ▸
+    // Book Details both start it and show it. One book at a time.
+    QtObject {
+        id: videoOptimizer
+        property string book: ""          // "" when idle
+        property var progress: ({})       // {i, n, dosya, pct}
+        property bool stopping: false
+        readonly property bool running: book !== ""
+        // Overall share done, 0 to 1.
+        readonly property real overall: progress.n > 0 ? (progress.i + progress.pct / 100) / progress.n : 0
+        // A run ended: result is the script's ({donusen, basarisiz,
+        // yeniden_adlandirilan, iptal?, hata?}).
+        signal finished(string book, var result)
+
+        function start(name) {
+            if (running || !name)
+                return false;
+            // The open book lets go of the video its panel may be holding
+            // (Windows won't replace a file that is open) and saves first.
+            if (name === openProject.currentProject) {
+                sideBar.videoVisible = false;
+                if (mainwindow.hasUnsavedChanges())
+                    mainwindow.save();
+            }
+            if (!pdfProcess.optimizeVideos(name))
+                return false;
+            book = name;
+            progress = ({});
+            stopping = false;
+            return true;
+        }
+
+        function stop() {
+            if (!running)
+                return;
+            stopping = true;
+            pdfProcess.cancelVideoOptimize();
+        }
+    }
+
+    // A video that changed its extension (.webm -> .mp4) already has its new
+    // path in config.json on disk. The open book takes it too, in memory —
+    // the author may have gone on editing meanwhile, so reloading is not an
+    // option — or its next save would put the old path back.
+    function renameVideoPaths(book, renamed) {
+        if (book !== openProject.currentProject || Object.keys(renamed).length === 0
+                || !config || !config.bookSets || config.bookSets.length === 0)
+            return;
+        var clean = !hasUnsavedChanges();
+        var books = config.bookSets[0].books;
+        for (var b = 0; b < books.length; b++) {
+            var pages = books[b].pages;
+            for (var p = 0; p < pages.length; p++) {
+                var sections = pages[p].sections;
+                for (var s = 0; s < sections.length; s++) {
+                    var video = sections[s].video;
+                    if (!video || !video.path)
+                        continue;
+                    var m = video.path.match(/^(\.\/books\/[^\/]+\/)(.*)$/);
+                    if (m && renamed[m[2]])
+                        video.path = m[1] + renamed[m[2]];
+                }
+            }
+        }
+        // Nothing else was edited: memory and config.json agree again.
+        if (clean)
+            refreshBaselineAfterLoad();
     }
 
     // --- Quick-add shortcuts at current mouse position ---
@@ -742,6 +837,59 @@ ApplicationWindow {
         function onScriptError(message) {
             toast.show(message, true);
         }
+        function onVideosChecked(book, json) {
+            if (book !== mainwindow.videoWarnBook)
+                return;
+            mainwindow.videoWarnBook = "";
+            if (book !== openProject.currentProject || book === videoOptimizer.book)
+                return;
+            var r;
+            try {
+                r = JSON.parse(json);
+            } catch (e) {
+                return;
+            }
+            var bad = (r.sorunlu || 0) + (r.okunamayan || 0);
+            if (bad > 0)
+                toast.show(bad + " video(s) in this book won't play on Windows — "
+                           + "open Project ▸ Videos to optimize them", true);
+        }
+        function onVideoOptimizeProgress(book, json) {
+            if (book !== videoOptimizer.book)
+                return;
+            try {
+                videoOptimizer.progress = JSON.parse(json);
+            } catch (e) {}
+        }
+        function onVideoOptimizeFinished(book, ok, json) {
+            if (book !== videoOptimizer.book)
+                return;
+            var r;
+            try {
+                r = JSON.parse(json);
+            } catch (e) {
+                r = { hata: "" + e };
+            }
+            videoOptimizer.book = "";
+            videoOptimizer.progress = ({});
+            videoOptimizer.stopping = false;
+            mainwindow.renameVideoPaths(book, r.yeniden_adlandirilan || {});
+
+            // Said here, not in a dialog: the author may have closed it and
+            // gone back to work long ago.
+            var done = (r.donusen || []).length;
+            var failed = (r.basarisiz || []).length;
+            if (r.hata)
+                toast.show("Video optimize (" + book + "): " + r.hata, true);
+            else if (failed > 0)
+                toast.show("Video optimize (" + book + "): " + done + " done, " + failed
+                           + " failed — see Project ▸ Videos", true);
+            else if (r.iptal)
+                toast.show("Video optimize stopped (" + book + ") — " + done + " video(s) done");
+            else if (done > 0)
+                toast.show(done + " video(s) optimized for Windows (" + book + ")");
+            videoOptimizer.finished(book, r);
+        }
     }
 
     ActivityDialog {
@@ -1067,6 +1215,10 @@ ApplicationWindow {
         id: optimizeDialog
     }
 
+    VideosDialog {
+        id: videosDialog
+    }
+
     DependencyDialog {
         id: dependencyDialog
     }
@@ -1116,7 +1268,7 @@ ApplicationWindow {
 
         Text {
             id: versionText
-            text: "v3.3.17"
+            text: "v3.3.18"
             color: "#009ca6"
             anchors.centerIn: parent
             font.pixelSize: 14

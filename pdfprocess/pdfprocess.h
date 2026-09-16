@@ -57,10 +57,15 @@ public:
     // once the zip is verified). No app. Same books shape as
     // packageForPlatforms; runs on a worker thread.
     Q_INVOKABLE bool exportBooks(const QVariantList &books);
-    // Package ▸ Book Details ▸ Optimize videos: converts every video in the book
-    // the Windows reader can't play (scripts/video_compat.py) into the book's
-    // .pkgcache/videos/, which normalize then swaps into book_export/. The
-    // project's own videos are left as they are. Progress arrives on
+    // Every video in books/<book>'s video folder against what the Windows
+    // reader can play (scripts/video_compat.py), on a worker thread at low
+    // priority: the answer arrives on videosChecked. For Project ▸ Videos and
+    // the warning when a book opens.
+    Q_INVOKABLE void checkVideos(const QString &book);
+    // Optimize videos (Project ▸ Videos, Package ▸ Book Details): converts the
+    // videos in books/<book> that the Windows reader can't play, in place —
+    // each replaces its original, and a .webm or the like becomes .mp4 with
+    // config.json following it on disk. Progress arrives on
     // videoOptimizeProgress, the end on videoOptimizeFinished. One run at a
     // time; false if one is already running.
     Q_INVOKABLE bool optimizeVideos(const QString &book);
@@ -213,11 +218,15 @@ signals:
     // empty with `error` set. Each word carries `piece`, the index of the crop
     // it came from, so the panel can keep the pieces visibly apart.
     void passageWordsReady(const QVariantList &words, const QString &error);
+    // checkVideos() answered. json: {toplam, sorunlu, okunamayan, ffmpeg_yok,
+    // videolar: [{dosya, mb, durum, ozet?, sorun?, hata?}]} or {hata}.
+    void videosChecked(const QString &book, const QString &json);
     // optimizeVideos() moving along. json: {i (0-based), n (videos to convert),
     // dosya (book-relative path), pct (0-99, of that video)}.
     void videoOptimizeProgress(const QString &book, const QString &json);
-    // optimizeVideos() done. resultJson: {donusen: [{dosya, sorun, mb}],
-    // basarisiz: [{dosya, hata}]}, plus iptal (stopped) or hata (nothing ran).
+    // optimizeVideos() done. resultJson: {donusen: [{dosya, eski?, sorun, mb}],
+    // basarisiz: [{dosya, hata}], yeniden_adlandirilan: {old: new}}, plus
+    // iptal (stopped) or hata (nothing ran). Paths are book-relative.
     void videoOptimizeFinished(const QString &book, bool ok, const QString &resultJson);
     void dependenciesChecked(bool ok, const QString &json);
     void dependenciesInstalled(bool ok);
