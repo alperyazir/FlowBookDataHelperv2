@@ -64,6 +64,85 @@ Dialog {
         bookInfo = ({});
     }
 
+    // Closing the dialog stops a running Optimize videos: nobody is left to
+    // watch it, and the videos it already finished are kept.
+    onClosed: if (videoBook !== "") stopVideoOptimize()
+
+    // Book Details ▸ Optimize videos. videoBook: the book it runs for ("" when
+    // idle), one at a time; videoProgress: its latest {i, n, dosya, pct}.
+    property string videoBook: ""
+    property var videoProgress: ({})
+    property bool videoStopping: false
+
+    // The videos that won't play on Windows and have no optimized copy yet.
+    function videoPending(book) {
+        var v = (info(book).check || {}).video || {};
+        var out = [];
+        var bad = v.sorunlu || [];
+        for (var i = 0; i < bad.length; i++)
+            if (!bad[i].hazir)
+                out.push(bad[i]);
+        return out;
+    }
+
+    function videosReady(book) {
+        var v = (info(book).check || {}).video;
+        if (!v)
+            return true;
+        return !v.ffmpeg_yok && !(v.okunamayan || []).length
+               && videoPending(book).length === 0 && videoBook !== book;
+    }
+
+    function startVideoOptimize(book) {
+        if (videoBook !== "" || !pdfProcess.optimizeVideos(book))
+            return;
+        videoBook = book;
+        videoStopping = false;
+        videoProgress = ({});
+        setInfo(book, { videoError: "" });
+    }
+
+    function stopVideoOptimize() {
+        videoStopping = true;
+        pdfProcess.cancelVideoOptimize();
+    }
+
+    Connections {
+        target: pdfProcess
+        function onVideoOptimizeProgress(book, json) {
+            if (book !== packageDialog.videoBook)
+                return;
+            try {
+                packageDialog.videoProgress = JSON.parse(json);
+            } catch (e) {}
+        }
+        function onVideoOptimizeFinished(book, ok, json) {
+            if (book !== packageDialog.videoBook)
+                return;
+            packageDialog.videoBook = "";
+            packageDialog.videoProgress = ({});
+            packageDialog.videoStopping = false;
+            if (!packageDialog.visible)
+                return;
+            var r;
+            try {
+                r = JSON.parse(json);
+            } catch (e) {
+                r = { hata: "" + e };
+            }
+            var msgs = [];
+            if (r.hata)
+                msgs.push(r.hata);
+            var failed = r.basarisiz || [];
+            for (var i = 0; i < failed.length; i++)
+                msgs.push(failed[i].dosya + ": " + failed[i].hata);
+            // What is left to do comes from checking again, not from this run.
+            packageDialog.setInfo(book, { videoError: msgs.join("\n"), rechecking: true });
+            recheckTimer.book = book;
+            recheckTimer.restart();
+        }
+    }
+
     function toggleBook(name) {
         var arr = selectedBooks.slice();
         var p = arr.indexOf(name);
@@ -158,7 +237,8 @@ Dialog {
                   && d.folder && !d.titleError
                   && !(c.ref_kayip > 0) && !((c.kirik_detay || []).length > 0)
                   && c.original !== "yok" && !c.pypdf_uyari
-                  && (c.answered !== "yok" || d.answered));
+                  && (c.answered !== "yok" || d.answered)
+                  && videosReady(book) && !d.rechecking);
     }
 
     function duplicateFolder() {
@@ -176,6 +256,7 @@ Dialog {
 
     readonly property bool detailsReady: {
         bookInfo;
+        videoBook;
         if (checking || selectedBooks.length === 0)
             return false;
         for (var i = 0; i < selectedBooks.length; i++)
@@ -230,6 +311,31 @@ Dialog {
             out.push({ level: "warn", text: c.bozuk_metin + " corrupt text value(s) in config.json will be cleaned" });
         if (c.logo_uyari)
             out.push({ level: "warn", text: c.logo_uyari });
+        // Videos last, so Optimize videos sits right under what it fixes.
+        var v = c.video;
+        if (v) {
+            if (v.ffmpeg_yok)
+                out.push({ level: "error", text: v.toplam + " video(s) can't be checked for Windows: "
+                                                 + "ffmpeg isn't installed — install it from Help ▸ Dependencies" });
+            var unreadable = v.okunamayan || [];
+            if (unreadable.length) {
+                out.push({ level: "error", text: unreadable.length
+                           + " video(s) can't be read — replace them before packaging:" });
+                for (var u = 0; u < unreadable.length; u++)
+                    out.push({ level: "error", detail: true,
+                               text: unreadable[u].dosya + " — " + unreadable[u].hata });
+            }
+            var pending = videoPending(book);
+            if (pending.length) {
+                out.push({ level: "error", text: pending.length + " video(s) won't play on Windows — "
+                           + "Optimize converts them to H.264 for the export (the project's files stay as they are):" });
+                for (var p = 0; p < pending.length; p++)
+                    out.push({ level: "error", detail: true, text: pending[p].dosya + " — " + pending[p].sorun });
+            }
+            var optimized = (v.sorunlu || []).length - pending.length;
+            if (optimized > 0)
+                out.push({ level: "info", text: optimized + " video(s) will ship as their optimized H.264 copies" });
+        }
         return out;
     }
 
@@ -299,6 +405,23 @@ Dialog {
         id: checkTimer
         interval: 50
         onTriggered: packageDialog.loadDetails()
+    }
+
+    // After Optimize videos: the book's check again, so its notes show what is
+    // left. A frame first, for "Checking the videos again…".
+    Timer {
+        id: recheckTimer
+        property string book
+        interval: 50
+        onTriggered: {
+            var check;
+            try {
+                check = JSON.parse(pdfProcess.checkBookForPackage(book));
+            } catch (e) {
+                check = { hata: "Could not check " + book + ": " + e };
+            }
+            packageDialog.setInfo(book, { check: check, rechecking: false });
+        }
     }
 
     // Title/publisher edits re-derive the folder preview once typing pauses.
@@ -736,6 +859,7 @@ Dialog {
                         readonly property var c: card.d.check || ({})
                         readonly property bool ready: {
                             packageDialog.bookInfo;
+                            packageDialog.videoBook;
                             return packageDialog.bookReady(card.book);
                         }
                         Layout.fillWidth: true
@@ -918,6 +1042,113 @@ Dialog {
                                            : modelData.level === "warn" ? "⚠  " : "•  ") + modelData.text
                                     color: modelData.level === "error" ? "#e06c75"
                                          : modelData.level === "warn" ? "#e0a32e" : "#8aa0a8"
+                                }
+                            }
+
+                            // Optimize videos, right under the video notes: converts
+                            // the videos that won't play on Windows into the
+                            // project's cache, which the export then ships.
+                            ColumnLayout {
+                                id: videoBox
+                                Layout.fillWidth: true
+                                readonly property int pending: {
+                                    packageDialog.bookInfo;
+                                    return packageDialog.videoPending(card.book).length;
+                                }
+                                readonly property bool running: packageDialog.videoBook === card.book
+                                readonly property var p: packageDialog.videoProgress
+                                // All videos so far, of all to convert; 0 to 1.
+                                readonly property real overall: p.n > 0 ? (p.i + p.pct / 100) / p.n : 0
+                                visible: running || !!card.d.rechecking || !!card.d.videoError
+                                         || (pending > 0 && !(card.c.video || {}).ffmpeg_yok)
+                                spacing: 6
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Button {
+                                        id: optimizeBtn
+                                        visible: !videoBox.running && videoBox.pending > 0
+                                        enabled: packageDialog.videoBook === "" && !card.d.rechecking
+                                        text: "Optimize videos (" + videoBox.pending + ")"
+                                        Layout.preferredHeight: 30
+                                        background: Rectangle {
+                                            radius: 2
+                                            color: !optimizeBtn.enabled ? "#2a3338"
+                                                 : (optimizeBtn.hovered ? "#00b3be" : "#009ca6")
+                                        }
+                                        contentItem: Text {
+                                            text: optimizeBtn.text; font.pixelSize: 12; font.bold: true
+                                            color: optimizeBtn.enabled ? "white" : "#6b7a80"
+                                            horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                                        }
+                                        onClicked: packageDialog.startVideoOptimize(card.book)
+                                    }
+                                    Button {
+                                        id: stopBtn
+                                        visible: videoBox.running
+                                        enabled: !packageDialog.videoStopping
+                                        text: packageDialog.videoStopping ? "Stopping…" : "Stop"
+                                        Layout.preferredHeight: 30
+                                        background: Rectangle {
+                                            radius: 2
+                                            color: stopBtn.hovered ? "#2A3337" : "#1A2327"
+                                            border.width: 1
+                                            border.color: "#009ca6"
+                                        }
+                                        contentItem: Text {
+                                            text: stopBtn.text; color: "white"; font.pixelSize: 12
+                                            horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                                        }
+                                        onClicked: packageDialog.stopVideoOptimize()
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        font.pixelSize: 12
+                                        color: "#e0a32e"
+                                        elide: Text.ElideRight
+                                        text: videoBox.running
+                                              ? (videoBox.p.n > 0
+                                                 ? "Converting " + (videoBox.p.i + 1) + " of " + videoBox.p.n
+                                                   + " · " + Math.round(videoBox.overall * 100) + "%"
+                                                 : "Checking the videos…")
+                                              : (card.d.rechecking ? "Checking the videos again…" : "")
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 4
+                                    visible: videoBox.running
+                                    radius: 2
+                                    color: "#1A2327"
+                                    Rectangle {
+                                        width: parent.width * videoBox.overall
+                                        height: parent.height
+                                        radius: 2
+                                        color: "#009ca6"
+                                    }
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    visible: videoBox.running && !!videoBox.p.dosya
+                                    text: (videoBox.p.dosya || "") + "  ·  " + (videoBox.p.pct || 0) + "%"
+                                    color: "#8aa0a8"
+                                    font.pixelSize: 11
+                                    elide: Text.ElideMiddle
+                                }
+                                TextEdit {
+                                    Layout.fillWidth: true
+                                    visible: !videoBox.running && !!card.d.videoError
+                                    readOnly: true
+                                    selectByMouse: true
+                                    selectionColor: "#00707a"
+                                    selectedTextColor: "white"
+                                    textFormat: TextEdit.PlainText
+                                    wrapMode: TextEdit.Wrap
+                                    font.pixelSize: 12
+                                    color: "#e06c75"
+                                    text: "✖  " + (card.d.videoError || "")
                                 }
                             }
 

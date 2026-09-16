@@ -17,6 +17,8 @@
 #include <QDateTime>
 #include <QSaveFile>
 #include <QSharedPointer>
+#include <QPointer>
+#include <QTimer>
 
 QString PdfProcess::scriptsDir()
 {
@@ -1123,6 +1125,15 @@ void PdfProcess::logNormalizeReport(const QJsonObject &r)
     const QStringList editorFiles = names(r.value("editor_dosyalari"));
     if (!editorFiles.isEmpty())
         log("removed editor/OS files: " + editorFiles.join(", "));
+
+    // Videos the Windows reader can't play, swapped for their optimized copies.
+    for (const QJsonValue &v : r.value("video").toObject().value("degisen").toArray()) {
+        const QJsonObject o = v.toObject();
+        const QJsonArray mb = o.value("mb").toArray();
+        log(QString("video: %1 — optimized copy (was %2; %3 MB → %4 MB)")
+                .arg(o.value("dosya").toString(), o.value("sorun").toString())
+                .arg(mb.at(0).toDouble()).arg(mb.at(1).toDouble()));
+    }
 
     // audio/audio.json keys, renamed by the module along with the audio files.
     const QJsonObject k = r.value("audio_json").toObject();
@@ -2347,4 +2358,89 @@ bool PdfProcess::exportBooks(const QVariantList &books) {
     connect(thread, &QThread::finished, thread, &QThread::deleteLater);
     thread->start();
     return true;
+}
+
+bool PdfProcess::optimizeVideos(const QString &book)
+{
+    if (_videoProcess)
+        return false;
+
+    QProcess *process = new QProcess(this);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    process->setProcessEnvironment(env);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+    _videoProcess = process;
+
+    // Whole lines only: a JSON progress line split across two reads would not
+    // parse. Lines that aren't progress are kept for the result.
+    auto lines = QSharedPointer<QStringList>::create();
+    const auto drain = [this, process, book, lines]() {
+        while (process->canReadLine()) {
+            const QString t = QString::fromUtf8(process->readLine()).trimmed();
+            if (t.startsWith(QStringLiteral("PROGRESS:")))
+                emit videoOptimizeProgress(book, t.mid(9).trimmed());
+            else if (!t.isEmpty())
+                lines->append(t);
+        }
+    };
+    connect(process, &QProcess::readyReadStandardOutput, this, drain);
+
+    connect(process, &QProcess::finished, this,
+            [this, process, book, lines, drain](int exitCode, QProcess::ExitStatus status) {
+        drain();
+        const QString rest = QString::fromUtf8(process->readAll()).trimmed();
+        if (!rest.isEmpty())
+            lines->append(rest);
+        _videoProcess = nullptr;
+        process->deleteLater();
+
+        QJsonObject result;
+        for (auto it = lines->crbegin(); it != lines->crend(); ++it) {
+            if (it->startsWith(QStringLiteral("RESULT_JSON:"))) {
+                result = QJsonDocument::fromJson(it->mid(12).trimmed().toUtf8()).object();
+                break;
+            }
+        }
+        if (result.isEmpty()) {
+            qWarning() << "package_book.py videos: no result;" << lines->join('\n').right(1000);
+            result["hata"] = extractScriptError(lines->join('\n'), exitCode);
+        }
+        emit videoOptimizeFinished(book, status == QProcess::NormalExit && exitCode == 0,
+                                   QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact)));
+    });
+
+    // A process that started and then crashed still reports on finished;
+    // one that never started does not.
+    connect(process, &QProcess::errorOccurred, this,
+            [this, process, book](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart || _videoProcess != process)
+            return;
+        _videoProcess = nullptr;
+        const QJsonObject result{{"hata", "Optimize could not start: " + process->errorString()}};
+        process->deleteLater();
+        emit videoOptimizeFinished(book, false,
+                                   QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact)));
+    });
+
+    process->start(pythonExecutable(),
+                   QStringList() << "-u" << (scriptsDir() + "/package_book.py") << "videos"
+                                 << (booksDir() + book) << "--stdin-stop");
+    return true;
+}
+
+void PdfProcess::cancelVideoOptimize()
+{
+    if (!_videoProcess)
+        return;
+    // The script stops ffmpeg itself once its stdin closes. Killing Python
+    // instead would leave ffmpeg converting on its own: Windows does not take
+    // a process's children down with it. The kill is only for a script that
+    // doesn't answer.
+    _videoProcess->closeWriteChannel();
+    QPointer<QProcess> p = _videoProcess;
+    QTimer::singleShot(15000, this, [p]() {
+        if (p && p->state() != QProcess::NotRunning)
+            p->kill();
+    });
 }
