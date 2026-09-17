@@ -19,8 +19,15 @@ GroupBox {
     property int sectionIndex
     signal removeSection(int secIndex)
 
-    // Stop playback when this panel is deselected (another section clicked).
-    onVisibleChanged: if (!visible) playRecord.stop()
+    // Stop playback when this panel is deselected (another section clicked),
+    // and let go of the file: Windows can't replace a video a player holds open,
+    // which is what Optimize videos does. Play sets the source again.
+    onVisibleChanged: {
+        if (!visible) {
+            playRecord.stop();
+            playRecord.source = "";
+        }
+    }
 
     // Play / pause / resume — used by the Play button and the Space shortcut.
     function togglePlay() {

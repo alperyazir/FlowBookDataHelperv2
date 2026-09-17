@@ -2,7 +2,7 @@
 """video_compat + package_book'un video adimi icin bagimsiz test.
 
 Kisa sentetik videolarla (HEVC 10-bit, VP9/WebM, 4K, donuk dikey video, AC-3
-ses, 4:4:4, bozuk dosya) bir kitap kurar; Book Details kontrolunu, Optimize'i,
+ses, 4:4:4, bozuk dosya) bir kitap kurar; kontrolu, yerinde Optimize'i,
 durdurmayi ve export'u dogrular. ffmpeg (libx264, libx265, libvpx-vp9, libopus
 ile) gerektirir; yoksa atlanir.
 
@@ -70,8 +70,13 @@ def kitap_kur(kok):
     uret(v / "ac3.mp4", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "ac3")
     uret(v / "yuv444.mp4", "-c:v", "libx264", "-pix_fmt", "yuv444p", "-c:a", "aac")
     (v / "broken.mp4").write_bytes(b"\0not a video" * 1000)
-
+    # audio/ may hold .mp4 files with no picture; they are not the book's videos
+    (b / "audio").mkdir(parents=True)
+    subprocess.run([FFMPEG, "-v", "error", "-y", "-f", "lavfi", "-i", "sine=duration=1",
+                    "-c:a", "aac", str(b / "audio" / "4.mp4")], check=True)
     (b / "images").mkdir(parents=True)
+    (b / "images" / "not-a-video.mp4").write_bytes(b"x")
+
     (b / "raw").mkdir()
     (b / "raw" / "original.pdf").write_bytes(b"%PDF-1.4 original" + b"\0" * 300)
     pre = "./books/VideoKitap/videos/"
@@ -101,91 +106,121 @@ def main():
     try:
         print("kitap kuruluyor…")
         book = kitap_kur(kok)
+        out = kok / "book_export"
+        normalize = ["normalize", str(book), str(out), "--baslik=Video Test",
+                     "--yayinevi=Universal ELT", "--answered-original"]
 
-        print("\nBook Details kontrolu")
+        print("\nKontrol")
         c = vc.check_book(book)
-        sorunlu = {r["dosya"]: r for r in c["sorunlu"]}
-        kontrol("8 video bulundu", c["toplam"] == 8, c["toplam"])
-        kontrol("ok.mp4 sorunsuz", "videos/ok.mp4" not in sorunlu)
-        kontrol("bozuk dosya okunamayan", [o["dosya"] for o in c["okunamayan"]] == ["videos/broken.mp4"],
-                c["okunamayan"])
-        kontrol("6 sorunlu video", len(sorunlu) == 6, sorted(sorunlu))
-        hevc = sorunlu.get("videos/CHASE 5  STORY 3.mp4", {}).get("sorun", "")
+        satir = {r["dosya"]: r for r in c["videolar"]}
+        kontrol("8 video bulundu, audio/ ve images/ taranmadi",
+                c["toplam"] == 8 and len(satir) == 8 and all(d.startswith("videos/") for d in satir),
+                sorted(satir))
+        kontrol("ok.mp4 uygun", satir.get("videos/ok.mp4", {}).get("durum") == "uygun")
+        kontrol("ozet okunur", satir.get("videos/ok.mp4", {}).get("ozet", "").startswith("H.264 · 320×240 · AAC"),
+                satir.get("videos/ok.mp4"))
+        kontrol("bozuk dosya okunamayan", c["okunamayan"] == 1
+                and satir.get("videos/broken.mp4", {}).get("durum") == "okunamayan")
+        kontrol("6 sorunlu video", c["sorunlu"] == 6, c["sorunlu"])
+        hevc = satir.get("videos/CHASE 5  STORY 3.mp4", {}).get("sorun", "")
         kontrol("HEVC 10-bit nedeniyle", "HEVC" in hevc and "10-bit" in hevc, hevc)
-        vp9 = sorunlu.get("videos/vp9 clip.webm", {}).get("sorun", "")
+        vp9 = satir.get("videos/vp9 clip.webm", {}).get("sorun", "")
         kontrol("webm: kap + VP9 + Opus", all(k in vp9 for k in (".webm", "VP9", "Opus")), vp9)
-        kontrol("4K: 1080p ustu", "over 1080p" in sorunlu.get("videos/big.mov", {}).get("sorun", ""))
-        kontrol("dikey 4K: 1080p ustu", "over 1080p" in sorunlu.get("videos/portrait.mp4", {}).get("sorun", ""))
-        ac3 = sorunlu.get("videos/ac3.mp4", {}).get("sorun", "")
+        kontrol("4K: 1080p ustu", "over 1080p" in satir.get("videos/big.mov", {}).get("sorun", ""))
+        kontrol("dikey 4K: 1080p ustu", "over 1080p" in satir.get("videos/portrait.mp4", {}).get("sorun", ""))
+        ac3 = satir.get("videos/ac3.mp4", {}).get("sorun", "")
         kontrol("AC-3 yalnizca ses", ac3 == "AC-3 audio", ac3)
-        kontrol("4:4:4 renk", "4:4:4" in sorunlu.get("videos/yuv444.mp4", {}).get("sorun", ""))
-        kontrol("hicbiri hazir degil", not any(r["hazir"] for r in c["sorunlu"]))
+        kontrol("4:4:4 renk", "4:4:4" in satir.get("videos/yuv444.mp4", {}).get("sorun", ""))
+        code, r = calistir(["video-check", str(book)])
+        kontrol("video-check komutu ayni sonucu verir", code == 0 and r.get("sorunlu") == 6, r)
+
+        print("\nExport uyumsuz video varken durur")
+        code, r = calistir(normalize)
+        kontrol("hata ile durdu", code == 2 and "can't be read" in r.get("hata", ""), r.get("hata"))
+        kontrol("hicbir sey kopyalanmadi", not (out / "Video_Test").exists())
         (book / "videos" / "broken.mp4").unlink()
 
         print("\nDurdurma")
-        adimlar = []
-
-        def dur_ilk_yuzdede():
-            return any(p > 0 for *_, p in adimlar)
-
-        r = vc.optimize_book(book, lambda i, n, d, p: adimlar.append((i, n, d, p)), dur_ilk_yuzdede)
-        kontrol("iptal bildirildi", r.get("iptal") is True, r)
-        kontrol("yarim .part kalmadi", not list(vc.cache_dir(book).glob("*.part.mp4")))
-        kontrol("durdurulan video onbellege girmedi",
-                sum(1 for x in vc.check_book(book)["sorunlu"] if x["hazir"]) == len(r["donusen"]))
-
-        print("\nOptimize")
-        adimlar.clear()
-        r = vc.optimize_book(book, lambda i, n, d, p: adimlar.append((i, n, d, p)), lambda: False)
-        kontrol("hata yok", "hata" not in r and not r["basarisiz"], r)
-        kontrol("ilerleme bildirildi", len(adimlar) > 0)
-        c = vc.check_book(book)
-        kontrol("hepsi hazir", c["sorunlu"] and all(x["hazir"] for x in c["sorunlu"]), c["sorunlu"])
-        kontrol("proje dosyalarina dokunulmadi",
-                vc.probe(book / "videos" / "CHASE 5  STORY 3.mp4", FFMPEG)["video"]["codec"] == "hevc")
-        r2 = vc.optimize_book(book, lambda *a: None, lambda: False)
-        kontrol("ikinci Optimize is yapmaz", r2 == {"donusen": [], "basarisiz": []}, r2)
-
-        print("\nExport")
-        out = kok / "book_export"
-        code, rapor = calistir(["normalize", str(book), str(out), "--baslik=Video Test",
-                                "--yayinevi=Universal ELT", "--answered-original"])
-        kontrol("normalize temiz bitti", code == 0 and "hata" not in rapor, rapor.get("hata"))
-        dest = Path(rapor.get("hedef", out / "Video_Test"))
-        kontrol("6 video degisti", len(rapor.get("video", {}).get("degisen", [])) == 6, rapor.get("video"))
-        kalan = [p.name for p in vc.find_videos(dest)
-                 if vc.problems(p, vc.probe(p, FFMPEG))]
-        kontrol("export'taki her video oynar", not kalan, kalan)
-        vids = {p.name for p in (dest / "videos").iterdir()}
-        kontrol("webm .mp4 oldu", "vp9_clip.mp4" in vids and "vp9_clip.webm" not in vids, vids)
-        kontrol("altyazi yerinde", "vp9_clip.srt" in vids, vids)
-        conf = json.loads((dest / "config.json").read_text(encoding="utf-8"))
-        yollar = [s["video_path"] for s in conf["books"][0]["modules"][0]["pages"][0]["sections"]]
-        kontrol("config yeni adi gosteriyor", "./books/Video_Test/videos/vp9_clip.mp4" in yollar, yollar)
-        kontrol("kirik referans yok", rapor.get("dogrulama", {}).get("kirik_referans") == 0,
-                rapor.get("dogrulama"))
-        big = vc.probe(dest / "videos" / "big.mov", FFMPEG)["video"]
-        kontrol("4K -> 1920x1080", (big["width"], big["height"]) == (1920, 1080), big)
-        por = vc.probe(dest / "videos" / "portrait.mp4", FFMPEG)["video"]
-        kontrol("dikey -> 1080x1920, donuksuz",
-                (por["width"], por["height"], por["rotation"]) == (1080, 1920, 0), por)
-        ac3 = vc.probe(dest / "videos" / "ac3.mp4", FFMPEG)
-        kontrol("AC-3: goruntu aynen, ses AAC",
-                (ac3["video"]["width"], ac3["audio"]["codec"]) == (320, "aac"), ac3)
-        kontrol(".pkgcache export'a gitmedi", not (dest / ".pkgcache").exists())
-
-        print("\nOnbellek yokken export durur")
-        shutil.rmtree(vc.cache_dir(book))
-        code, rapor = calistir(["normalize", str(book), str(out), "--baslik=Video Test",
-                                "--yayinevi=Universal ELT", "--answered-original"])
-        kontrol("hata ile durdu", code == 2 and "Optimize videos" in rapor.get("hata", ""),
-                rapor.get("hata"))
-
-        print("\nvideos komutu: stdin kapaninca durur")
         run = subprocess.run([sys.executable, str(Path(package_book.__file__)), "videos",
                               str(book), "--stdin-stop"],
                              stdin=subprocess.DEVNULL, capture_output=True, text=True)
-        kontrol("cikis 3 (durduruldu)", run.returncode == 3, run.stdout[-300:] + run.stderr[-300:])
+        kontrol("stdin kapaninca cikis 3", run.returncode == 3, run.stdout[-300:] + run.stderr[-300:])
+        # The editor's Stop: stdin closes while a conversion is running.
+        proc = subprocess.Popen([sys.executable, "-u", str(Path(package_book.__file__)), "videos",
+                                 str(book), "--stdin-stop"],
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        for line in proc.stdout:
+            if b'"pct": ' in line and not line.rstrip().endswith(b'"pct": 0}'):
+                proc.stdin.close()
+                break
+        rest = proc.stdout.read()
+        proc.wait()
+        kontrol("calisirken Stop: cikis 3, cokme yok",
+                proc.returncode == 3 and b"Fatal Python error" not in rest, (proc.returncode, rest[-300:]))
+        kontrol("Stop sonrasi orijinal yerinde",
+                vc.probe(book / "videos" / "CHASE 5  STORY 3.mp4", FFMPEG)["video"]["codec"] == "hevc")
+        adimlar = []
+        r = vc.optimize_book(book, lambda i, n, d, p: adimlar.append((i, n, d, p)),
+                             lambda: any(p > 0 for *_, p in adimlar))
+        kontrol("iptal bildirildi", r.get("iptal") is True, r)
+        kontrol("durdurulan video yerinde, dokunulmamis",
+                vc.probe(book / "videos" / "CHASE 5  STORY 3.mp4", FFMPEG)["video"]["codec"] == "hevc")
+        kontrol("yarim dosya kalmadi", not list(book.rglob("*.part.mp4")))
+
+        print("\nOptimize (yerinde)")
+        eski = book / ".pkgcache" / "videos"
+        eski.mkdir(parents=True, exist_ok=True)
+        (eski / "0123456789abcdef01234567.mp4").write_bytes(b"3.3.17 onbellegi")
+        (eski / "0123456789abcdef01234567.json").write_text("{}")
+        adimlar.clear()
+        r = vc.optimize_book(book, lambda i, n, d, p: adimlar.append((i, n, d, p)), lambda: False)
+        kontrol("hata yok", "hata" not in r and not r["basarisiz"], r)
+        kontrol("6 video donustu", len(r["donusen"]) == 6, r["donusen"])
+        kontrol("ilerleme bildirildi", len(adimlar) > 0)
+        c = vc.check_book(book)
+        kontrol("kitaptaki her video artik uygun",
+                c["toplam"] == 7 and all(v["durum"] == "uygun" for v in c["videolar"]), c["videolar"])
+        vids = {p.name for p in (book / "videos").iterdir()}
+        kontrol("webm .mp4 oldu, orijinal silindi", "vp9 clip.mp4" in vids and "vp9 clip.webm" not in vids, vids)
+        kontrol("yeniden adlandirma bildirildi",
+                r["yeniden_adlandirilan"] == {"videos/vp9 clip.webm": "videos/vp9 clip.mp4"}, r["yeniden_adlandirilan"])
+        kontrol("altyazi yerinde", "vp9 clip.srt" in vids, vids)
+        kontrol(".mov adi degismedi", "big.mov" in vids, vids)
+        conf = json.loads((book / "config.json").read_text(encoding="utf-8"))
+        yollar = [s["video_path"] for s in conf["books"][0]["modules"][0]["pages"][0]["sections"]]
+        kontrol("config.json yeni adi gosteriyor",
+                "./books/VideoKitap/videos/vp9 clip.mp4" in yollar and not any(y.endswith(".webm") for y in yollar), yollar)
+        big = vc.probe(book / "videos" / "big.mov", FFMPEG)["video"]
+        kontrol("4K -> 1920x1080", (big["width"], big["height"]) == (1920, 1080), big)
+        por = vc.probe(book / "videos" / "portrait.mp4", FFMPEG)["video"]
+        kontrol("dikey -> 1080x1920, donuksuz",
+                (por["width"], por["height"], por["rotation"]) == (1080, 1920, 0), por)
+        a3 = vc.probe(book / "videos" / "ac3.mp4", FFMPEG)
+        kontrol("AC-3: goruntu aynen, ses AAC", (a3["video"]["width"], a3["audio"]["codec"]) == (320, "aac"), a3)
+        kontrol(".pkgcache/videos temizlendi (3.3.17 onbellegi dahil)", not (book / ".pkgcache").exists())
+        r2 = vc.optimize_book(book, lambda *a: None, lambda: False)
+        kontrol("ikinci Optimize is yapmaz",
+                r2 == {"donusen": [], "basarisiz": [], "yeniden_adlandirilan": {}}, r2)
+        # stdin stays open until the run ends on its own, as with the editor:
+        # the watcher must not make Python abort at exit ("Python quit unexpectedly").
+        proc = subprocess.Popen([sys.executable, str(Path(package_book.__file__)), "videos",
+                                 str(book), "--stdin-stop"],
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        out_bytes = proc.stdout.read()
+        proc.wait()
+        proc.stdin.close()
+        kontrol("stdin acikken normal bitis: cikis 0, cokme yok",
+                proc.returncode == 0 and b"Fatal Python error" not in out_bytes, (proc.returncode, out_bytes[-300:]))
+
+        print("\nExport")
+        code, rapor = calistir(normalize)
+        kontrol("normalize temiz bitti", code == 0 and "hata" not in rapor, rapor.get("hata"))
+        kontrol("rapor 7 video", rapor.get("video") == {"toplam": 7}, rapor.get("video"))
+        dest = Path(rapor.get("hedef", out / "Video_Test"))
+        kalan = [p.name for p in vc.find_videos(dest) if vc.problems(p, vc.probe(p, FFMPEG))]
+        kontrol("export'taki her video oynar", not kalan, kalan)
+        kontrol("kirik referans yok", rapor.get("dogrulama", {}).get("kirik_referans") == 0,
+                rapor.get("dogrulama"))
     finally:
         shutil.rmtree(kok, ignore_errors=True)
 

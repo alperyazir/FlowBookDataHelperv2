@@ -3,9 +3,9 @@
 Windows customers get the Qt 5.15 reader, and its FFmpeg is cut down on purpose
 (LGPL, Win7-safe, software decoding only): the mov demuxer, the H.264 decoder,
 AAC and MP3 — nothing else. A video outside that does not open at all. CHASE 5
-arrived as HEVC, one of its videos 10-bit, and not one of the twenty played on
-Windows, while a Mac played every one of them: its decoders take HEVC in their
-stride, so nothing looked wrong in the editor.
+arrived as HEVC, one of its videos 10-bit, and not one of them played on
+Windows, while a Mac played every one: its decoders take HEVC in their stride,
+so nothing looked wrong in the editor.
 
 The rule, in one place:
 
@@ -15,21 +15,20 @@ The rule, in one place:
   size        up to 1080p               decoded in software on old smartboards
   audio       AAC or MP3 (or none)      the only audio decoders
 
-Package ▸ Book Details asks check_book() about every video. A video that breaks
-the rule is converted by optimize_book() into the project's .pkgcache/videos/,
-named after its content, and export swaps the converted copy into book_export/
-(apply_to_export). The project's own files are never rewritten: the editor
-keeps playing what the author handed over, and a re-export finds the work done.
+check_book() reports every video against it — for Project ▸ Videos, the toast
+when a book opens, and Package ▸ Book Details. optimize_book() converts the
+videos that break it IN the book's own folder, replacing the originals: Test
+copies books/<book> as it is into a FlowBook, so a fix kept anywhere else
+would never reach it. Export only checks (check_export) and stops if one is
+left.
 
 Only ffmpeg is needed, never ffprobe: Help ▸ Dependencies installs ffmpeg from
 the imageio-ffmpeg wheel, which ships no ffprobe. So streams are read from what
 `ffmpeg -i` prints.
 """
-import hashlib
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -41,16 +40,17 @@ import flowbook_normalize as fn
 # The karaoke converter's lookup: PATH, then where Help ▸ Dependencies puts it.
 from audio_cbr import _ffmpeg as find_ffmpeg
 
+# Where a book keeps its videos (the editor's video/, the export's videos/).
+# Nowhere else is looked at: audio/ holds .mp4 files with no picture, which
+# read as broken videos, and walking images/ on every open costs time for
+# nothing.
+VIDEO_DIRS = {"video", "videos"}
 VIDEO_EXTS = {".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi", ".wmv", ".flv",
               ".mpg", ".mpeg", ".3gp", ".ts", ".mts", ".m2ts", ".ogv"}
 PLAYABLE_EXTS = {".mp4", ".m4v", ".mov"}
 PLAYABLE_PIX = {"yuv420p", "yuvj420p"}
 PLAYABLE_AUDIO = {"aac", "mp3"}
 MAX_LONG, MAX_SHORT = 1920, 1080
-
-# Part of every cache key: change the conversion below and bump this, and every
-# copy made the old way is made again instead of shipping.
-RECIPE = 1
 
 # The editor starts Python without a console; without this every ffmpeg it
 # starts would open a console window of its own on Windows.
@@ -184,64 +184,33 @@ def problems(path, info):
     return out
 
 
-def content_key(path):
-    """Names a video's converted copy by what the file holds, not where it is:
-    export renames files ("CHASE 5  STORY 3.mp4" becomes CHASE_5_STORY_3.mp4),
-    and the copy it looks up has to be the one made from the same bytes.
-
-    Size plus the first and last megabyte. Re-encoding or trimming a video
-    rewrites its index, which an MP4 keeps at one end or the other, so a
-    changed video gets a new key; hashing whole files would read gigabytes
-    every time the dialog opens."""
-    size = os.path.getsize(path)
-    h = hashlib.sha1(f"r{RECIPE}:{size}:".encode())
-    with open(path, "rb") as f:
-        h.update(f.read(1 << 20))
-        if size > 2 << 20:
-            f.seek(-(1 << 20), os.SEEK_END)
-            h.update(f.read(1 << 20))
-    return h.hexdigest()[:24]
-
-
-def cache_dir(book):
-    return Path(book) / ".pkgcache" / "videos"
-
-
-def cached_copy(cache, key):
-    """The finished converted copy for key, or None. The .json is written only
-    after the copy verified, so a run cut short leaves nothing that counts."""
-    out = cache / f"{key}.mp4"
-    try:
-        meta = json.loads((cache / f"{key}.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    if out.is_file() and out.stat().st_size == meta.get("bytes"):
-        return out
-    return None
-
-
 def find_videos(book):
-    """Every video file that ships with the book. raw/ ships only its PDFs,
-    and the module's junk (.pkgcache, temp, ...) never ships at all."""
+    """Every video file in the book's video folder(s), junk left out."""
     book = Path(book)
     out = []
-    for p in sorted(book.rglob("*")):
-        rel = p.relative_to(book)
-        if (rel.parts[0] == "raw" or p.suffix.lower() not in VIDEO_EXTS
-                or any(part.startswith(".") for part in rel.parts)
-                or not p.is_file() or fn.is_junk_path(p, book)):
-            continue
-        out.append(p)
-    return out
+    try:
+        roots = [d for d in book.iterdir() if d.is_dir() and d.name.lower() in VIDEO_DIRS]
+    except OSError:
+        return out
+    for root in roots:
+        for p in sorted(root.rglob("*")):
+            rel = p.relative_to(book)
+            if (p.suffix.lower() not in VIDEO_EXTS
+                    or any(part.startswith(".") for part in rel.parts)
+                    or not p.is_file() or fn.is_junk_path(p, book)):
+                continue
+            out.append(p)
+    return sorted(out)
 
 
 def survey(book, ffmpeg):
     """Probe every video in the book. Each row: {path, dosya, info, sorun} or
-    {path, dosya, hata}. Probes run side by side — most of a probe is starting
-    ffmpeg, and a book can have a hundred videos."""
+    {path, dosya, hata}. A few probes run side by side — most of a probe is
+    starting ffmpeg — but not so many that a check started as a book opens
+    competes with the editor for an old machine's cores."""
     book = Path(book)
     videos = find_videos(book)
-    with ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 4)) as pool:
+    with ThreadPoolExecutor(max_workers=min(3, os.cpu_count() or 2)) as pool:
         infos = list(pool.map(lambda p: probe(p, ffmpeg), videos))
     rows = []
     for p, info in zip(videos, infos):
@@ -261,29 +230,67 @@ FFMPEG_MISSING = ("ffmpeg isn't installed, so the videos can't be checked or "
                   "converted — install it from Help ▸ Dependencies")
 
 
-def check_book(book):
-    """For the Package dialog; touches nothing.
+def _summary(info):
+    """"H.264 · 854×480 · AAC · 2:36", for the Videos dialog."""
+    v, a = info["video"], info["audio"]
+    parts = [_name(v["codec"]), f"{v['width']}×{v['height']}",
+             _name(a["codec"]) if a else "no audio"]
+    if info["duration"]:
+        m, sec = divmod(int(round(info["duration"])), 60)
+        parts.append(f"{m}:{sec:02d}")
+    return " · ".join(parts)
 
-    {toplam, ffmpeg_yok, sorunlu: [{dosya, sorun, hazir}], okunamayan: [{dosya, hata}]}
-    hazir: Optimize already made its converted copy.
+
+def lower_priority():
+    """Run this process, and every ffmpeg it starts, below the editor. Windows
+    children inherit a below-normal priority class; POSIX children the nice
+    value."""
+    try:
+        if os.name == "nt":
+            import ctypes
+            BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
+            k32 = ctypes.windll.kernel32
+            k32.SetPriorityClass(k32.GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS)
+        else:
+            os.nice(10)
+    except (OSError, AttributeError):
+        pass
+
+
+def check_book(book):
+    """Every video in the book against the rule; touches nothing.
+
+    {toplam, sorunlu, okunamayan, ffmpeg_yok, videolar: [row]}. Each row is
+    {dosya, mb, durum} plus, by durum:
+      "uygun"       plays on Windows              ozet
+      "sorunlu"     won't; Optimize fixes it      ozet, sorun
+      "okunamayan"  ffmpeg can't open it          hata
+      "bilinmiyor"  no ffmpeg to ask (ffmpeg_yok)
     """
     book = Path(book)
     videos = find_videos(book)
-    r = {"toplam": len(videos), "ffmpeg_yok": False, "sorunlu": [], "okunamayan": []}
+    r = {"toplam": len(videos), "sorunlu": 0, "okunamayan": 0,
+         "ffmpeg_yok": False, "videolar": []}
     if not videos:
         return r
     ffmpeg = find_ffmpeg()
     if not ffmpeg:
         r["ffmpeg_yok"] = True
+        r["videolar"] = [{"dosya": p.relative_to(book).as_posix(), "durum": "bilinmiyor",
+                          "mb": round(p.stat().st_size / 1048576, 1)} for p in videos]
         return r
-    cache = cache_dir(book)
     for row in survey(book, ffmpeg):
+        out = {"dosya": row["dosya"], "mb": round(row["path"].stat().st_size / 1048576, 1)}
         if "hata" in row:
-            r["okunamayan"].append({"dosya": row["dosya"], "hata": row["hata"]})
+            out.update(durum="okunamayan", hata=row["hata"])
+            r["okunamayan"] += 1
         elif row["sorun"]:
-            r["sorunlu"].append({
-                "dosya": row["dosya"], "sorun": ", ".join(row["sorun"]),
-                "hazir": cached_copy(cache, content_key(row["path"])) is not None})
+            out.update(durum="sorunlu", ozet=_summary(row["info"]),
+                       sorun=", ".join(row["sorun"]))
+            r["sorunlu"] += 1
+        else:
+            out.update(durum="uygun", ozet=_summary(row["info"]))
+        r["videolar"].append(out)
     return r
 
 
@@ -309,18 +316,33 @@ def _remove(path):
             time.sleep(0.25)
 
 
+def _replace(src, dst):
+    """Move src over dst; None, or why it couldn't. On Windows a file another
+    program holds open can't be replaced — the editor's own player holds a
+    video it has shown, and a FlowBook started from Test may too — so the
+    handle gets a moment to go before we give up and say what is in the way."""
+    for attempt in range(8):
+        try:
+            os.replace(src, dst)
+            return None
+        except PermissionError:
+            if attempt == 7:
+                return (f"{Path(dst).name} is open in another program (a video player, "
+                        f"or a FlowBook started from Test) — close it and optimize again")
+            time.sleep(0.25)
+
+
 def convert(src, info, out, ffmpeg, on_pct, stop):
-    """Convert one video to out (an .mp4). Returns {} on success, {hata} or {iptal}.
+    """Convert one video into out, a scratch .mp4 the caller moves into place.
+    Returns {} once out probes clean and runs as long as the source, else
+    {hata} or {iptal} with out removed.
 
     Only what breaks the rule is redone: an H.264 video with the wrong audio
-    keeps its picture untouched (-c:v copy), and the reverse. Written beside
-    out and moved into place only after the result probes clean and runs as
-    long as the source, so a failure or a Stop never leaves a copy that counts.
+    keeps its picture untouched (-c:v copy), and the reverse.
     """
     v, a = info["video"], info["audio"]
     redo_video = v["codec"] != "h264" or v["pix_fmt"] not in PLAYABLE_PIX or _too_large(v)
     redo_audio = a is not None and a["codec"] not in PLAYABLE_AUDIO
-    part = out.with_name(out.stem + ".part.mp4")
 
     cmd = [ffmpeg, "-hide_banner", "-nostdin", "-y", "-v", "error", "-nostats",
            "-progress", "pipe:1", "-i", str(src),
@@ -346,7 +368,7 @@ def convert(src, info, out, ffmpeg, on_pct, stop):
     else:
         cmd += ["-c:v", "copy"]
     cmd += ["-c:a", "aac", "-b:a", "160k"] if redo_audio else ["-c:a", "copy"]
-    cmd += ["-movflags", "+faststart", "-f", "mp4", str(part)]
+    cmd += ["-movflags", "+faststart", "-f", "mp4", str(out)]
 
     duration = info["duration"] or 0
     errors, last = [], -1
@@ -373,83 +395,30 @@ def convert(src, info, out, ffmpeg, on_pct, stop):
     proc.wait()
 
     if stop():
-        _remove(part)
+        _remove(out)
         return {"iptal": True}
     if proc.returncode != 0:
-        _remove(part)
+        _remove(out)
         return {"hata": "ffmpeg failed: " + (" / ".join(errors[-3:]) or f"exit {proc.returncode}")}
-    after = probe(part, ffmpeg)
+    after = probe(out, ffmpeg)
     left = ["no video stream"] if not after.get("video") else problems(out, after)
     if after.get("error") or left:
-        _remove(part)
-        return {"hata": "the converted copy still won't play: "
+        _remove(out)
+        return {"hata": "the converted video still won't play: "
                         + (after.get("error") or ", ".join(left))}
     if duration and after["duration"] and abs(after["duration"] - duration) > max(1.0, duration * 0.02):
-        _remove(part)
-        return {"hata": f"the converted copy runs {after['duration']:.1f} s, "
+        _remove(out)
+        return {"hata": f"the converted video runs {after['duration']:.1f} s, "
                         f"the original {duration:.1f} s"}
-    os.replace(part, out)
     return {}
 
 
-def optimize_book(book, progress, stop):
-    """Make the converted copy of every video in the book that needs one.
-
-    progress(i, n, dosya, pct) as each conversion moves; stop() is polled and
-    ends the run early (the video in hand is dropped, finished ones are kept).
-    Returns {donusen: [{dosya, sorun, mb}], basarisiz: [{dosya, hata}]},
-    plus {iptal: true} after a stop or {hata} when nothing could be tried.
-    """
-    book = Path(book)
-    ffmpeg = find_ffmpeg()
-    if not ffmpeg:
-        return {"hata": FFMPEG_MISSING}
-    cache = cache_dir(book)
-    cache.mkdir(parents=True, exist_ok=True)
-    for stale in cache.glob("*.part.mp4"):        # left by a run that was killed
-        _remove(stale)
-
-    todo = []
-    for row in survey(book, ffmpeg):
-        if row.get("sorun"):
-            key = content_key(row["path"])
-            if cached_copy(cache, key) is None:
-                todo.append((row, key))
-    r = {"donusen": [], "basarisiz": []}
-    if todo and not _has_libx264(ffmpeg):
-        return {**r, "hata": f"this ffmpeg ({ffmpeg}) has no H.264 encoder (libx264) — "
-                             f"install ffmpeg again from Help ▸ Dependencies"}
-
-    for i, (row, key) in enumerate(todo):
-        if stop():
-            r["iptal"] = True
-            break
-        progress(i, len(todo), row["dosya"], 0)
-        out = cache / f"{key}.mp4"
-        res = convert(row["path"], row["info"], out, ffmpeg,
-                      lambda pct: progress(i, len(todo), row["dosya"], pct), stop)
-        if res.get("iptal"):
-            r["iptal"] = True
-            break
-        if res.get("hata"):
-            r["basarisiz"].append({"dosya": row["dosya"], "hata": res["hata"]})
-            continue
-        src_bytes, out_bytes = row["path"].stat().st_size, out.stat().st_size
-        meta = {"kaynak": row["dosya"], "sorun": row["sorun"], "recipe": RECIPE,
-                "kaynak_bytes": src_bytes, "bytes": out_bytes}
-        tmp = cache / f"{key}.json.tmp"
-        tmp.write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
-        os.replace(tmp, cache / f"{key}.json")
-        r["donusen"].append({"dosya": row["dosya"], "sorun": ", ".join(row["sorun"]),
-                             "mb": [round(src_bytes / 1048576, 1), round(out_bytes / 1048576, 1)]})
-    return r
-
-
 def _rewrite_refs(book, renamed):
-    """Point config.json/games.json at videos whose extension changed. Paths
-    are matched whole, so no other string that merely contains one moves."""
+    """Point config.json and games.json at videos whose extension changed.
+    renamed maps book-relative paths ("video/a.webm" -> "video/a.mp4"); a path
+    matches whole, after the "./books/<folder>/" in front of it."""
     for name in ("config.json", "games.json"):
-        cfg = book / name
+        cfg = Path(book) / name
         if not cfg.is_file():
             continue
         data = json.loads(cfg.read_text(encoding="utf-8"))
@@ -460,65 +429,120 @@ def _rewrite_refs(book, renamed):
                 return {k: walk(v) for k, v in node.items()}
             if isinstance(node, list):
                 return [walk(v) for v in node]
-            if isinstance(node, str) and node in renamed:
-                count[0] += 1
-                return renamed[node]
+            if isinstance(node, str) and node.startswith(fn.BOOKS_PREFIX):
+                folder, _, rel = node[len(fn.BOOKS_PREFIX):].partition("/")
+                if rel in renamed:
+                    count[0] += 1
+                    return f"{fn.BOOKS_PREFIX}{folder}/{renamed[rel]}"
             return node
 
         data = walk(data)
         if count[0]:
-            cfg.write_text(json.dumps(data, ensure_ascii=False, indent=4), encoding="utf-8")
+            tmp = cfg.with_name(cfg.name + ".tmp")
+            tmp.write_text(json.dumps(data, ensure_ascii=False, indent=4), encoding="utf-8")
+            os.replace(tmp, cfg)
 
 
-def apply_to_export(dest, cache, folder):
-    """Swap each video in an export that breaks the rule for its converted copy.
+def optimize_book(book, progress, stop):
+    """Convert every video in the book that won't play on Windows, in place.
 
-    A video without one stops the export ({hata}) rather than ship: the dialog
-    will not let a book through with such a video, so this only happens when
-    a file changed after the check, and the fix is the dialog's Optimize.
-    Returns {toplam, degisen: [{dosya, sorun, mb}]} or {hata}.
+    Each converted video replaces its original under the same name; one in a
+    container the reader can't open (.webm, .mkv, ...) becomes .mp4, and
+    config.json/games.json follow it. A conversion is written to the book's
+    .pkgcache/videos/ first and moved over the original only once it has
+    verified, so a failure or a stop leaves that original as it was.
+
+    progress(i, n, dosya, pct) as each conversion moves; stop() is polled and
+    ends the run early (the video in hand is dropped, finished ones stay).
+    Returns {donusen: [{dosya, eski?, sorun, mb}], basarisiz: [{dosya, hata}],
+    yeniden_adlandirilan: {old: new}}, plus {iptal: true} after a stop or
+    {hata} when nothing could be tried.
     """
-    dest, cache = Path(dest), Path(cache)
-    videos = find_videos(dest)
-    if not videos:
-        return {"toplam": 0, "degisen": []}
+    book = Path(book)
     ffmpeg = find_ffmpeg()
     if not ffmpeg:
         return {"hata": FFMPEG_MISSING}
-    rows = survey(dest, ffmpeg)
-    bad = [r for r in rows if "hata" in r]
-    if bad:
-        return {"hata": f"{len(bad)} video(s) can't be read: "
-                        + "; ".join(f"{r['dosya']} ({r['hata']})" for r in bad[:5])}
-    plan, missing = [], []
-    for row in rows:
-        if row["sorun"]:
-            copy = cached_copy(cache, content_key(row["path"]))
-            (plan.append((row, copy)) if copy else missing.append(row["dosya"]))
-    if missing:
-        return {"hata": f"{len(missing)} video(s) won't play on Windows and have no optimized "
-                        f"copy — use Optimize videos in Book Details: "
-                        + ", ".join(missing[:5]) + (", …" if len(missing) > 5 else "")}
+    work = book / ".pkgcache" / "videos"
+    work.mkdir(parents=True, exist_ok=True)
+    # The folder is Optimize's own scratch space: anything in it is left over,
+    # a conversion from a run that was killed, or a whole cached copy from the
+    # editor before 3.3.18 (which converted into here and never into the book).
+    for stale in work.iterdir():
+        if stale.is_file():
+            _remove(stale)
 
-    degisen, renamed = [], {}
-    for row, copy in plan:
+    todo = [row for row in survey(book, ffmpeg) if row.get("sorun")]
+    r = {"donusen": [], "basarisiz": [], "yeniden_adlandirilan": {}}
+    if todo and not _has_libx264(ffmpeg):
+        return {**r, "hata": f"this ffmpeg ({ffmpeg}) has no H.264 encoder (libx264) — "
+                             f"install ffmpeg again from Help ▸ Dependencies"}
+
+    for i, row in enumerate(todo):
+        if stop():
+            r["iptal"] = True
+            break
         old = row["path"]
         # The mov demuxer reads an MP4 under a .mov or .m4v name just the same;
         # only a container the reader has no demuxer for changes its name.
         new = old if old.suffix.lower() in PLAYABLE_EXTS else old.with_suffix(".mp4")
         if new != old and new.exists():
-            return {"hata": f"{row['dosya']} becomes .mp4, but {new.name} is already there"}
+            r["basarisiz"].append({"dosya": row["dosya"],
+                                   "hata": f"it would become {new.name}, which is already there"})
+            continue
+        progress(i, len(todo), row["dosya"], 0)
+        scratch = work / f"{i}.part.mp4"
+        res = convert(old, row["info"], scratch, ffmpeg,
+                      lambda pct: progress(i, len(todo), row["dosya"], pct), stop)
+        if res.get("iptal"):
+            r["iptal"] = True
+            break
+        if res.get("hata"):
+            r["basarisiz"].append({"dosya": row["dosya"], "hata": res["hata"]})
+            continue
         was = old.stat().st_size
-        tmp = new.with_name(new.name + ".tmp")
-        shutil.copyfile(copy, tmp)
-        os.replace(tmp, new)
+        why = _replace(scratch, new)
+        if why:
+            _remove(scratch)
+            r["basarisiz"].append({"dosya": row["dosya"], "hata": why})
+            continue
+        new_rel = new.relative_to(book).as_posix()
+        entry = {"dosya": new_rel, "sorun": ", ".join(row["sorun"]),
+                 "mb": [round(was / 1048576, 1), round(new.stat().st_size / 1048576, 1)]}
         if new != old:
-            fn.safe_remove(old)
-            prefix = f"{fn.BOOKS_PREFIX}{folder}/"
-            renamed[prefix + row["dosya"]] = prefix + new.relative_to(dest).as_posix()
-        degisen.append({"dosya": new.relative_to(dest).as_posix(),
-                        "sorun": ", ".join(row["sorun"]),
-                        "mb": [round(was / 1048576, 1), round(new.stat().st_size / 1048576, 1)]})
-    if renamed:
-        _rewrite_refs(dest, renamed)
-    return {"toplam": len(videos), "degisen": degisen}
+            _remove(old)
+            r["yeniden_adlandirilan"][row["dosya"]] = new_rel
+            entry["eski"] = row["dosya"]
+        r["donusen"].append(entry)
+
+    if r["yeniden_adlandirilan"]:
+        _rewrite_refs(book, r["yeniden_adlandirilan"])
+    for d in (work, work.parent):                 # only when nothing else is in them
+        try:
+            d.rmdir()
+        except OSError:
+            break
+    return r
+
+
+def check_export(book):
+    """For export: {toplam}, or {hata} naming the videos that would ship
+    unplayable on Windows. Asked of the project before anything is copied:
+    normalizing renames files but never changes what is in a video."""
+    book = Path(book)
+    videos = find_videos(book)
+    if not videos:
+        return {"toplam": 0}
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        return {"hata": FFMPEG_MISSING}
+    rows = survey(book, ffmpeg)
+    bad = [r for r in rows if "hata" in r]
+    if bad:
+        return {"hata": f"{len(bad)} video(s) can't be read: "
+                        + "; ".join(f"{r['dosya']} ({r['hata']})" for r in bad[:5])}
+    wrong = [r["dosya"] for r in rows if r["sorun"]]
+    if wrong:
+        return {"hata": f"{len(wrong)} video(s) won't play on Windows — optimize them in "
+                        f"Book Details or Project ▸ Videos: "
+                        + ", ".join(wrong[:5]) + (", …" if len(wrong) > 5 else "")}
+    return {"toplam": len(videos)}

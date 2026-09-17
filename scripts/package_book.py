@@ -11,6 +11,10 @@ copied over. This file adds only what belongs to the editor:
       config's pages fit the PDF, the publisher logo path, and which videos
       won't play on Windows.
 
+  video-check <book_dir>
+      Only the videos: video_compat.check_book(), for Project ▸ Videos and the
+      warning when a book opens. Runs at below-normal priority.
+
   title --baslik T [--yayinevi P]
       The folder the title becomes and the title warnings, for the dialog's
       live preview -- the same title_to_folder the export uses.
@@ -25,14 +29,14 @@ copied over. This file adds only what belongs to the editor:
           any other extra is kept and reported, never silently dropped
         * the editor's own files (fbinf, settings.json, review/, *.ini, ...)
           removed from the export, whatever their letter case
-        * every video the Windows reader can't play replaced by its optimized
-          copy from the project's .pkgcache/videos/; stops if one has none
+        * stops before copying anything if a video won't play on Windows
         * --geri-yaz: book_title/publisher_name written back to the project's
           config.json, those two fields and nothing else
 
   videos <book_dir> [--stdin-stop]
-      Converts the book's videos the Windows reader can't play into the
-      project's .pkgcache/videos/ (video_compat.py) — Book Details' Optimize.
+      Converts the book's videos the Windows reader can't play, in the book's
+      own folder, replacing the originals (video_compat.optimize_book) — the
+      Optimize of Book Details and Project ▸ Videos.
       Prints "PROGRESS: {i, n, dosya, pct}" lines as it goes; --stdin-stop ends
       the run when stdin closes, which is how the editor stops it (killing
       Python would leave ffmpeg running on Windows). Exit 0 all converted,
@@ -334,11 +338,15 @@ def cmd_normalize(a):
         return emit({"hata": f"Answered PDF not found: {a.answered}"}, 2)
 
     src = Path(a.book_dir)
+    video = video_compat.check_export(src)
+    if "hata" in video:
+        return emit({"hata": video["hata"]}, 2)
     try:
         rapor = fn.normalize_book(src, a.export_root, title=title, publisher=publisher)
     except fn.FlowbookError as exc:
         return emit({"hata": str(exc)}, 2)
     rapor["geri_yazildi"] = write_back(src, title, publisher) if a.geri_yaz else False
+    rapor["video"] = video
 
     dest = Path(rapor["hedef"])
     raw = dest / "raw"
@@ -360,10 +368,6 @@ def cmd_normalize(a):
 
     rapor["raw"] = clean_raw(raw)
     rapor["editor_dosyalari"] = strip_editor_files(dest)
-    rapor["video"] = video_compat.apply_to_export(dest, video_compat.cache_dir(src),
-                                                  rapor["klasor"])
-    if "hata" in rapor["video"]:
-        return emit({**rapor, "hata": rapor["video"]["hata"]}, 2)
     conf = json.loads((dest / "config.json").read_text(encoding="utf-8"))
     if a.yayinevi_yok and conf.get("publisher_name"):
         # normalize_book writes a publisher only when given one, so "None"
@@ -441,6 +445,16 @@ def final_check(book, folder):
     return {"kirik_referans": len(kalan), "ornek": kalan[:10]}
 
 
+def cmd_video_check(a):
+    src = Path(a.book_dir)
+    if not src.is_dir():
+        return emit({"hata": f"Book folder not found: {src}"}, 2)
+    # Runs in the background while the author works (a book just opened):
+    # it must never be what makes the editor feel slow.
+    video_compat.lower_priority()
+    return emit(video_compat.check_book(src), 0)
+
+
 def cmd_videos(a):
     src = Path(a.book_dir)
     if not (src / "config.json").is_file():
@@ -448,7 +462,16 @@ def cmd_videos(a):
     stopped = threading.Event()
     if a.stdin_stop:
         def watch():
-            sys.stdin.buffer.read()          # returns when the editor closes it
+            # Returns when the editor closes our stdin. Read off the descriptor,
+            # not sys.stdin: a daemon thread parked inside the buffered reader
+            # holds its lock, and when the run ends normally Python aborts at
+            # shutdown ("could not acquire lock for <stdin>") — macOS reports
+            # that as "Python quit unexpectedly".
+            try:
+                while os.read(sys.stdin.fileno(), 4096):
+                    pass
+            except OSError:
+                pass
             stopped.set()
         threading.Thread(target=watch, daemon=True).start()
 
@@ -540,6 +563,8 @@ def main(argv=None):
     g.add_argument("--answered")
     g.add_argument("--answered-original", action="store_true")
     n.add_argument("--geri-yaz", action="store_true")
+    vc = sub.add_parser("video-check")
+    vc.add_argument("book_dir")
     v = sub.add_parser("videos")
     v.add_argument("book_dir")
     v.add_argument("--stdin-stop", action="store_true")
@@ -549,7 +574,8 @@ def main(argv=None):
     a = ap.parse_args(argv)
     try:
         return {"check": cmd_check, "title": cmd_title, "normalize": cmd_normalize,
-                "videos": cmd_videos, "zip": cmd_zip}[a.cmd](a)
+                "video-check": cmd_video_check, "videos": cmd_videos,
+                "zip": cmd_zip}[a.cmd](a)
     except Exception as exc:
         # The result line FIRST: printing a traceback can itself fail on a
         # console that can't encode the path in it, and the editor would then

@@ -19,9 +19,13 @@
 #include <QSharedPointer>
 #include <QPointer>
 #include <QTimer>
+#include <QMutex>
 
 QString PdfProcess::scriptsDir()
 {
+    // Asked from worker threads too (packaging, the video check).
+    static QMutex mutex;
+    QMutexLocker lock(&mutex);
     static QString cached;
     if (!cached.isEmpty())
         return cached;
@@ -68,6 +72,9 @@ QString PdfProcess::pythonExecutable()
     // PATH: a GUI .app bundle runs with a minimal PATH where the first match is
     // Apple's /usr/bin/python3 stub, which lacks PyMuPDF ("fitz"). So we probe
     // candidate interpreters and pick the first one that can import fitz.
+    // Asked from worker threads too (packaging, the video check).
+    static QMutex mutex;
+    QMutexLocker lock(&mutex);
     static QString cached;
     if (!cached.isEmpty())
         return cached;
@@ -1126,14 +1133,10 @@ void PdfProcess::logNormalizeReport(const QJsonObject &r)
     if (!editorFiles.isEmpty())
         log("removed editor/OS files: " + editorFiles.join(", "));
 
-    // Videos the Windows reader can't play, swapped for their optimized copies.
-    for (const QJsonValue &v : r.value("video").toObject().value("degisen").toArray()) {
-        const QJsonObject o = v.toObject();
-        const QJsonArray mb = o.value("mb").toArray();
-        log(QString("video: %1 — optimized copy (was %2; %3 MB → %4 MB)")
-                .arg(o.value("dosya").toString(), o.value("sorun").toString())
-                .arg(mb.at(0).toDouble()).arg(mb.at(1).toDouble()));
-    }
+    // The export stops before this if one won't play, so reaching here means all do.
+    const int videos = r.value("video").toObject().value("toplam").toInt();
+    if (videos > 0)
+        log(QString("videos: %1, all play on Windows").arg(videos));
 
     // audio/audio.json keys, renamed by the module along with the audio files.
     const QJsonObject k = r.value("audio_json").toObject();
@@ -2358,6 +2361,50 @@ bool PdfProcess::exportBooks(const QVariantList &books) {
     connect(thread, &QThread::finished, thread, &QThread::deleteLater);
     thread->start();
     return true;
+}
+
+void PdfProcess::checkVideos(const QString &book)
+{
+    // All of it off the GUI thread, because it is asked as a book opens: the
+    // first script of a session also unpacks the scripts and looks for Python
+    // (a probe per interpreter — seconds on some Windows machines), and on the
+    // GUI thread that held the book up.
+    const QString bookDir = booksDir() + book;
+    QtConcurrent::run([this, book, bookDir]() {
+        QProcess proc;
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        env.insert("PYTHONIOENCODING", "utf-8");
+        proc.setProcessEnvironment(env);
+        proc.setProcessChannelMode(QProcess::MergedChannels);
+        proc.start(pythonExecutable(),
+                   QStringList() << "-u" << (scriptsDir() + "/package_book.py")
+                                 << "video-check" << bookDir);
+
+        QJsonObject result;
+        if (!proc.waitForStarted(30000)) {
+            result["hata"] = "The video check could not start: " + proc.errorString();
+        } else if (!proc.waitForFinished(10 * 60 * 1000)) {
+            proc.kill();
+            proc.waitForFinished(2000);
+            result["hata"] = QStringLiteral("The video check did not finish.");
+        } else {
+            const QString output = QString::fromUtf8(proc.readAll());
+            const QStringList lines = output.split('\n');
+            for (auto it = lines.crbegin(); it != lines.crend(); ++it) {
+                const QString t = it->trimmed();
+                if (t.startsWith(QStringLiteral("RESULT_JSON:"))) {
+                    result = QJsonDocument::fromJson(t.mid(12).trimmed().toUtf8()).object();
+                    break;
+                }
+            }
+            if (result.isEmpty() || proc.exitStatus() != QProcess::NormalExit) {
+                qWarning() << "package_book.py video-check: no result;" << output.right(1000);
+                result = QJsonObject{{"hata", extractScriptError(output, proc.exitCode())}};
+            }
+        }
+        // Emitted from the pool thread; queued to the QML handlers on the GUI thread.
+        emit videosChecked(book, QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact)));
+    });
 }
 
 bool PdfProcess::optimizeVideos(const QString &book)

@@ -64,72 +64,49 @@ Dialog {
         bookInfo = ({});
     }
 
-    // Closing the dialog stops a running Optimize videos: nobody is left to
-    // watch it, and the videos it already finished are kept.
-    onClosed: if (videoBook !== "") stopVideoOptimize()
+    // Book Details ▸ Optimize videos runs on the window's videoOptimizer
+    // (main.qml): in the background, one book at a time, and it carries on if
+    // this dialog closes. These mirror it for the cards below.
+    readonly property string videoBook: videoOptimizer.book
+    readonly property var videoProgress: videoOptimizer.progress
+    readonly property bool videoStopping: videoOptimizer.stopping
 
-    // Book Details ▸ Optimize videos. videoBook: the book it runs for ("" when
-    // idle), one at a time; videoProgress: its latest {i, n, dosya, pct}.
-    property string videoBook: ""
-    property var videoProgress: ({})
-    property bool videoStopping: false
-
-    // The videos that won't play on Windows and have no optimized copy yet.
-    function videoPending(book) {
-        var v = (info(book).check || {}).video || {};
+    // The book's videos in one state ("sorunlu": won't play on Windows,
+    // "okunamayan": can't be read), from its check.
+    function videosIn(book, durum) {
+        var all = (((info(book).check || {}).video || {}).videolar) || [];
         var out = [];
-        var bad = v.sorunlu || [];
-        for (var i = 0; i < bad.length; i++)
-            if (!bad[i].hazir)
-                out.push(bad[i]);
+        for (var i = 0; i < all.length; i++)
+            if (all[i].durum === durum)
+                out.push(all[i]);
         return out;
+    }
+
+    function videoPending(book) {
+        return videosIn(book, "sorunlu");
     }
 
     function videosReady(book) {
         var v = (info(book).check || {}).video;
         if (!v)
             return true;
-        return !v.ffmpeg_yok && !(v.okunamayan || []).length
-               && videoPending(book).length === 0 && videoBook !== book;
+        return !v.ffmpeg_yok && !v.okunamayan && !v.sorunlu && videoBook !== book;
     }
 
     function startVideoOptimize(book) {
-        if (videoBook !== "" || !pdfProcess.optimizeVideos(book))
-            return;
-        videoBook = book;
-        videoStopping = false;
-        videoProgress = ({});
-        setInfo(book, { videoError: "" });
+        if (videoOptimizer.start(book))
+            setInfo(book, { videoError: "" });
     }
 
     function stopVideoOptimize() {
-        videoStopping = true;
-        pdfProcess.cancelVideoOptimize();
+        videoOptimizer.stop();
     }
 
     Connections {
-        target: pdfProcess
-        function onVideoOptimizeProgress(book, json) {
-            if (book !== packageDialog.videoBook)
+        target: videoOptimizer
+        function onFinished(book, r) {
+            if (!packageDialog.visible || !packageDialog.bookInfo[book])
                 return;
-            try {
-                packageDialog.videoProgress = JSON.parse(json);
-            } catch (e) {}
-        }
-        function onVideoOptimizeFinished(book, ok, json) {
-            if (book !== packageDialog.videoBook)
-                return;
-            packageDialog.videoBook = "";
-            packageDialog.videoProgress = ({});
-            packageDialog.videoStopping = false;
-            if (!packageDialog.visible)
-                return;
-            var r;
-            try {
-                r = JSON.parse(json);
-            } catch (e) {
-                r = { hata: "" + e };
-            }
             var msgs = [];
             if (r.hata)
                 msgs.push(r.hata);
@@ -317,7 +294,7 @@ Dialog {
             if (v.ffmpeg_yok)
                 out.push({ level: "error", text: v.toplam + " video(s) can't be checked for Windows: "
                                                  + "ffmpeg isn't installed — install it from Help ▸ Dependencies" });
-            var unreadable = v.okunamayan || [];
+            var unreadable = videosIn(book, "okunamayan");
             if (unreadable.length) {
                 out.push({ level: "error", text: unreadable.length
                            + " video(s) can't be read — replace them before packaging:" });
@@ -328,13 +305,10 @@ Dialog {
             var pending = videoPending(book);
             if (pending.length) {
                 out.push({ level: "error", text: pending.length + " video(s) won't play on Windows — "
-                           + "Optimize converts them to H.264 for the export (the project's files stay as they are):" });
+                           + "Optimize converts them to H.264 in the book's own folder, replacing the originals:" });
                 for (var p = 0; p < pending.length; p++)
                     out.push({ level: "error", detail: true, text: pending[p].dosya + " — " + pending[p].sorun });
             }
-            var optimized = (v.sorunlu || []).length - pending.length;
-            if (optimized > 0)
-                out.push({ level: "info", text: optimized + " video(s) will ship as their optimized H.264 copies" });
         }
         return out;
     }
@@ -1046,8 +1020,8 @@ Dialog {
                             }
 
                             // Optimize videos, right under the video notes: converts
-                            // the videos that won't play on Windows into the
-                            // project's cache, which the export then ships.
+                            // the videos that won't play on Windows in the book's
+                            // own folder (the same as Project ▸ Videos).
                             ColumnLayout {
                                 id: videoBox
                                 Layout.fillWidth: true
