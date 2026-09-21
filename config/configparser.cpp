@@ -314,6 +314,22 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
                     act->_circleExtra.push_back(c);
                 }
 
+                actArr = scObj["attachments"].toArray();
+                for (const auto &at : actArr) {
+                    auto atObj = at.toObject();
+                    auto atCoords = atObj["coords"].toObject();
+                    QVariantMap m;
+                    m["x"] = atCoords["x"].toInt();
+                    m["y"] = atCoords["y"].toInt();
+                    m["w"] = atCoords["w"].toInt();
+                    m["h"] = atCoords["h"].toInt();
+                    m["position"] = atObj["position"].toString() == "bottom" ? "bottom" : "top";
+                    act->_attachments.append(m);
+                }
+                act->_base_section_path = scObj["base_section_path"].toString();
+                cObj = scObj["image_offset"].toObject();
+                act->_image_offset = QPoint(cObj["x"].toInt(), cObj["y"].toInt());
+
                 section->_activity = act;
                 scObj = sObj["show_all_answers"].toObject();
                 section->_show_all_answers = QRect(scObj["x"].toInt(), scObj["y"].toInt(), scObj["w"].toInt(), scObj["h"].toInt());

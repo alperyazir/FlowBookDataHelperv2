@@ -42,7 +42,9 @@ ColumnLayout {
             if (selectedFilePath) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
                 if (newPath)
-                    fields.activityModelData.sectionPath = newPath;
+                    // Goes through the page so an image with attachments
+                    // stacks them onto the new one.
+                    content.pageDetails.setActivityBaseImage(fields.activityModelData, newPath);
                 else
                     console.log("Books klasörü bulunamadı.");
             } else {
@@ -206,6 +208,103 @@ ColumnLayout {
             Layout.preferredWidth: 88
             Layout.preferredHeight: 34
             onClicked: content.startCropMode(fields.activityModelData)
+        }
+    }
+
+    // --- Attachments: a table/passage the question is about, cut from
+    // elsewhere on the page and stacked above/below the question image ---
+    RowLayout {
+        visible: fields.showPath && fields.showCrop
+        Layout.fillWidth: true
+        spacing: 6
+
+        Text {
+            text: "Attach"
+            color: "#8aa0a8"
+            font.pixelSize: 13
+            Layout.preferredWidth: fields.labelW
+            horizontalAlignment: Text.AlignLeft
+        }
+
+        AppButton {
+            text: "Up (u)"
+            variant: "secondary"
+            // Stacks onto the question's own crop: crop it first.
+            enabled: !!fields.activityModelData && !!fields.activityModelData.sectionPath
+                     && fields.activityModelData.imageCoords.width > 0
+            Layout.fillWidth: true
+            Layout.preferredHeight: 30
+            onClicked: content.pageDetails.startAttachCrop(fields.activityModelData, "top")
+        }
+        AppButton {
+            text: "Below (b)"
+            variant: "secondary"
+            // Stacks onto the question's own crop: crop it first.
+            enabled: !!fields.activityModelData && !!fields.activityModelData.sectionPath
+                     && fields.activityModelData.imageCoords.width > 0
+            Layout.fillWidth: true
+            Layout.preferredHeight: 30
+            onClicked: content.pageDetails.startAttachCrop(fields.activityModelData, "bottom")
+        }
+        // The previous question's table, one click: questions 3 and 4 share it.
+        AppButton {
+            visible: content.pageDetails.reusableAttachment() !== null
+            text: "Last (l)"
+            enabled: !!fields.activityModelData && !!fields.activityModelData.sectionPath
+                     && fields.activityModelData.imageCoords.width > 0
+            variant: "primary"
+            Layout.fillWidth: true
+            Layout.preferredHeight: 30
+            onClicked: content.pageDetails.reuseLastAttachment(fields.activityModelData, "top")
+        }
+    }
+
+    Repeater {
+        model: (fields.showPath && fields.showCrop && fields.activityModelData
+                && fields.activityModelData.attachments) || []
+        delegate: RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: fields.labelW + 10
+            spacing: 6
+
+            Rectangle {
+                width: 18
+                height: 18
+                radius: 4
+                color: "#ffa726"
+                Text {
+                    anchors.centerIn: parent
+                    text: index + 1
+                    color: "#1b1b1b"
+                    font.pixelSize: 11
+                    font.bold: true
+                }
+            }
+            Text {
+                text: Math.round(modelData.w) + "×" + Math.round(modelData.h)
+                      + (modelData.position === "bottom" ? "  below" : "  up")
+                color: "#cfe8ea"
+                font.pixelSize: 12
+                Layout.fillWidth: true
+            }
+            AppButton {
+                text: modelData.position === "bottom" ? "↑" : "↓"
+                variant: "secondary"
+                Layout.preferredWidth: 32
+                Layout.preferredHeight: 26
+                leftPadding: 0
+                rightPadding: 0
+                onClicked: content.pageDetails.flipAttachment(fields.activityModelData, index)
+            }
+            AppButton {
+                text: "✕"
+                variant: "danger"
+                Layout.preferredWidth: 32
+                Layout.preferredHeight: 26
+                leftPadding: 0
+                rightPadding: 0
+                onClicked: content.pageDetails.removeAttachment(fields.activityModelData, index)
+            }
         }
     }
 

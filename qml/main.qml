@@ -225,6 +225,16 @@ ApplicationWindow {
     // `a` acts both as "audio" and as the prefix for activity shortcuts (a+d, a+g, ...).
     // We wait a short window after `a` to see if the next key completes an activity combo.
     property bool awaitingActivityKey: false
+    // u / b / l attach a table or passage to the open activity's image (see
+    // PageDetails.startAttachCrop) — only for activities shown as one image,
+    // and never mid a→… combo, where l means coloring.
+    readonly property bool attachKeysEnabled: {
+        if (!sideBar.activityVisible || !sideBar.activityModelData
+                || awaitingActivityKey || typingInField || activityDialog.visible)
+            return false;
+        var t = String(sideBar.activityModelData.type || "");
+        return t !== "" && t !== "matchTheWords" && t !== "ordering" && t !== "puzzleFindWords";
+    }
 
     // True while a text editor (header field, word pool, fill text...) holds
     // focus, so single-key shortcuts (c / h / ...) don't steal characters
@@ -345,19 +355,29 @@ ApplicationWindow {
     }
     // `l`: completes the a→l "add coloring" combo, OR — when a matchTheWords
     // activity is open — crops its LEFT column (the items: word + optional
-    // picture) into matchWord.
+    // picture) into matchWord, OR — for other activities — stacks the LAST
+    // attachment drawn on this page onto it (the "Last" button).
     Shortcut {
         sequence: "l"
-        enabled: awaitingActivityKey
+        enabled: awaitingActivityKey || attachKeysEnabled
                  || (sideBar.activityVisible && !typingInField
                      && sideBar.activityModelData
                      && String(sideBar.activityModelData.type || "") === "matchTheWords")
         onActivated: {
             if (awaitingActivityKey)
                 triggerActivityCombo("coloring");
+            else if (attachKeysEnabled)
+                content.pageDetails.reuseLastAttachment(sideBar.activityModelData, "top");
             else
                 content.startMatchColumnCrop(sideBar.activityModelData, "left");
         }
+    }
+
+    // `u`: draw an attachment to stack UP (above) the open activity's image.
+    Shortcut {
+        sequence: "u"
+        enabled: attachKeysEnabled
+        onActivated: content.pageDetails.startAttachCrop(sideBar.activityModelData, "top")
     }
 
     // `h`: pick the header text of the open activity (read the instruction
@@ -416,11 +436,18 @@ ApplicationWindow {
 
     // `b`: bold / unbold the selected fills (same as the Fill panel's Bold
     // toggle). If every selected fill is already bold it unbolds them all.
+    // With an activity open instead, draws an attachment to stack BELOW its
+    // image. One Shortcut for both: two enabled on the same key fire neither.
     Shortcut {
         sequence: "b"
-        enabled: sideBar.fillSelection.length > 0 && !typingInField
-                 && !awaitingActivityKey && !activityDialog.visible
+        enabled: (sideBar.fillSelection.length > 0 && !typingInField
+                  && !awaitingActivityKey && !activityDialog.visible)
+                 || attachKeysEnabled
         onActivated: {
+            if (sideBar.fillSelection.length === 0) {
+                content.pageDetails.startAttachCrop(sideBar.activityModelData, "bottom");
+                return;
+            }
             var sel = sideBar.fillSelection;
             var allBold = sel.length > 0;
             for (var i = 0; i < sel.length; i++) {
@@ -1268,7 +1295,7 @@ ApplicationWindow {
 
         Text {
             id: versionText
-            text: "v3.3.18"
+            text: "v3.3.19"
             color: "#009ca6"
             anchors.centerIn: parent
             font.pixelSize: 14

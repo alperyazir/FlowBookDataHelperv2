@@ -77,6 +77,14 @@ public:
                                          double x, double y, double w, double h,
                                          double pngWidth, double pngHeight,
                                          const QString &outputPath);
+    // Stacks page regions (a table, a passage) above/below an activity image
+    // into outputPath; see scripts/compose_section.py. Answers composeCompleted.
+    Q_INVOKABLE void composeSectionImage(const QString &rawDir, int pageIndex,
+                                         double pngWidth, double pngHeight,
+                                         const QString &baseImagePath,
+                                         const QString &baseRectJson,
+                                         const QString &attachmentsJson,
+                                         const QString &outputPath);
     Q_INVOKABLE void redetectCircleOptions(const QString &rawDir, int pageNumber,
                                            double x, double y, double w, double h,
                                            double pngWidth, double pngHeight,
@@ -197,6 +205,9 @@ signals:
     void projectCreated(bool success, const QString &bookDir);
     void aiAnalysisCompleted(bool success);
     void cropCompleted(bool success, const QString &outputPath);
+    // resultJson: {offset: {x, y}, w, h} — where the question image landed.
+    void composeCompleted(bool success, const QString &resultJson,
+                          const QString &outputPath);
     void circleRedetectCompleted(bool success, const QString &resultJson,
                                  const QString &outputPath);
     void headerTextDetected(bool success, const QString &text);

@@ -1713,6 +1713,63 @@ void PdfProcess::cropSectionFromPdf(const QString &pdfPath, int pageIndex,
     qDebug() << "Crop process started";
 }
 
+void PdfProcess::composeSectionImage(const QString &rawDir, int pageIndex,
+                                     double pngWidth, double pngHeight,
+                                     const QString &baseImagePath,
+                                     const QString &baseRectJson,
+                                     const QString &attachmentsJson,
+                                     const QString &outputPath)
+{
+    qDebug() << "Composing section image:" << baseImagePath << attachmentsJson
+             << "output:" << outputPath;
+
+    QProcess *process = new QProcess(this);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    process->setProcessEnvironment(env);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [this, process, outputPath](int exitCode, QProcess::ExitStatus exitStatus) {
+                QString output = QString::fromUtf8(process->readAllStandardOutput());
+                qDebug() << "Compose script output:" << output;
+
+                QString json;
+                const QStringList lines = output.split('\n', Qt::SkipEmptyParts);
+                for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
+                    QString t = it->trimmed();
+                    if (t.startsWith('{') && t.endsWith('}')) {
+                        json = t;
+                        break;
+                    }
+                }
+                bool ok = exitStatus == QProcess::NormalExit && exitCode == 0 && !json.isEmpty();
+                if (!ok)
+                    emit scriptError(extractScriptError(output, exitCode));
+                emit composeCompleted(ok, json, outputPath);
+                process->deleteLater();
+            });
+
+    connect(process, &QProcess::errorOccurred, [this, process, outputPath](QProcess::ProcessError error) {
+        qDebug() << "Compose process error:" << error << process->errorString();
+        emit scriptError(QStringLiteral("Attach could not start: ") + process->errorString());
+        emit composeCompleted(false, QString(), outputPath);
+        process->deleteLater();
+    });
+
+    QStringList arguments;
+    arguments << "-u" << scriptsDir() + "/compose_section.py"
+              << rawDir
+              << QString::number(pageIndex)
+              << QString::number(pngWidth, 'f', 2)
+              << QString::number(pngHeight, 'f', 2)
+              << baseImagePath
+              << baseRectJson
+              << attachmentsJson
+              << outputPath;
+    process->start(pythonExecutable(), arguments);
+}
+
 void PdfProcess::cropPassageAudio(const QString &rawDir, int pageIndex,
                                   const QString &rectsJson,
                                   double pngWidth, double pngHeight,
