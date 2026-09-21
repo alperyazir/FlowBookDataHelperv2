@@ -65,6 +65,12 @@ Item {
     property string cropMatchSide: ""      // "left"/"right": single-column match crop (l/r keys)
     property bool cropPassage: false       // rect picks the passage text to karaoke-align
     property var cropPassageAudioRef: null // audio section to flag karaoke on (survives endCropMode)
+    property string cropAttachPos: ""      // "top"/"bottom": rect is an attachment for cropActivity
+    // The last attachment drawn, {x, y, w, h, page}: questions 3 and 4 often
+    // share one table, so the second one reuses it instead of redrawing.
+    property var lastAttachment: null
+    // Running composes, keyed by output path: {act, rel, stale}.
+    property var composeJobs: ({})
     // Karaoke preview: word boxes (with start/end) for the selected audio, lit
     // in sync with in-editor playback. karaokeTime < 0 hides the overlay.
     property var karaokeWords: []
@@ -2182,6 +2188,46 @@ Item {
                         }
                     }
 
+                    // The attachments of the selected activity (table/passage
+                    // stacked with its image), outlined where they are on the
+                    // page. Display only; they are edited from the panel.
+                    Repeater {
+                        model: (sideBar.activityVisible
+                                && sideBar.activityModelData === modelData.activity)
+                               ? modelData.activity.attachments : []
+                        delegate: Rectangle {
+                            z: -1
+                            readonly property real sx: picture.sourceSize.width > 0
+                                                       ? picture.paintedWidth / picture.sourceSize.width : 1
+                            readonly property real sy: picture.sourceSize.height > 0
+                                                       ? picture.paintedHeight / picture.sourceSize.height : 1
+                            x: (flick.contentWidth / 2 - picture.paintedWidth / 2) + modelData.x * sx
+                            y: (flick.contentHeight / 2 - picture.paintedHeight / 2) + modelData.y * sy
+                            width: modelData.w * sx
+                            height: modelData.h * sy
+                            color: "#14ffa726"
+                            border.color: "#ffa726"
+                            border.width: 2
+                            radius: 4
+                            Rectangle {
+                                x: 4
+                                y: 4
+                                width: attachTag.implicitWidth + 10
+                                height: 18
+                                radius: 4
+                                color: "#ffa726"
+                                Text {
+                                    id: attachTag
+                                    anchors.centerIn: parent
+                                    text: (index + 1) + (modelData.position === "bottom" ? " ↓ below" : " ↑ up")
+                                    color: "#1b1b1b"
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                }
+                            }
+                        }
+                    }
+
                     // activity
                     Rectangle {
                         id: activityRect
@@ -2473,6 +2519,161 @@ Item {
         print("Crop mode started for property: " + root.cropPathProperty + " = " + currentPath);
     }
 
+    // ---- Attachments: a table/passage stacked with the question image ----
+    // See Activity::attachments. Answers always live in the stacked image's
+    // space; imageOffset says how far they were moved to get there.
+
+    function startAttachCrop(act, position) {
+        // Only activities shown as one section image can carry attachments.
+        var t = String((act && act.type) || "");
+        if (!act || t === "matchTheWords" || t === "ordering" || t === "puzzleFindWords")
+            return;
+        // Attachments stack onto the question's own crop, so it must exist.
+        if (!act.sectionPath || act.imageCoords.width <= 0) {
+            print("Attach: crop the question first");
+            return;
+        }
+        startCropMode(act, "sectionPath");
+        root.cropAttachPos = position === "bottom" ? "bottom" : "top";
+        print("Attachment crop started: " + root.cropAttachPos);
+    }
+
+    function hasAttachments(act) {
+        return !!act && !!act.attachments && act.attachments.length > 0;
+    }
+
+    // Plain JS copy: edits go through a new list assigned back, so the
+    // property's change signal fires.
+    function attachmentList(act) {
+        var out = [];
+        var src = (act && act.attachments) || [];
+        for (var i = 0; i < src.length; i++)
+            out.push({ x: src[i].x, y: src[i].y, w: src[i].w, h: src[i].h,
+                       position: src[i].position === "bottom" ? "bottom" : "top" });
+        return out;
+    }
+
+    function addAttachment(act, att) {
+        var list = root.attachmentList(act);
+        list.push(att);
+        act.attachments = list;
+        root.lastAttachment = { x: att.x, y: att.y, w: att.w, h: att.h,
+                                page: page ? page.page_number : -1 };
+        root.composeActivityImage(act);
+    }
+
+    // The last attachment drawn on this page, or null.
+    function reusableAttachment() {
+        var l = root.lastAttachment;
+        return (l && page && l.page === page.page_number) ? l : null;
+    }
+
+    function reuseLastAttachment(act, position) {
+        var l = root.reusableAttachment();
+        if (!act || !l)
+            return;
+        root.addAttachment(act, { x: l.x, y: l.y, w: l.w, h: l.h,
+                                  position: position === "bottom" ? "bottom" : "top" });
+    }
+
+    function removeAttachment(act, index) {
+        var list = root.attachmentList(act);
+        list.splice(index, 1);
+        act.attachments = list;
+        root.composeActivityImage(act);
+    }
+
+    function flipAttachment(act, index) {
+        var list = root.attachmentList(act);
+        list[index].position = list[index].position === "top" ? "bottom" : "top";
+        act.attachments = list;
+        root.composeActivityImage(act);
+    }
+
+    function shiftAnswers(act, dx, dy) {
+        if (!act || (dx === 0 && dy === 0))
+            return;
+        var i, c;
+        for (i = 0; i < act.answers.length; i++) {
+            c = act.answers[i].coords;
+            act.answers[i].coords = Qt.rect(c.x + dx, c.y + dy, c.width, c.height);
+        }
+        for (i = 0; i < act.circleExtra.length; i++) {
+            c = act.circleExtra[i].coords;
+            act.circleExtra[i].coords = Qt.rect(c.x + dx, c.y + dy, c.width, c.height);
+        }
+    }
+
+    // Answers back to the question-only image's space. Any compose still
+    // running for this activity is now out of date.
+    function detachOffset(act) {
+        for (var k in root.composeJobs)
+            if (root.composeJobs[k].act === act)
+                root.composeJobs[k].stale = true;
+        root.shiftAnswers(act, -act.imageOffset.x, -act.imageOffset.y);
+        act.imageOffset = Qt.point(0, 0);
+    }
+
+    // The question was just (re-)cropped into sectionPath: that is the new
+    // question-only image; restack the attachments on it.
+    function afterBaseCrop(act) {
+        if (!root.hasAttachments(act))
+            return;
+        act.baseSectionPath = act.sectionPath;
+        root.composeActivityImage(act);
+    }
+
+    // A browsed image replaces the question-only image.
+    function setActivityBaseImage(act, path) {
+        if (!root.hasAttachments(act)) {
+            act.sectionPath = path;
+            return;
+        }
+        root.detachOffset(act);
+        act.sectionPath = path;
+        root.afterBaseCrop(act);
+    }
+
+    function composeActivityImage(act) {
+        if (!act)
+            return;
+        if (!root.hasAttachments(act)) {
+            // Last attachment gone: back to the question-only image.
+            if (act.baseSectionPath !== "") {
+                root.detachOffset(act);
+                act.sectionPath = act.baseSectionPath;
+                act.baseSectionPath = "";
+            }
+            return;
+        }
+        // No base yet means this is the first attachment, so the current
+        // image is the question alone (and imageOffset is 0).
+        if (act.baseSectionPath === "")
+            act.baseSectionPath = act.sectionPath;
+        var base = String(act.baseSectionPath).replace(/\\/g, "/");
+        if (base === "" || !page) {
+            print("Attach: the activity has no image yet, crop it first");
+            return;
+        }
+        var r = act.imageCoords;
+        var dir = base.indexOf("/") !== -1
+                ? base.substring(0, base.lastIndexOf("/") + 1)
+                : String(page.image_path).replace(/\\/g, "/").replace(/[^/]*$/, "");
+        var rel = dir + "p" + page.page_number + "_crop_" + Date.now() + ".png";
+        var outputPath = appPath + rel.substring(2);
+        for (var k in root.composeJobs)
+            if (root.composeJobs[k].act === act)
+                root.composeJobs[k].stale = true;
+        root.composeJobs[outputPath] = { act: act, rel: rel, stale: false };
+        pdfProcess.composeSectionImage(
+            root._rawDir(), root._pageIndex(),
+            picture.sourceSize.width, picture.sourceSize.height,
+            appPath + base.substring(2),
+            JSON.stringify({ x: r.x, y: r.y, w: r.width, h: r.height }),
+            JSON.stringify(root.attachmentList(act)),
+            outputPath);
+    }
+
     // Single-column match crop (l/r keys): draw a rect over ONE column of a
     // matchTheWords activity; the rows in it fill that side (left = the items /
     // sentences, right = the draggable word pool), no auto number/letter split.
@@ -2636,6 +2837,7 @@ Item {
 
     function endCropMode() {
         root.passageRects = [];          // abandon any half-assembled passage
+        root.cropAttachPos = "";
         root.cropMode = false;
         root.cropRedetect = false;
         root.cropHeaderPick = false;
@@ -2761,6 +2963,18 @@ Item {
             return;
         }
 
+        // Attachment: the rect is a table/passage to stack with the question,
+        // not a new crop of the question itself.
+        if (root.cropAttachPos !== "") {
+            var attachAct = root.cropActivity;
+            var att = { x: Math.round(originalX), y: Math.round(originalY),
+                        w: Math.round(originalW), h: Math.round(originalH),
+                        position: root.cropAttachPos };
+            endCropMode();
+            root.addAttachment(attachAct, att);
+            return;
+        }
+
         // Output path: generate unique name to bust QML image cache
         var currentPath = root.cropActivity[root.cropPathProperty] || "";
         var sectionDir;
@@ -2789,6 +3003,12 @@ Item {
                 && typeof root.cropActivity.imageCoords !== "undefined") {
             root.cropActivity.imageCoords = Qt.rect(originalX, originalY, originalW, originalH);
         }
+        // A question with attachments is being re-cut: its answers go back to
+        // the question-only image's space, whatever the crop does with them;
+        // the stack is rebuilt (and they move again) once the crop lands.
+        if (root.cropActivity && root.cropPathProperty === "sectionPath"
+                && root.hasAttachments(root.cropActivity))
+            root.detachOffset(root.cropActivity);
 
         print("Crop: PDF=" + pdfPath + " page=" + pageIndex);
         print("Crop: PNG coords x=" + originalX + " y=" + originalY + " w=" + originalW + " h=" + originalH);
@@ -2868,6 +3088,8 @@ Item {
         onStatusChanged: {
             if (status === Image.Ready)
                 root.syncDragdropZones();
+            if (status === Image.Ready || status === Image.Error)
+                root.afterBaseCrop(root.cropActivityRef);
         }
     }
 
@@ -2983,8 +3205,11 @@ Item {
                     var t = String(root.cropActivityRef.type || "");
                     if ((t.indexOf("dragdroppicture") === 0 || t === "fillpicture")
                             && root.cropPngRect) {
+                        // afterBaseCrop runs once the zones are derived.
                         zoneSyncImage.source = "";
                         zoneSyncImage.source = "file:" + outputPath;
+                    } else if (root.cropPathProperty === "sectionPath") {
+                        root.afterBaseCrop(root.cropActivityRef);
                     }
                 }
             } else {
@@ -3141,6 +3366,7 @@ Item {
 
             if (res.answer.length === 0) {
                 print("Redetect: no options found in rect, crop applied, answers kept");
+                root.afterBaseCrop(act);
                 return;
             }
 
@@ -3160,6 +3386,22 @@ Item {
                 act.circleCount = res.circleCount;
                 print("Redetect applied: " + res.answer.length + " options, circleCount=" + res.circleCount);
             }
+            root.afterBaseCrop(act);
+        }
+
+        function onComposeCompleted(success, resultJson, outputPath) {
+            var job = root.composeJobs[outputPath];
+            delete root.composeJobs[outputPath];
+            if (!job || job.stale || !success)
+                return;
+            var res = JSON.parse(resultJson);
+            var act = job.act;
+            root.shiftAnswers(act, res.offset.x - act.imageOffset.x,
+                              res.offset.y - act.imageOffset.y);
+            act.imageOffset = Qt.point(res.offset.x, res.offset.y);
+            act.sectionPath = job.rel;
+            print("Attachments stacked: " + job.rel + " (question at "
+                  + res.offset.x + "," + res.offset.y + ")");
         }
     }
 

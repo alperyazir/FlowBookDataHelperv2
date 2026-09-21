@@ -730,6 +730,15 @@ struct Activity : public QObject {
     Q_PROPERTY(bool isTextOnLeft READ isTextOnLeft WRITE setIsTextOnLeft NOTIFY isTextOnLeftChanged)
     Q_PROPERTY(int textFontSize READ textFontSize WRITE setTextFontSize NOTIFY textFontSizeChanged)
     Q_PROPERTY(QVariantList circleExtra READ circleExtra WRITE setCircleExtra NOTIFY circleExtraChanged)
+    // Extra page regions (a table, a passage the question is about) stacked
+    // above/below the question in the activity image. Each is a map
+    // {x, y, w, h (page-PNG px), position: "top"|"bottom"}. When any exist,
+    // sectionPath is the stacked image, baseSectionPath the question-only
+    // crop, and imageOffset where that crop sits inside the stacked one —
+    // the answers are already moved by it.
+    Q_PROPERTY(QVariantList attachments READ attachments WRITE setAttachments NOTIFY attachmentsChanged)
+    Q_PROPERTY(QString baseSectionPath READ baseSectionPath WRITE setBaseSectionPath NOTIFY baseSectionPathChanged)
+    Q_PROPERTY(QPoint imageOffset READ imageOffset WRITE setImageOffset NOTIFY imageOffsetChanged)
 
 public:
     explicit Activity(QObject *parent = nullptr) :
@@ -755,6 +764,33 @@ public:
     bool _isTextOnLeft;
     int _textFontSize;
     QVector<CircleExtra*> _circleExtra;
+    QVariantList _attachments;
+    QString _base_section_path;
+    QPoint _image_offset;
+
+    QVariantList attachments() const { return _attachments; }
+    void setAttachments(const QVariantList &attachments) {
+        if (_attachments != attachments) {
+            _attachments = attachments;
+            emit attachmentsChanged();
+        }
+    }
+
+    QString baseSectionPath() const { return _base_section_path; }
+    void setBaseSectionPath(const QString &path) {
+        if (_base_section_path != path) {
+            _base_section_path = path;
+            emit baseSectionPathChanged();
+        }
+    }
+
+    QPoint imageOffset() const { return _image_offset; }
+    void setImageOffset(const QPoint &offset) {
+        if (_image_offset != offset) {
+            _image_offset = offset;
+            emit imageOffsetChanged();
+        }
+    }
 
     QRect coords() const { return _coords; }
     void setCoords(const QRect &coords) {
@@ -1151,6 +1187,35 @@ public:
             activityObj["circle_extra"] = circleExtraArray;
         }
 
+        if (!_attachments.isEmpty()) {
+            QJsonArray attachmentsArray;
+            for (const QVariant &v : _attachments) {
+                const QVariantMap m = v.toMap();
+                QJsonObject coordsObj;
+                coordsObj["x"] = qRound(m.value("x").toDouble());
+                coordsObj["y"] = qRound(m.value("y").toDouble());
+                coordsObj["w"] = qRound(m.value("w").toDouble());
+                coordsObj["h"] = qRound(m.value("h").toDouble());
+                QJsonObject attachmentObj;
+                attachmentObj["coords"] = coordsObj;
+                attachmentObj["position"] = m.value("position").toString() == "bottom"
+                                            ? "bottom" : "top";
+                attachmentsArray.append(attachmentObj);
+            }
+            activityObj["attachments"] = attachmentsArray;
+        }
+
+        if (!_base_section_path.isEmpty()) {
+            activityObj["base_section_path"] = _base_section_path;
+        }
+
+        if (!_image_offset.isNull()) {
+            QJsonObject offsetObj;
+            offsetObj["x"] = _image_offset.x();
+            offsetObj["y"] = _image_offset.y();
+            activityObj["image_offset"] = offsetObj;
+        }
+
         return activityObj;
     }
 
@@ -1170,6 +1235,9 @@ signals:
     void isTextOnLeftChanged();
     void textFontSizeChanged();
     void circleExtraChanged();
+    void attachmentsChanged();
+    void baseSectionPathChanged();
+    void imageOffsetChanged();
 };
 
 struct AudioExtra : public QObject {
