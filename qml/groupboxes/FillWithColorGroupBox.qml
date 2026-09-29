@@ -39,9 +39,11 @@ GroupBox {
             var sel = imgFileDialog.file + "";
             if (sel && root.imgTarget) {
                 var rel = sideBar.findBooksFolder(sel, "books");
-                if (rel)
+                if (rel) {
                     root.imgTarget.imagePath = rel;
-                else
+                    // Down to the 750 px the reader needs, in place (image_optimize.py).
+                    pdfProcess.optimizePickedImage(rel);
+                } else
                     console.log("Books klasörü bulunamadı.");
             }
             root.imgTarget = null;

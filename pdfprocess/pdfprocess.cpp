@@ -2533,6 +2533,40 @@ bool PdfProcess::optimizeVideos(const QString &book)
     return true;
 }
 
+void PdfProcess::optimizePickedImage(const QString &path)
+{
+    // "./books/<Book>/assets/a.png": the book is the folder right after books/.
+    // A path outside books/ is the author's own file somewhere else; it is
+    // never touched.
+    static const QString prefix = QStringLiteral("./books/");
+    if (!path.startsWith(prefix))
+        return;
+    const QString book = path.mid(prefix.size()).section('/', 0, 0);
+    if (book.isEmpty())
+        return;
+    const QString bookDir = booksDir() + book;
+    QtConcurrent::run([this, path, bookDir]() {
+        const QString json = runPackageScript(QStringList() << "image" << bookDir << path,
+                                              5 * 60 * 1000, nullptr);
+        emit pickedImageOptimized(path, json);
+    });
+}
+
+bool PdfProcess::optimizeImages(const QString &book)
+{
+    if (!_isOptimizingImages.testAndSetOrdered(0, 1))
+        return false;
+    const QString bookDir = booksDir() + book;
+    QtConcurrent::run([this, book, bookDir]() {
+        int code = 2;
+        const QString json = runPackageScript(QStringList() << "images" << bookDir,
+                                              30 * 60 * 1000, &code);
+        _isOptimizingImages.storeRelease(0);
+        emit imagesOptimized(book, code == 0, json);
+    });
+    return true;
+}
+
 void PdfProcess::cancelVideoOptimize()
 {
     if (!_videoProcess)

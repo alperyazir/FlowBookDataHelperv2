@@ -92,6 +92,8 @@ Rectangle {
             if (selectedFilePath) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
                 if (newPath) {
+                    // Down to the 750 px the reader needs, in place (image_optimize.py).
+                    pdfProcess.optimizePickedImage(newPath);
                     questionImageField.text = newPath;
                     if (builderQuestion) {
                         builderQuestion.image = newPath;

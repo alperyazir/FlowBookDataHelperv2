@@ -8,8 +8,8 @@ copied over. This file adds only what belongs to the editor:
   check <book_dir>
       check_book() (touches nothing) plus what the Package dialog has to ask
       about before anything is written: is there an answered PDF, do the
-      config's pages fit the PDF, the publisher logo path, and which videos
-      won't play on Windows.
+      config's pages fit the PDF, the publisher logo path, which videos
+      won't play on Windows, and which game/fill images are oversized.
 
   video-check <book_dir>
       Only the videos: video_compat.check_book(), for Project ▸ Videos and the
@@ -42,6 +42,17 @@ copied over. This file adds only what belongs to the editor:
       Python would leave ffmpeg running on Windows). Exit 0 all converted,
       1 some failed, 2 error, 3 stopped.
 
+  images <book_dir>
+      Brings the book's game and fill-with-color images whose long side is
+      over 750 px and that weigh over 1 MB down to 750 px, in the book's own
+      folder, same names (image_optimize.optimize_book) — Optimize images in
+      Book Details. Exit 0 all done, 1 some failed, 2 error.
+
+  image <book_dir> <path>
+      One image just picked in the editor (a game card, a fill block's
+      Browse), down to 750 px unless a page uses it too
+      (image_optimize.shrink_picked). Exit 0, or 2 on error.
+
   zip <export_dir> [--klasoru-sil]
       <export_dir>.zip with the book under one top-level folder, leaving out
       OS and editor junk and every raw/ file but the two canonical PDFs;
@@ -64,6 +75,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import flowbook_normalize as fn
+import image_optimize
 import video_compat
 
 # How many more pages the PDF may have than the config reaches before it is
@@ -312,6 +324,7 @@ def cmd_check(a):
     r["kapak_yolu"] = cover_path(src, conf, r.get("kapak"))
     r["kirik_detay"] = broken_refs(src)
     r["video"] = video_compat.check_book(src)
+    r["gorsel"] = image_optimize.check_book(src)
     return emit(r, 1 if r.get("ref_kayip") or r["kirik_detay"] else 0)
 
 
@@ -487,6 +500,24 @@ def cmd_videos(a):
     return emit(r, 1 if r["basarisiz"] else 0)
 
 
+def cmd_images(a):
+    src = Path(a.book_dir)
+    if not (src / "config.json").is_file():
+        return emit({"hata": f"Not a book (no config.json): {src}"}, 2)
+    r = image_optimize.optimize_book(src)
+    if "hata" in r:
+        return emit(r, 2)
+    return emit(r, 1 if r["basarisiz"] else 0)
+
+
+def cmd_image(a):
+    src = Path(a.book_dir)
+    if not src.is_dir():
+        return emit({"hata": f"Book folder not found: {src}"}, 2)
+    r = image_optimize.shrink_picked(src, a.path)
+    return emit(r, 2 if "hata" in r else 0)
+
+
 # Already compressed: deflating them costs time and saves nothing.
 ZIP_STORED = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp3", ".m4a", ".wav",
               ".ogg", ".mp4", ".m4v", ".mov", ".webm", ".pdf", ".zip"}
@@ -568,6 +599,11 @@ def main(argv=None):
     v = sub.add_parser("videos")
     v.add_argument("book_dir")
     v.add_argument("--stdin-stop", action="store_true")
+    im = sub.add_parser("images")
+    im.add_argument("book_dir")
+    i1 = sub.add_parser("image")
+    i1.add_argument("book_dir")
+    i1.add_argument("path")
     zp = sub.add_parser("zip")
     zp.add_argument("export_dir")
     zp.add_argument("--klasoru-sil", action="store_true")
@@ -575,6 +611,7 @@ def main(argv=None):
     try:
         return {"check": cmd_check, "title": cmd_title, "normalize": cmd_normalize,
                 "video-check": cmd_video_check, "videos": cmd_videos,
+                "images": cmd_images, "image": cmd_image,
                 "zip": cmd_zip}[a.cmd](a)
     except Exception as exc:
         # The result line FIRST: printing a traceback can itself fail on a

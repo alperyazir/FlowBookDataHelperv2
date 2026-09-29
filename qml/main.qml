@@ -917,6 +917,21 @@ ApplicationWindow {
                 toast.show(done + " video(s) optimized for Windows (" + book + ")");
             videoOptimizer.finished(book, r);
         }
+        // A picked game/fill image brought down to 750 px: say so only when it
+        // actually changed, so picking a right-sized image stays quiet.
+        function onPickedImageOptimized(path, json) {
+            var r;
+            try {
+                r = JSON.parse(json);
+            } catch (e) {
+                return;
+            }
+            if (r.hata)
+                toast.show("Image resize: " + r.hata, true);
+            else if (r.degisti)
+                toast.show("Image resized for the reader: " + r.eski[0] + "×" + r.eski[1] + " → "
+                           + r.yeni[0] + "×" + r.yeni[1] + " (" + r.eski_mb + " MB → " + r.mb + " MB)");
+        }
     }
 
     ActivityDialog {
