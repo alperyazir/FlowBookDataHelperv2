@@ -120,6 +120,66 @@ Dialog {
         }
     }
 
+    // Book Details ▸ Optimize images: the book being worked on, "" when idle.
+    // Fast (seconds), so no progress — just the button's text.
+    property string imageBook: ""
+
+    // The book's game/fill images in one state ("buyuk": over 750 px and
+    // 1 MB, "okunamayan": can't be read), from its check.
+    function imagesIn(book, durum) {
+        var all = (((info(book).check || {}).gorsel || {}).gorseller) || [];
+        var out = [];
+        for (var i = 0; i < all.length; i++)
+            if (all[i].durum === durum)
+                out.push(all[i]);
+        return out;
+    }
+
+    function startImageOptimize(book) {
+        if (imageBook !== "")
+            return;
+        if (pdfProcess.optimizeImages(book)) {
+            imageBook = book;
+            setInfo(book, { imageError: "" });
+        }
+    }
+
+    Connections {
+        target: pdfProcess
+        function onImagesOptimized(book, ok, json) {
+            if (book !== packageDialog.imageBook)
+                return;
+            packageDialog.imageBook = "";
+            var r;
+            try {
+                r = JSON.parse(json);
+            } catch (e) {
+                r = { hata: "" + e };
+            }
+            var msgs = [];
+            if (r.hata)
+                msgs.push(r.hata);
+            var failed = r.basarisiz || [];
+            for (var i = 0; i < failed.length; i++)
+                msgs.push(failed[i].dosya + ": " + failed[i].hata);
+            var done = r.kucultulen || [];
+            var before = 0, after = 0;
+            for (var j = 0; j < done.length; j++) {
+                before += done[j].eski_mb;
+                after += done[j].mb;
+            }
+            if (done.length)
+                toast.show(done.length + " image(s) brought down to 750 px (" + book + "): "
+                           + before.toFixed(1) + " MB → " + after.toFixed(1) + " MB");
+            if (!packageDialog.bookInfo[book])
+                return;
+            // What is left comes from checking again, not from this run.
+            packageDialog.setInfo(book, { imageError: msgs.join("\n"), rechecking: true });
+            recheckTimer.book = book;
+            recheckTimer.restart();
+        }
+    }
+
     function toggleBook(name) {
         var arr = selectedBooks.slice();
         var p = arr.indexOf(name);
@@ -215,7 +275,7 @@ Dialog {
                   && !(c.ref_kayip > 0) && !((c.kirik_detay || []).length > 0)
                   && c.original !== "yok" && !c.pypdf_uyari
                   && (c.answered !== "yok" || d.answered)
-                  && videosReady(book) && !d.rechecking);
+                  && videosReady(book) && !d.rechecking && imageBook !== book);
     }
 
     function duplicateFolder() {
@@ -234,6 +294,7 @@ Dialog {
     readonly property bool detailsReady: {
         bookInfo;
         videoBook;
+        imageBook;
         if (checking || selectedBooks.length === 0)
             return false;
         for (var i = 0; i < selectedBooks.length; i++)
@@ -288,6 +349,28 @@ Dialog {
             out.push({ level: "warn", text: c.bozuk_metin + " corrupt text value(s) in config.json will be cleaned" });
         if (c.logo_uyari)
             out.push({ level: "warn", text: c.logo_uyari });
+        // Game and fill-with-color images: a warning, not a stop — an
+        // oversized picture still shows, it only makes the package heavy.
+        var g = c.gorsel;
+        if (g) {
+            if (g.pillow_yok)
+                out.push({ level: "warn", text: g.toplam + " game/fill image(s) can't be checked: "
+                                                + "Pillow isn't installed — install it from Help ▸ Dependencies" });
+            var badImg = imagesIn(book, "okunamayan");
+            if (badImg.length) {
+                out.push({ level: "warn", text: badImg.length + " game/fill image(s) can't be read:" });
+                for (var bi = 0; bi < badImg.length; bi++)
+                    out.push({ level: "warn", detail: true, text: badImg[bi].dosya + " — " + badImg[bi].hata });
+            }
+            var bigImg = imagesIn(book, "buyuk");
+            if (bigImg.length) {
+                out.push({ level: "warn", text: bigImg.length + " game/fill image(s) are far bigger than the reader needs — "
+                           + "Optimize images brings them down to " + g.limit + " px in the book's own folder:" });
+                for (var gi = 0; gi < bigImg.length; gi++)
+                    out.push({ level: "warn", detail: true, text: bigImg[gi].dosya + " — " + bigImg[gi].w + "×"
+                               + bigImg[gi].h + ", " + bigImg[gi].mb + " MB" });
+            }
+        }
         // Videos last, so Optimize videos sits right under what it fixes.
         var v = c.video;
         if (v) {
@@ -1019,6 +1102,52 @@ Dialog {
                                 }
                             }
 
+                            // Optimize images: the game/fill images listed above,
+                            // down to 750 px in the book's own folder.
+                            RowLayout {
+                                id: imageBox
+                                Layout.fillWidth: true
+                                readonly property int pending: {
+                                    packageDialog.bookInfo;
+                                    return packageDialog.imagesIn(card.book, "buyuk").length;
+                                }
+                                readonly property bool running: packageDialog.imageBook === card.book
+                                visible: running || pending > 0 || !!card.d.imageError
+                                spacing: 8
+                                Button {
+                                    id: imageBtn
+                                    visible: imageBox.running || imageBox.pending > 0
+                                    enabled: packageDialog.imageBook === "" && !card.d.rechecking
+                                    text: imageBox.running ? "Optimizing images…"
+                                                           : "Optimize images (" + imageBox.pending + ")"
+                                    Layout.preferredHeight: 30
+                                    background: Rectangle {
+                                        radius: 2
+                                        color: !imageBtn.enabled ? "#2a3338"
+                                             : (imageBtn.hovered ? "#00b3be" : "#009ca6")
+                                    }
+                                    contentItem: Text {
+                                        text: imageBtn.text; font.pixelSize: 12; font.bold: true
+                                        color: imageBtn.enabled ? "white" : "#6b7a80"
+                                        horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                                    }
+                                    onClicked: packageDialog.startImageOptimize(card.book)
+                                }
+                                TextEdit {
+                                    Layout.fillWidth: true
+                                    visible: !imageBox.running && !!card.d.imageError
+                                    readOnly: true
+                                    selectByMouse: true
+                                    selectionColor: "#00707a"
+                                    selectedTextColor: "white"
+                                    textFormat: TextEdit.PlainText
+                                    wrapMode: TextEdit.Wrap
+                                    font.pixelSize: 12
+                                    color: "#e06c75"
+                                    text: "✖  " + (card.d.imageError || "")
+                                }
+                            }
+
                             // Optimize videos, right under the video notes: converts
                             // the videos that won't play on Windows in the book's
                             // own folder (the same as Project ▸ Videos).
@@ -1086,7 +1215,7 @@ Dialog {
                                                  ? "Converting " + (videoBox.p.i + 1) + " of " + videoBox.p.n
                                                    + " · " + Math.round(videoBox.overall * 100) + "%"
                                                  : "Checking the videos…")
-                                              : (card.d.rechecking ? "Checking the videos again…" : "")
+                                              : (card.d.rechecking ? "Checking the book again…" : "")
                                     }
                                 }
 

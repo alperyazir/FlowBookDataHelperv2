@@ -86,6 +86,8 @@ Rectangle {
             if (selectedFilePath) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
                 if (newPath) {
+                    // Down to the 750 px the reader needs, in place (image_optimize.py).
+                    pdfProcess.optimizePickedImage(newPath);
                     imageTextField.text = newPath;
                     if (raceQuestion) {
                         raceQuestion.image = newPath;
@@ -480,6 +482,8 @@ Rectangle {
                                     if (selectedFilePath) {
                                         var newPath = findBooksFolder(selectedFilePath, "books");
                                         if (newPath) {
+                                            // Down to the 750 px the reader needs, in place (image_optimize.py).
+                                            pdfProcess.optimizePickedImage(newPath);
                                             // Update the text field
                                             parent.parent.children[3].text = newPath;
                                             // Update the data

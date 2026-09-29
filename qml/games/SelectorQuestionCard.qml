@@ -81,6 +81,8 @@ Rectangle {
             if (selectedFilePath) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
                 if (newPath) {
+                    // Down to the 750 px the reader needs, in place (image_optimize.py).
+                    pdfProcess.optimizePickedImage(newPath);
                     questionImageField.text = newPath;
                     if (selectorQuestion) selectorQuestion.image = newPath;
                 } else {
@@ -138,6 +140,8 @@ Rectangle {
             var selectedFilePath = optionImageDialog.file + "";
             if (selectedFilePath && currentOptionIndex >= 0 && selectorQuestion.answers && currentOptionIndex < selectorQuestion.answers.length) {
                 var newPath = findBooksFolder(selectedFilePath, "books");
+                // Down to the 750 px the reader needs, in place (image_optimize.py).
+                if (newPath) pdfProcess.optimizePickedImage(newPath);
                 var finalPath = newPath || selectedFilePath;
                 selectorQuestion.answers[currentOptionIndex].image = finalPath;
             }

@@ -72,6 +72,17 @@ public:
     // Stops a running optimizeVideos(): the video being converted is dropped,
     // the ones already finished stay. Safe to call when nothing runs.
     Q_INVOKABLE void cancelVideoOptimize();
+    // An image just picked in the editor (a game card, a fill block's Browse),
+    // given as its "./books/<Book>/..." path: brought down to a 750 px long
+    // side in place, same name and format, unless a page uses it too
+    // (scripts/image_optimize.py). On a worker thread; the answer arrives on
+    // pickedImageOptimized.
+    Q_INVOKABLE void optimizePickedImage(const QString &path);
+    // Optimize images (Package ▸ Book Details): the book's game and
+    // fill-with-color images over 750 px and 1 MB, brought down to 750 px in
+    // books/<book> itself. On a worker thread; the end arrives on
+    // imagesOptimized. One run at a time; false if one is already running.
+    Q_INVOKABLE bool optimizeImages(const QString &book);
     Q_INVOKABLE void copyAdditionalFiles(const QStringList &filePaths);
     Q_INVOKABLE void cropSectionFromPdf(const QString &pdfPath, int pageIndex,
                                          double x, double y, double w, double h,
@@ -239,6 +250,12 @@ signals:
     // basarisiz: [{dosya, hata}], yeniden_adlandirilan: {old: new}}, plus
     // iptal (stopped) or hata (nothing ran). Paths are book-relative.
     void videoOptimizeFinished(const QString &book, bool ok, const QString &resultJson);
+    // optimizePickedImage() done. json: {dosya, degisti, eski_mb?, mb?, eski?,
+    // yeni?, sayfada?} or {hata}.
+    void pickedImageOptimized(const QString &path, const QString &json);
+    // optimizeImages() done. json: {kucultulen: [{dosya, eski_mb, mb, eski,
+    // yeni}], basarisiz: [{dosya, hata}]} or {hata}. Paths are book-relative.
+    void imagesOptimized(const QString &book, bool ok, const QString &json);
     void dependenciesChecked(bool ok, const QString &json);
     void dependenciesInstalled(bool ok);
     // A Python helper script failed — carries a short, user-readable reason
@@ -287,5 +304,6 @@ private:
     QString booksDir() const;
 
     QAtomicInt _isPackaging = 0;   // guards against overlapping package runs
+    QAtomicInt _isOptimizingImages = 0;   // one optimizeImages() at a time
 
 };
