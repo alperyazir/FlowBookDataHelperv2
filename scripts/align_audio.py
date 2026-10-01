@@ -48,6 +48,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _bootstrap import ensure_runtime_deps, ensure_align_deps
 # Stdlib + ffmpeg only, so it can be imported before the heavy deps are pulled.
 import audio_cbr
+import audio_level
 
 ensure_runtime_deps()   # fitz
 ensure_align_deps()     # whisperx (+ torch)
@@ -950,6 +951,20 @@ def main():
     # afterwards would leave them describing a file nobody plays, off by the
     # encoder's delay and padding. Already-CBR clips are untouched.
     cbr = audio_cbr.ensure_cbr(audio_path, log=lambda m: print(m, flush=True))
+    # Same reasoning for loudness: a clip brought to -16 LUFS after aligning
+    # would be a different file from the one timed. A no-op when it is
+    # already there (Create and Book Details normalize too).
+    level = None
+    try:
+        r = audio_level.normalize_file(audio_path)
+        if r.get("degisti"):
+            print(f"PROGRESS: Audio level {r['i']} → {r['yeni_i']} LUFS", flush=True)
+            level = {"i": r["i"], "yeni_i": r["yeni_i"], "gain": r["gain"]}
+        elif "hata" in r:
+            print(f"PROGRESS: Could not set the audio level ({r['hata']}); aligning it as it is",
+                  flush=True)
+    except Exception as e:  # noqa: BLE001 - never block an align over loudness
+        print(f"PROGRESS: Could not set the audio level ({e}); aligning it as it is", flush=True)
 
     # Lines prefixed "PROGRESS:" are surfaced live in the editor's karaoke
     # status so the author sees what stage the (multi-second) align is at,
@@ -1044,6 +1059,8 @@ def main():
     # from the one I dropped in?" has an answer months from now.
     if cbr:
         entry["audio_cbr"] = cbr
+    if level:
+        entry["audio_level"] = level
     merge_into_audio_json(audio_json_path, audio_id, entry)
     print(f"Wrote {audio_id} -> {audio_json_path}", flush=True)
     # Compact summary for the C++ caller (parsed off stdout, before "OK").
@@ -1052,6 +1069,8 @@ def main():
                "review": flags}
     if cbr:
         summary["audio_cbr"] = cbr
+    if level:
+        summary["audio_level"] = level
     print("SUMMARY: " + json.dumps(summary, ensure_ascii=False), flush=True)
     print("OK", flush=True)
 

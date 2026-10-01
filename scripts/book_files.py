@@ -43,3 +43,14 @@ def find_original_pdf(raw_dir):
         return os.path.join(raw_dir, named[0])
     no_cover = [f for f in rest if not _has(f, COVER_KEYS)]
     return os.path.join(raw_dir, (no_cover or rest)[0])
+
+
+def find_answered_pdf(raw_dir):
+    """The answered (answer-key) PDF in raw_dir, or None: the first, sorted, whose
+    name says so ("answered.pdf", "...-cevapli.pdf"). Mirrors
+    PdfProcess::findAnsweredPdf."""
+    if not os.path.isdir(raw_dir):
+        return None
+    pdfs = sorted(f for f in os.listdir(raw_dir)
+                  if f.lower().endswith(".pdf") and _has(f, ANSWERED_KEYS))
+    return os.path.join(raw_dir, pdfs[0]) if pdfs else None
