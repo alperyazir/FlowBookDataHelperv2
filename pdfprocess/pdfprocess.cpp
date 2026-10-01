@@ -845,15 +845,38 @@ QString PdfProcess::booksDir() const {
     return appDir + "books/";
 }
 
-QString PdfProcess::originalPdfStatus(const QString &book) {
+QString PdfProcess::findAnsweredPdf(const QString &rawDir) const {
+    // The first, sorted, whose name says it is the answer key — the same rule
+    // as book_files.find_answered_pdf.
+    QDir d(rawDir);
+    QStringList pdfs = d.entryList(QStringList() << "*.pdf", QDir::Files, QDir::Name);
+    for (const QString &f : pdfs)
+        if (pdfNameHas(f, {"cevap", "answer", "key"}))
+            return d.filePath(f);
+    return QString();
+}
+
+// .pkgcache/<kind>.pdf, its stamp and its lock. The original's names predate
+// the answered copy and stay as they were (compress_pdf._cache_paths).
+static void pdfCacheNames(const QString &kind, QString &pdf, QString &stamp, QString &lock)
+{
+    const bool answered = kind == QLatin1String("answered");
+    pdf = answered ? "answered.pdf" : "original.pdf";
+    stamp = answered ? "stamp_answered.json" : "stamp.json";
+    lock = answered ? "lock_answered" : "lock";
+}
+
+QString PdfProcess::pdfCacheStatus(const QString &book, const QString &kind) const {
     const QString bookDir = booksDir() + book;
     const QString rawDir = bookDir + "/raw";
     const QString cacheDir = bookDir + "/.pkgcache";
-    const QString cachePdf = cacheDir + "/original.pdf";
-    const QString stampPath = cacheDir + "/stamp.json";
-    const QString lockPath = cacheDir + "/lock";
+    QString pdfName, stampName, lockName;
+    pdfCacheNames(kind, pdfName, stampName, lockName);
+    const QString cachePdf = cacheDir + "/" + pdfName;
+    const QString stampPath = cacheDir + "/" + stampName;
+    const QString lockPath = cacheDir + "/" + lockName;
 
-    // Ready: the cache exists and its stamp still matches the source original.
+    // Ready: the cache exists and its stamp still matches the source PDF.
     if (QFileInfo::exists(cachePdf) && QFileInfo::exists(stampPath)) {
         QFile f(stampPath);
         if (f.open(QIODevice::ReadOnly)) {
@@ -872,10 +895,20 @@ QString PdfProcess::originalPdfStatus(const QString &book) {
         if (li.lastModified().secsTo(QDateTime::currentDateTime()) < 30 * 60)
             return QStringLiteral("inprogress");
     }
-    // None: raw/ has no PDF at all to keep.
-    if (QDir(rawDir).entryList(QStringList() << "*.pdf", QDir::Files).isEmpty())
+    // None: raw/ has no PDF of this kind to keep.
+    const QString src = kind == QLatin1String("answered") ? findAnsweredPdf(rawDir)
+                                                         : findOriginalPdf(rawDir);
+    if (src.isEmpty())
         return QStringLiteral("none");
     return QStringLiteral("stale");
+}
+
+QString PdfProcess::originalPdfStatus(const QString &book) {
+    return pdfCacheStatus(book, QStringLiteral("original"));
+}
+
+QString PdfProcess::answeredPdfStatus(const QString &book) {
+    return pdfCacheStatus(book, QStringLiteral("answered"));
 }
 
 QVariantMap PdfProcess::originalPdfInfo(const QString &book) {
@@ -900,6 +933,21 @@ void PdfProcess::ensureOriginalCompressed(const QString &book) {
     // Detached: the (possibly slow) job survives the app closing and finishes
     // writing the cache on its own; status is read back from the filesystem.
     QProcess::startDetached(pythonExecutable(), args);
+}
+
+void PdfProcess::ensureAnsweredCompressed(const QString &book) {
+    const QString s = answeredPdfStatus(book);
+    if (s == "ready" || s == "inprogress" || s == "none")
+        return;
+    QStringList args;
+    args << "-u" << (scriptsDir() + "/compress_pdf.py")
+         << "--cache-answered" << (booksDir() + book + "/raw") << "150" << "80";
+    QProcess::startDetached(pythonExecutable(), args);
+}
+
+void PdfProcess::ensurePdfsCompressed(const QString &book) {
+    ensureOriginalCompressed(book);
+    ensureAnsweredCompressed(book);
 }
 
 void PdfProcess::optimizeOriginalPdf(const QString &book, bool force) {
@@ -1045,6 +1093,14 @@ QString PdfProcess::checkBookForPackage(const QString &book)
     return runPackageScript(QStringList() << "check" << (booksDir() + book), 120000, nullptr);
 }
 
+void PdfProcess::checkBookForPackageAsync(const QString &book)
+{
+    QtConcurrent::run([this, book]() {
+        // Emitted from the pool thread; queued to the QML handlers.
+        emit bookChecked(book, checkBookForPackage(book));
+    });
+}
+
 QString PdfProcess::packageFolderPreview(const QString &title, const QString &publisher)
 {
     // "--opt=value": a title that starts with "-" must not read as an option.
@@ -1158,44 +1214,72 @@ void PdfProcess::logNormalizeReport(const QJsonObject &r)
         log("⚠  " + r.value("logo_uyari").toString());
 }
 
-// Project ▸ Optimize leaves a compressed original.pdf in the PROJECT's
-// .pkgcache, and the normalizer deletes .pkgcache from its copy as junk — so
-// the optimized PDF is carried into the export here, after normalizing. Only
-// while the export's original.pdf is still the file that cache was built from
-// (same size as the project's original): if the normalizer merged parts or
-// picked another PDF, the cache belongs to something else and the full-size
-// PDF ships instead.
+// Project ▸ Optimize and Book Details ▸ Optimize PDFs leave compressed copies
+// of original.pdf and answered.pdf in the PROJECT's .pkgcache, and the
+// normalizer deletes .pkgcache from its copy as junk — so they are carried
+// into the export here, after normalizing. A cached copy is used only while
+// the exported PDF is still the file it was built from (same size as the
+// project's): if the normalizer merged parts, or the author picked an answered
+// PDF from elsewhere, the export's own PDF is compressed right here instead.
+// Either way no PDF leaves uncompressed.
 bool PdfProcess::applyOptimizedPdf(const QString &book, const QString &exportDir)
 {
-    const QString status = originalPdfStatus(book);
-    if (status != "ready") {
-        if (status != "none")
-            setLogMessages(QString("       ⚠  original.pdf is not optimized — "
-                                   "it ships full size"));
-        return true;
-    }
-    const QString cache = booksDir() + book + "/.pkgcache/original.pdf";
-    const QString projectPdf = findOriginalPdf(booksDir() + book + "/raw");
-    const QString dst = exportDir + "/raw/original.pdf";
-    if (projectPdf.isEmpty() || QFileInfo(projectPdf).size() != QFileInfo(dst).size()) {
-        setLogMessages("       ⚠  the optimized PDF was made from a different original "
-                       "than the one exported — original.pdf ships full size");
-        return true;
-    }
+    return applyOptimizedPdfKind(book, exportDir, QStringLiteral("original"))
+        && applyOptimizedPdfKind(book, exportDir, QStringLiteral("answered"));
+}
+
+bool PdfProcess::applyOptimizedPdfKind(const QString &book, const QString &exportDir,
+                                       const QString &kind)
+{
+    QString pdfName, stampName, lockName;
+    pdfCacheNames(kind, pdfName, stampName, lockName);
+    const QString dst = exportDir + "/raw/" + pdfName;
+    if (!QFileInfo::exists(dst))
+        return true;                       // the export has no such PDF
+    const QString rawDir = booksDir() + book + "/raw";
+    const QString projectPdf = kind == QLatin1String("answered") ? findAnsweredPdf(rawDir)
+                                                                : findOriginalPdf(rawDir);
+    const QString cache = booksDir() + book + "/.pkgcache/" + pdfName;
     const QString tmp = dst + ".optimized";
     QFile::remove(tmp);
-    if (!QFile::copy(cache, tmp)) {
-        setLogMessages("✖  Could not copy the optimized original.pdf into the export.");
-        return false;
+    const qint64 before = QFileInfo(dst).size();
+
+    if (pdfCacheStatus(book, kind) == "ready" && !projectPdf.isEmpty()
+        && QFileInfo(projectPdf).size() == before) {
+        if (!QFile::copy(cache, tmp)) {
+            setLogMessages(QString("✖  Could not copy the optimized %1 into the export.").arg(pdfName));
+            return false;
+        }
+    } else {
+        // Not the PDF the cache was made from: compress the export's own copy.
+        setLogMessages(QString("       %1: optimizing… (a minute or two on a big book)").arg(pdfName));
+        QProcess proc;
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        env.insert("PYTHONIOENCODING", "utf-8");
+        proc.setProcessEnvironment(env);
+        proc.setProcessChannelMode(QProcess::MergedChannels);
+        proc.start(pythonExecutable(), QStringList() << "-u" << (scriptsDir() + "/compress_pdf.py")
+                                                     << dst << tmp << "150" << "80");
+        const bool finished = proc.waitForFinished(45 * 60 * 1000);
+        const QString out = QString::fromUtf8(proc.readAll());
+        if (!finished || proc.exitCode() != 0 || !QFileInfo::exists(tmp)) {
+            if (!finished)
+                proc.kill();
+            QFile::remove(tmp);
+            setLogMessages(QString("✖  Could not optimize %1: %2")
+                               .arg(pdfName, extractScriptError(out, proc.exitCode())));
+            return false;
+        }
     }
     QFile::remove(dst);
     if (!QFile::rename(tmp, dst)) {
-        setLogMessages("✖  Could not replace original.pdf with the optimized copy.");
+        setLogMessages(QString("✖  Could not replace %1 with the optimized copy.").arg(pdfName));
         return false;
     }
-    setLogMessages(QString("       original.pdf: optimized copy (%1 MB → %2 MB)")
-                       .arg(QFileInfo(projectPdf).size() / 1048576)
-                       .arg(QFileInfo(dst).size() / 1048576));
+    setLogMessages(QString("       %1: optimized (%2 MB → %3 MB)")
+                       .arg(pdfName)
+                       .arg(before / 1048576.0, 0, 'f', 1)
+                       .arg(QFileInfo(dst).size() / 1048576.0, 0, 'f', 1));
     return true;
 }
 
@@ -1374,9 +1458,12 @@ bool PdfProcess::package(const QStringList &platforms, const QVariantList &books
         // Source FlowBook path
         QString sourceFlowBookPath = packagePath + "/" + flowBookVersion;
         
-        // Create the new folder name with the package name
+        // The zip is named after the FlowBook version and the package; inside
+        // it everything sits under one folder named after the package, so
+        // extracting it — "Extract here" included — gives one folder with
+        // FlowBook and data/ in it instead of scattering them.
         QString targetFolderName = flowBookVersion + " - " + packageName;
-        QString targetPath = releaseBookPath + "/" + targetFolderName;
+        QString targetPath = releaseBookPath + "/" + packageName;
 
         // FlowBook kopyalama
         setProgress(baseProgress + progressPerPlatform * 0.4); // %40
@@ -1556,10 +1643,12 @@ bool PdfProcess::zipFolder(const QString &sourceDir, const QString &zipFilePath)
     QProcess *process = new QProcess(this);
     QStringList arguments;
     
+    // The folder itself goes in, not just its contents: the zip's one
+    // top-level entry is sourceDir's own name.
+    const QFileInfo src(sourceDir);
 #ifdef Q_OS_MAC
-    // On macOS, use zip command
-    arguments << "-r" << zipFilePath << ".";
-    process->setWorkingDirectory(sourceDir);
+    arguments << "-r" << zipFilePath << src.fileName();
+    process->setWorkingDirectory(src.absolutePath());
     process->start("zip", arguments);
 #else
     // On Windows, you might want to use 7zip or another tool
@@ -1578,8 +1667,9 @@ bool PdfProcess::zipFolder(const QString &sourceDir, const QString &zipFilePath)
         return false;
     }
 
-    // 7z.exe çalıştır: "7z.exe a -tzip zipFilePath sourceDir/*"
-    arguments << "a" << "-tzip" << zipFilePath << sourceDir + "/*";
+    // "7z a -tzip zipFilePath sourceDir": a folder given without "/*" is
+    // stored under its own name.
+    arguments << "a" << "-tzip" << zipFilePath << QDir::toNativeSeparators(src.absoluteFilePath());
     process->start(sevenZipPath, arguments);
 #endif
 
@@ -2565,6 +2655,80 @@ bool PdfProcess::optimizeImages(const QString &book)
         emit imagesOptimized(book, code == 0, json);
     });
     return true;
+}
+
+bool PdfProcess::optimizeAudio(const QString &book)
+{
+    if (_audioProcess)
+        return false;
+    QProcess *process = new QProcess(this);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    process->setProcessEnvironment(env);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+    _audioProcess = process;
+
+    // Whole lines only, as in optimizeVideos.
+    auto lines = QSharedPointer<QStringList>::create();
+    const auto drain = [this, process, book, lines]() {
+        while (process->canReadLine()) {
+            const QString t = QString::fromUtf8(process->readLine()).trimmed();
+            if (t.startsWith(QStringLiteral("PROGRESS:")))
+                emit audioOptimizeProgress(book, t.mid(9).trimmed());
+            else if (!t.isEmpty())
+                lines->append(t);
+        }
+    };
+    connect(process, &QProcess::readyReadStandardOutput, this, drain);
+
+    connect(process, &QProcess::finished, this,
+            [this, process, book, lines, drain](int exitCode, QProcess::ExitStatus status) {
+        drain();
+        const QString rest = QString::fromUtf8(process->readAll()).trimmed();
+        if (!rest.isEmpty())
+            lines->append(rest);
+        _audioProcess = nullptr;
+        process->deleteLater();
+
+        QJsonObject result;
+        for (auto it = lines->crbegin(); it != lines->crend(); ++it) {
+            if (it->startsWith(QStringLiteral("RESULT_JSON:"))) {
+                result = QJsonDocument::fromJson(it->mid(12).trimmed().toUtf8()).object();
+                break;
+            }
+        }
+        if (result.isEmpty()) {
+            qWarning() << "package_book.py audio: no result;" << lines->join('\n').right(1000);
+            result["hata"] = extractScriptError(lines->join('\n'), exitCode);
+        }
+        emit audioOptimizeFinished(book, status == QProcess::NormalExit && exitCode == 0,
+                                   QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact)));
+    });
+
+    connect(process, &QProcess::errorOccurred, this,
+            [this, process, book](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart || _audioProcess != process)
+            return;
+        _audioProcess = nullptr;
+        const QJsonObject result{{"hata", "Optimize could not start: " + process->errorString()}};
+        process->deleteLater();
+        emit audioOptimizeFinished(book, false,
+                                   QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact)));
+    });
+
+    process->start(pythonExecutable(),
+                   QStringList() << "-u" << (scriptsDir() + "/package_book.py") << "audio"
+                                 << (booksDir() + book) << "--stdin-stop");
+    return true;
+}
+
+void PdfProcess::cancelAudioOptimize()
+{
+    if (!_audioProcess)
+        return;
+    // The script finishes the clip it is on and stops once stdin closes;
+    // killing Python could leave ffmpeg running on Windows.
+    _audioProcess->closeWriteChannel();
 }
 
 void PdfProcess::cancelVideoOptimize()

@@ -9,8 +9,9 @@ Dialog {
     title: "Let's Package"
     modal: true
     closePolicy: Popup.NoAutoClose
-    width: 520
-    height: 640
+    // Big enough for a book's checks and their file lists, never past the window.
+    width: Math.min(820, (parent ? parent.width : 900) - 40)
+    height: Math.min(900, (parent ? parent.height : 960) - 40)
 
     anchors.centerIn: parent
 
@@ -18,12 +19,12 @@ Dialog {
     // read-only pre-flight check), 3 = pick platforms.
     property int step: 1
 
-    // Bumped while the book list shows so each row re-queries the optimize
-    // status (a book that hasn't been optimized gets a badge — its full-size
-    // original.pdf will ship). Optimizing itself is done in Project ▸ Optimize.
+    // Bumped while the book list and the book details show, so each re-queries
+    // the PDF optimize status: compression runs detached, and its end is only
+    // seen on disk. Book Details won't go on until both PDFs are optimized.
     property int statusTick: 0
     Timer {
-        running: packageDialog.visible && packageDialog.step === 1
+        running: packageDialog.visible && packageDialog.step <= 2
         interval: 1500
         repeat: true
         onTriggered: packageDialog.statusTick++
@@ -62,6 +63,8 @@ Dialog {
         step = 1;
         selectedBooks = currentProject ? [currentProject] : [];
         bookInfo = ({});
+        pendingChecks = [];
+        checking = false;
     }
 
     // Book Details ▸ Optimize videos runs on the window's videoOptimizer
@@ -114,7 +117,7 @@ Dialog {
             for (var i = 0; i < failed.length; i++)
                 msgs.push(failed[i].dosya + ": " + failed[i].hata);
             // What is left to do comes from checking again, not from this run.
-            packageDialog.setInfo(book, { videoError: msgs.join("\n"), rechecking: true });
+            packageDialog.setInfo(book, { videoError: msgs.join("\n"), rechecking: true, recheckKey: "video" });
             recheckTimer.book = book;
             recheckTimer.restart();
         }
@@ -174,7 +177,91 @@ Dialog {
             if (!packageDialog.bookInfo[book])
                 return;
             // What is left comes from checking again, not from this run.
-            packageDialog.setInfo(book, { imageError: msgs.join("\n"), rechecking: true });
+            packageDialog.setInfo(book, { imageError: msgs.join("\n"), rechecking: true, recheckKey: "images" });
+            recheckTimer.book = book;
+            recheckTimer.restart();
+        }
+    }
+
+    // ---- PDFs: original.pdf and answered.pdf must be optimized first ----
+    // "ready" | "inprogress" | "stale" | "none", re-read on every statusTick.
+    function pdfState(book, kind) {
+        statusTick;
+        return kind === "answered" ? pdfProcess.answeredPdfStatus(book)
+                                   : pdfProcess.originalPdfStatus(book);
+    }
+
+    function pdfsReady(book) {
+        var o = pdfState(book, "original"), a = pdfState(book, "answered");
+        return (o === "ready" || o === "none") && (a === "ready" || a === "none");
+    }
+
+    // ---- Audio: Book Details ▸ Optimize audio (scripts/audio_level.py) ----
+    property string audioBook: ""        // "" when idle
+    property var audioProgress: ({})     // {i, n, dosya}
+    property bool audioStopping: false
+
+    function audioIn(book, durum) {
+        var all = (((info(book).check || {}).ses || {}).sesler) || [];
+        var out = [];
+        for (var i = 0; i < all.length; i++)
+            if (all[i].durum === durum)
+                out.push(all[i]);
+        return out;
+    }
+
+    function startAudioOptimize(book) {
+        if (audioBook !== "")
+            return;
+        // The open book lets go of a clip its audio panel may hold (Windows
+        // won't replace an open file).
+        if (book === currentProject && typeof sideBar !== "undefined")
+            sideBar.audioVisible = false;
+        if (pdfProcess.optimizeAudio(book)) {
+            audioBook = book;
+            audioProgress = ({});
+            audioStopping = false;
+            setInfo(book, { audioError: "" });
+        }
+    }
+
+    Connections {
+        target: pdfProcess
+        function onAudioOptimizeProgress(book, json) {
+            if (book !== packageDialog.audioBook)
+                return;
+            try {
+                packageDialog.audioProgress = JSON.parse(json);
+            } catch (e) {}
+        }
+        function onAudioOptimizeFinished(book, ok, json) {
+            if (book !== packageDialog.audioBook)
+                return;
+            packageDialog.audioBook = "";
+            packageDialog.audioProgress = ({});
+            packageDialog.audioStopping = false;
+            var r;
+            try {
+                r = JSON.parse(json);
+            } catch (e) {
+                r = { hata: "" + e };
+            }
+            var msgs = [];
+            if (r.hata)
+                msgs.push(r.hata);
+            var failed = r.basarisiz || [];
+            for (var i = 0; i < failed.length; i++)
+                msgs.push(failed[i].dosya + ": " + failed[i].hata);
+            var skipped = r.hizali_atlanan || [];
+            for (var k = 0; k < skipped.length; k++)
+                msgs.push(skipped[k] + ": left as it is — re-encoding would move its karaoke timings");
+            var done = (r.normalize_edilen || []).length;
+            if (done)
+                toast.show(done + " audio file(s) brought to -16 LUFS (" + book + ")"
+                           + (r.iptal ? " — stopped" : ""));
+            if (!packageDialog.bookInfo[book])
+                return;
+            packageDialog.setInfo(book, { audioError: msgs.join("\n"), rechecking: true, recheckKey: "audio" });
             recheckTimer.book = book;
             recheckTimer.restart();
         }
@@ -202,30 +289,66 @@ Dialog {
 
     // Runs the pre-flight check (nothing is written) for each selected book
     // not checked yet, and pre-fills title and publisher.
+    // Books whose first check is still running (checkBookForPackageAsync):
+    // the check measures every MP3 and probes every video, so it runs on a
+    // worker thread and the dialog stays live meanwhile.
+    property var pendingChecks: []
+
     function loadDetails() {
+        var pending = [], ask = [];
         for (var i = 0; i < selectedBooks.length; i++) {
             var book = "" + selectedBooks[i];
             if (info(book).check)
                 continue;                  // keep what was already typed
-            var check;
-            try {
-                check = JSON.parse(pdfProcess.checkBookForPackage(book));
-            } catch (e) {
-                check = { hata: "Could not check " + book + ": " + e };
-            }
-            // The open project may hold edits not saved yet; prefer those.
-            var open = book === currentProject && config;
-            var pub = (open && config.publisherName) ? config.publisherName : (check.publisher_name || "");
-            setInfo(book, {
-                check: check,
-                title: (open && config.bookTitle) ? config.bookTitle : (check.book_title || ""),
-                publisherIndex: publisherIndexOf(pub),
-                configPublisher: pub,
-                answered: ""
-            });
-            refreshFolder(book);
+            pending.push(book);
+            // Back and Next again while a check is out: wait for that one.
+            if (pendingChecks.indexOf(book) === -1)
+                ask.push(book);
         }
-        checking = false;
+        pendingChecks = pending;
+        checking = pending.length > 0;
+        for (var j = 0; j < ask.length; j++)
+            pdfProcess.checkBookForPackageAsync(ask[j]);
+    }
+
+    function applyCheck(book, json) {
+        var check;
+        try {
+            check = JSON.parse(json);
+        } catch (e) {
+            check = { hata: "Could not check " + book + ": " + e };
+        }
+        var p = pendingChecks.indexOf(book);
+        if (p === -1) {
+            // A re-check after an Optimize: only the findings change.
+            if (info(book).rechecking)
+                setInfo(book, { check: check, rechecking: false });
+            return;
+        }
+        // The open project may hold edits not saved yet; prefer those.
+        var open = book === currentProject && config;
+        var pub = (open && config.publisherName) ? config.publisherName : (check.publisher_name || "");
+        setInfo(book, {
+            check: check,
+            title: (open && config.bookTitle) ? config.bookTitle : (check.book_title || ""),
+            publisherIndex: publisherIndexOf(pub),
+            configPublisher: pub,
+            answered: ""
+        });
+        refreshFolder(book);
+        var rest = pendingChecks.slice();
+        rest.splice(p, 1);
+        pendingChecks = rest;
+        if (rest.length === 0)
+            checking = false;
+    }
+
+    Connections {
+        target: pdfProcess
+        function onBookChecked(book, json) {
+            if (packageDialog.visible)
+                packageDialog.applyCheck(book, json);
+        }
     }
 
     // The option a config value matches, ignoring case ("EduLink" is Edulink);
@@ -275,7 +398,8 @@ Dialog {
                   && !(c.ref_kayip > 0) && !((c.kirik_detay || []).length > 0)
                   && c.original !== "yok" && !c.pypdf_uyari
                   && (c.answered !== "yok" || d.answered)
-                  && videosReady(book) && !d.rechecking && imageBook !== book);
+                  && videosReady(book) && !d.rechecking && imageBook !== book
+                  && audioBook !== book && pdfsReady(book));
     }
 
     function duplicateFolder() {
@@ -295,6 +419,8 @@ Dialog {
         bookInfo;
         videoBook;
         imageBook;
+        audioBook;
+        statusTick;
         if (checking || selectedBooks.length === 0)
             return false;
         for (var i = 0; i < selectedBooks.length; i++)
@@ -349,51 +475,196 @@ Dialog {
             out.push({ level: "warn", text: c.bozuk_metin + " corrupt text value(s) in config.json will be cleaned" });
         if (c.logo_uyari)
             out.push({ level: "warn", text: c.logo_uyari });
-        // Game and fill-with-color images: a warning, not a stop — an
-        // oversized picture still shows, it only makes the package heavy.
-        var g = c.gorsel;
-        if (g) {
-            if (g.pillow_yok)
-                out.push({ level: "warn", text: g.toplam + " game/fill image(s) can't be checked: "
-                                                + "Pillow isn't installed — install it from Help ▸ Dependencies" });
-            var badImg = imagesIn(book, "okunamayan");
-            if (badImg.length) {
-                out.push({ level: "warn", text: badImg.length + " game/fill image(s) can't be read:" });
-                for (var bi = 0; bi < badImg.length; bi++)
-                    out.push({ level: "warn", detail: true, text: badImg[bi].dosya + " — " + badImg[bi].hata });
-            }
-            var bigImg = imagesIn(book, "buyuk");
-            if (bigImg.length) {
-                out.push({ level: "warn", text: bigImg.length + " game/fill image(s) are far bigger than the reader needs — "
-                           + "Optimize images brings them down to " + g.limit + " px in the book's own folder:" });
-                for (var gi = 0; gi < bigImg.length; gi++)
-                    out.push({ level: "warn", detail: true, text: bigImg[gi].dosya + " — " + bigImg[gi].w + "×"
-                               + bigImg[gi].h + ", " + bigImg[gi].mb + " MB" });
-            }
-        }
-        // Videos last, so Optimize videos sits right under what it fixes.
-        var v = c.video;
-        if (v) {
-            if (v.ffmpeg_yok)
-                out.push({ level: "error", text: v.toplam + " video(s) can't be checked for Windows: "
-                                                 + "ffmpeg isn't installed — install it from Help ▸ Dependencies" });
-            var unreadable = videosIn(book, "okunamayan");
-            if (unreadable.length) {
-                out.push({ level: "error", text: unreadable.length
-                           + " video(s) can't be read — replace them before packaging:" });
-                for (var u = 0; u < unreadable.length; u++)
-                    out.push({ level: "error", detail: true,
-                               text: unreadable[u].dosya + " — " + unreadable[u].hata });
-            }
-            var pending = videoPending(book);
-            if (pending.length) {
-                out.push({ level: "error", text: pending.length + " video(s) won't play on Windows — "
-                           + "Optimize converts them to H.264 in the book's own folder, replacing the originals:" });
-                for (var p = 0; p < pending.length; p++)
-                    out.push({ level: "error", detail: true, text: pending[p].dosya + " — " + pending[p].sorun });
-            }
-        }
         return out;
+    }
+
+    // ---- Checks: one row per topic (PDFs, audio, images, videos) ----
+    // Which rows are open, by "<book>/<key>": kept here, not in the row,
+    // because the rows are rebuilt on every progress tick.
+    property var openChecks: ({})
+    function toggleCheck(book, key) {
+        var o = Object.assign({}, openChecks);
+        o[book + "/" + key] = !o[book + "/" + key];
+        openChecks = o;
+    }
+
+    function mb(bytes) {
+        return (bytes / 1048576).toFixed(1) + " MB";
+    }
+
+    // Each row: {key, title, state ("ok" | "warn" | "error" | "running"),
+    // summary, details: [{text, level}], action ("" for none), stoppable,
+    // progress (0-1, or -1 for none), error}. State "error" holds Next back.
+    function mediaChecks(book) {
+        var d = info(book);
+        var c = d.check || {};
+        var rows = [];
+        if (!d.check || c.hata)
+            return rows;
+        var again = d.rechecking ? d.recheckKey : "";
+
+        // PDFs — a must.
+        var po = pdfState(book, "original"), pa = pdfState(book, "answered");
+        var pdf = { key: "pdf", title: "PDFs", details: [], action: "", stoppable: false,
+                    progress: -1, error: "" };
+        var oi = pdfProcess.originalPdfInfo(book);
+        var kinds = [["original.pdf", po], ["answered.pdf", pa]];
+        for (var k = 0; k < kinds.length; k++) {
+            if (kinds[k][1] === "none")
+                continue;
+            var label = kinds[k][1] === "ready" ? "optimized" : kinds[k][1] === "inprogress"
+                        ? "optimizing…" : "not optimized";
+            if (k === 0 && po === "ready" && oi.original > 0 && oi.compressed > 0)
+                label += " (" + mb(oi.original) + " → " + mb(oi.compressed) + ")";
+            pdf.details.push({ text: kinds[k][0] + " — " + label,
+                               level: kinds[k][1] === "stale" ? "error" : "info" });
+        }
+        if (po === "inprogress" || pa === "inprogress") {
+            pdf.state = "running";
+            pdf.summary = "Optimizing… a minute or two on a big book";
+        } else if (po === "stale" || pa === "stale") {
+            pdf.state = "error";
+            pdf.summary = "Must be optimized before packaging";
+            pdf.action = "Optimize";
+        } else {
+            pdf.state = "ok";
+            pdf.summary = (pa === "none" ? "original.pdf" : "original.pdf and answered.pdf") + " optimized";
+        }
+        rows.push(pdf);
+
+        // Audio — -16 LUFS; a warning.
+        var s = c.ses;
+        if (s && s.toplam) {
+            var au = { key: "audio", title: "Audio", details: [], action: "", stoppable: false,
+                       progress: -1, error: d.audioError || "" };
+            var quiet = audioIn(book, "duzeltilecek"), badAu = audioIn(book, "okunamayan");
+            for (var q = 0; q < quiet.length; q++)
+                au.details.push({ level: "warn", text: quiet[q].dosya + " — " + quiet[q].i + " LUFS, peak "
+                                  + quiet[q].tp + " dBTP → " + (quiet[q].gain > 0 ? "+" : "") + quiet[q].gain + " dB" });
+            for (var ba = 0; ba < badAu.length; ba++)
+                au.details.push({ level: "warn", text: badAu[ba].dosya + " — can't be read: " + badAu[ba].hata });
+            if (audioBook === book) {
+                var ap = audioProgress;
+                au.state = "running";
+                au.summary = ap.n > 0 ? "Leveling " + (ap.i + 1) + " of " + ap.n + " · " + (ap.dosya || "")
+                                      : "Measuring…";
+                au.progress = ap.n > 0 ? ap.i / ap.n : 0;
+                au.stoppable = true;
+            } else if (again === "audio") {
+                au.state = "running";
+                au.summary = "Checking again…";
+            } else if (s.ffmpeg_yok) {
+                au.state = "warn";
+                au.summary = "Can't check " + s.toplam + " file(s): ffmpeg isn't installed (Help ▸ Dependencies)";
+            } else if (quiet.length) {
+                au.state = "warn";
+                au.summary = quiet.length + " of " + s.toplam + " file(s) too quiet — off " + s.hedef + " LUFS";
+                au.action = "Optimize";
+            } else if (badAu.length) {
+                au.state = "warn";
+                au.summary = badAu.length + " file(s) can't be read";
+            } else {
+                au.state = "ok";
+                au.summary = s.toplam + " file(s) at " + s.hedef + " LUFS";
+            }
+            rows.push(au);
+        }
+
+        // Game/fill images — a warning.
+        var g = c.gorsel;
+        if (g && g.toplam) {
+            var im = { key: "images", title: "Images", details: [], action: "", stoppable: false,
+                       progress: -1, error: d.imageError || "" };
+            var big = imagesIn(book, "buyuk"), badImg = imagesIn(book, "okunamayan");
+            for (var gi = 0; gi < big.length; gi++)
+                im.details.push({ level: "warn", text: big[gi].dosya + " — " + big[gi].w + "×" + big[gi].h
+                                  + ", " + big[gi].mb + " MB" });
+            for (var bi = 0; bi < badImg.length; bi++)
+                im.details.push({ level: "warn", text: badImg[bi].dosya + " — can't be read: " + badImg[bi].hata });
+            if (imageBook === book) {
+                im.state = "running";
+                im.summary = "Resizing to " + g.limit + " px…";
+            } else if (again === "images") {
+                im.state = "running";
+                im.summary = "Checking again…";
+            } else if (g.pillow_yok) {
+                im.state = "warn";
+                im.summary = "Can't check: Pillow isn't installed (Help ▸ Dependencies)";
+            } else if (big.length) {
+                im.state = "warn";
+                im.summary = big.length + " of " + g.toplam + " game/fill image(s) far bigger than "
+                             + g.limit + " px";
+                im.action = "Optimize";
+            } else if (badImg.length) {
+                im.state = "warn";
+                im.summary = badImg.length + " image(s) can't be read";
+            } else {
+                im.state = "ok";
+                im.summary = g.toplam + " game/fill image(s) sized for the reader";
+            }
+            rows.push(im);
+        }
+
+        // Videos — must play on Windows.
+        var v = c.video;
+        if (v && v.toplam) {
+            var vi = { key: "video", title: "Videos", details: [], action: "", stoppable: false,
+                       progress: -1, error: d.videoError || "" };
+            var pend = videoPending(book), badV = videosIn(book, "okunamayan");
+            for (var p = 0; p < pend.length; p++)
+                vi.details.push({ level: "error", text: pend[p].dosya + " — " + pend[p].sorun });
+            for (var u = 0; u < badV.length; u++)
+                vi.details.push({ level: "error", text: badV[u].dosya + " — can't be read: " + badV[u].hata });
+            if (videoBook === book) {
+                var vp = videoProgress;
+                vi.state = "running";
+                vi.progress = vp.n > 0 ? (vp.i + vp.pct / 100) / vp.n : 0;
+                vi.summary = vp.n > 0 ? "Converting " + (vp.i + 1) + " of " + vp.n + " · "
+                                        + (vp.dosya || "") + " " + (vp.pct || 0) + "%"
+                                      : "Checking the videos…";
+                vi.stoppable = true;
+            } else if (again === "video") {
+                vi.state = "running";
+                vi.summary = "Checking again…";
+            } else if (v.ffmpeg_yok) {
+                vi.state = "error";
+                vi.summary = "Can't check " + v.toplam + " video(s): ffmpeg isn't installed (Help ▸ Dependencies)";
+            } else if (badV.length) {
+                vi.state = "error";
+                vi.summary = badV.length + " video(s) can't be read — replace them";
+            } else if (pend.length) {
+                vi.state = "error";
+                vi.summary = pend.length + " of " + v.toplam + " video(s) won't play on Windows";
+                vi.action = "Optimize";
+            } else {
+                vi.state = "ok";
+                vi.summary = v.toplam + " video(s) play on Windows";
+            }
+            rows.push(vi);
+        }
+        return rows;
+    }
+
+    function runCheck(book, key) {
+        if (key === "pdf") {
+            pdfProcess.ensurePdfsCompressed(book);
+            statusTick++;
+        } else if (key === "audio") {
+            startAudioOptimize(book);
+        } else if (key === "images") {
+            startImageOptimize(book);
+        } else if (key === "video") {
+            startVideoOptimize(book);
+        }
+    }
+
+    function stopCheck(key) {
+        if (key === "audio") {
+            audioStopping = true;
+            pdfProcess.cancelAudioOptimize();
+        } else if (key === "video") {
+            stopVideoOptimize();
+        }
     }
 
     function folderList() {
@@ -457,28 +728,20 @@ Dialog {
         return books;
     }
 
-    // Gives "Checking books…" a frame to show before the (blocking) check.
+    // Gives "Checking books…" a frame to show before the checks start.
     Timer {
         id: checkTimer
         interval: 50
         onTriggered: packageDialog.loadDetails()
     }
 
-    // After Optimize videos: the book's check again, so its notes show what is
-    // left. A frame first, for "Checking the videos again…".
+    // After an Optimize: the book's check again (in the background), so its
+    // rows show what is left.
     Timer {
         id: recheckTimer
         property string book
         interval: 50
-        onTriggered: {
-            var check;
-            try {
-                check = JSON.parse(pdfProcess.checkBookForPackage(book));
-            } catch (e) {
-                check = { hata: "Could not check " + book + ": " + e };
-            }
-            packageDialog.setInfo(book, { check: check, rechecking: false });
-        }
+        onTriggered: pdfProcess.checkBookForPackageAsync(book)
     }
 
     // Title/publisher edits re-derive the folder preview once typing pauses.
@@ -836,11 +1099,54 @@ Dialog {
             Layout.alignment: Qt.AlignHCenter
             color: "white"
         }
-        Text {
+        // While the checks run (on a worker thread): a turning ring in the
+        // middle of the space the cards will take.
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
             visible: packageDialog.checking
-            text: "Checking books…"
-            color: "#e0a32e"
-            font.pixelSize: 12
+            Column {
+                anchors.centerIn: parent
+                spacing: 14
+                Canvas {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 34
+                    height: 34
+                    onPaint: {
+                        var ctx = getContext("2d");
+                        ctx.reset();
+                        ctx.lineWidth = 3;
+                        ctx.lineCap = "round";
+                        ctx.strokeStyle = "#2c3c44";
+                        ctx.beginPath();
+                        ctx.arc(width / 2, height / 2, width / 2 - 3, 0, Math.PI * 2);
+                        ctx.stroke();
+                        ctx.strokeStyle = "#4fd2dc";
+                        ctx.beginPath();
+                        ctx.arc(width / 2, height / 2, width / 2 - 3, 0, Math.PI * 0.6);
+                        ctx.stroke();
+                    }
+                    RotationAnimator on rotation {
+                        running: packageDialog.checking && packageDialog.visible
+                        from: 0; to: 360; duration: 900
+                        loops: Animation.Infinite
+                    }
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "Checking " + (packageDialog.pendingChecks.length > 1
+                                         ? packageDialog.pendingChecks.length + " books" : "the book") + "…"
+                    color: "white"
+                    font.pixelSize: 14
+                    font.bold: true
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "Measuring the audio and probing the videos — a few seconds the first time"
+                    color: "#8aa0a8"
+                    font.pixelSize: 12
+                }
+            }
         }
 
         // A plain Flickable sized by the laid-out column: the ScrollView here
@@ -1102,156 +1408,232 @@ Dialog {
                                 }
                             }
 
-                            // Optimize images: the game/fill images listed above,
-                            // down to 750 px in the book's own folder.
-                            RowLayout {
-                                id: imageBox
-                                Layout.fillWidth: true
-                                readonly property int pending: {
-                                    packageDialog.bookInfo;
-                                    return packageDialog.imagesIn(card.book, "buyuk").length;
-                                }
-                                readonly property bool running: packageDialog.imageBook === card.book
-                                visible: running || pending > 0 || !!card.d.imageError
-                                spacing: 8
-                                Button {
-                                    id: imageBtn
-                                    visible: imageBox.running || imageBox.pending > 0
-                                    enabled: packageDialog.imageBook === "" && !card.d.rechecking
-                                    text: imageBox.running ? "Optimizing images…"
-                                                           : "Optimize images (" + imageBox.pending + ")"
-                                    Layout.preferredHeight: 30
-                                    background: Rectangle {
-                                        radius: 2
-                                        color: !imageBtn.enabled ? "#2a3338"
-                                             : (imageBtn.hovered ? "#00b3be" : "#009ca6")
-                                    }
-                                    contentItem: Text {
-                                        text: imageBtn.text; font.pixelSize: 12; font.bold: true
-                                        color: imageBtn.enabled ? "white" : "#6b7a80"
-                                        horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                                    }
-                                    onClicked: packageDialog.startImageOptimize(card.book)
-                                }
-                                TextEdit {
-                                    Layout.fillWidth: true
-                                    visible: !imageBox.running && !!card.d.imageError
-                                    readOnly: true
-                                    selectByMouse: true
-                                    selectionColor: "#00707a"
-                                    selectedTextColor: "white"
-                                    textFormat: TextEdit.PlainText
-                                    wrapMode: TextEdit.Wrap
-                                    font.pixelSize: 12
-                                    color: "#e06c75"
-                                    text: "✖  " + (card.d.imageError || "")
-                                }
+                            // Checks: one row per topic, a click opens its files.
+                            Text {
+                                Layout.topMargin: 6
+                                visible: checksCol.count > 0
+                                text: "CHECKS"
+                                color: "#5e7178"
+                                font.pixelSize: 11
+                                font.bold: true
+                                font.letterSpacing: 1
                             }
-
-                            // Optimize videos, right under the video notes: converts
-                            // the videos that won't play on Windows in the book's
-                            // own folder (the same as Project ▸ Videos).
                             ColumnLayout {
-                                id: videoBox
+                                id: checksBox
                                 Layout.fillWidth: true
-                                readonly property int pending: {
+                                spacing: 4
+                                // The rows themselves, re-read on every tick and progress
+                                // line. The Repeater's model is only the list of topics
+                                // (a string, so an unchanged list is no change): rows
+                                // are built once and update in place, keeping an open
+                                // file list, its selection and the hover.
+                                readonly property var checks: {
                                     packageDialog.bookInfo;
-                                    return packageDialog.videoPending(card.book).length;
+                                    packageDialog.statusTick;
+                                    packageDialog.audioProgress;
+                                    packageDialog.videoProgress;
+                                    packageDialog.audioBook;
+                                    packageDialog.imageBook;
+                                    packageDialog.videoBook;
+                                    return packageDialog.mediaChecks(card.book);
                                 }
-                                readonly property bool running: packageDialog.videoBook === card.book
-                                readonly property var p: packageDialog.videoProgress
-                                // All videos so far, of all to convert; 0 to 1.
-                                readonly property real overall: p.n > 0 ? (p.i + p.pct / 100) / p.n : 0
-                                visible: running || !!card.d.rechecking || !!card.d.videoError
-                                         || (pending > 0 && !(card.c.video || {}).ffmpeg_yok)
-                                spacing: 6
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-                                    Button {
-                                        id: optimizeBtn
-                                        visible: !videoBox.running && videoBox.pending > 0
-                                        enabled: packageDialog.videoBook === "" && !card.d.rechecking
-                                        text: "Optimize videos (" + videoBox.pending + ")"
-                                        Layout.preferredHeight: 30
-                                        background: Rectangle {
-                                            radius: 2
-                                            color: !optimizeBtn.enabled ? "#2a3338"
-                                                 : (optimizeBtn.hovered ? "#00b3be" : "#009ca6")
-                                        }
-                                        contentItem: Text {
-                                            text: optimizeBtn.text; font.pixelSize: 12; font.bold: true
-                                            color: optimizeBtn.enabled ? "white" : "#6b7a80"
-                                            horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                                        }
-                                        onClicked: packageDialog.startVideoOptimize(card.book)
-                                    }
-                                    Button {
-                                        id: stopBtn
-                                        visible: videoBox.running
-                                        enabled: !packageDialog.videoStopping
-                                        text: packageDialog.videoStopping ? "Stopping…" : "Stop"
-                                        Layout.preferredHeight: 30
-                                        background: Rectangle {
-                                            radius: 2
-                                            color: stopBtn.hovered ? "#2A3337" : "#1A2327"
-                                            border.width: 1
-                                            border.color: "#009ca6"
-                                        }
-                                        contentItem: Text {
-                                            text: stopBtn.text; color: "white"; font.pixelSize: 12
-                                            horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                                        }
-                                        onClicked: packageDialog.stopVideoOptimize()
-                                    }
-                                    Text {
+                                readonly property string checkKeys: checks.map(function(r) { return r.key; }).join(",")
+                                Repeater {
+                                    id: checksCol
+                                    model: checksBox.checkKeys ? checksBox.checkKeys.split(",") : []
+                                    delegate: Rectangle {
+                                        id: checkRow
+                                        required property int index
+                                        readonly property var r: checksBox.checks[index]
+                                            || ({ key: "", title: "", state: "ok", summary: "", details: [],
+                                                  action: "", stoppable: false, progress: -1, error: "" })
+                                        readonly property bool expanded: !!packageDialog.openChecks[card.book + "/" + r.key]
+                                        readonly property bool hasDetails: r.details.length > 0 || !!r.error
+                                        readonly property color tone: r.state === "ok" ? "#4fbf8a"
+                                                                    : r.state === "warn" ? "#e0a32e"
+                                                                    : r.state === "error" ? "#e06c75" : "#4fd2dc"
                                         Layout.fillWidth: true
-                                        font.pixelSize: 12
-                                        color: "#e0a32e"
-                                        elide: Text.ElideRight
-                                        text: videoBox.running
-                                              ? (videoBox.p.n > 0
-                                                 ? "Converting " + (videoBox.p.i + 1) + " of " + videoBox.p.n
-                                                   + " · " + Math.round(videoBox.overall * 100) + "%"
-                                                 : "Checking the videos…")
-                                              : (card.d.rechecking ? "Checking the book again…" : "")
-                                    }
-                                }
+                                        implicitHeight: rowCol.implicitHeight
+                                        radius: 4
+                                        color: rowMouse.containsMouse && checkRow.hasDetails ? "#253740" : "#212f36"
+                                        border.width: 1
+                                        border.color: r.state === "error" ? "#5a3236" : "#2c3c44"
 
-                                Rectangle {
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 4
-                                    visible: videoBox.running
-                                    radius: 2
-                                    color: "#1A2327"
-                                    Rectangle {
-                                        width: parent.width * videoBox.overall
-                                        height: parent.height
-                                        radius: 2
-                                        color: "#009ca6"
+                                        // A thin bar in the row's own colour, on the left.
+                                        Rectangle {
+                                            width: 3
+                                            height: parent.height - 8
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 4
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            radius: 1.5
+                                            color: checkRow.tone
+                                        }
+
+                                        ColumnLayout {
+                                            id: rowCol
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            spacing: 0
+
+                                            Item {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 40
+                                                MouseArea {
+                                                    id: rowMouse
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: checkRow.hasDetails ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                    onClicked: if (checkRow.hasDetails)
+                                                                   packageDialog.toggleCheck(card.book, checkRow.r.key)
+                                                }
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 16
+                                                    anchors.rightMargin: 8
+                                                    spacing: 10
+                                                    Item {
+                                                        Layout.preferredWidth: 16
+                                                        Layout.preferredHeight: 16
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            visible: checkRow.r.state !== "running"
+                                                            text: checkRow.r.state === "ok" ? "✓"
+                                                                : checkRow.r.state === "warn" ? "!" : "✖"
+                                                            color: checkRow.tone
+                                                            font.pixelSize: 14
+                                                            font.bold: true
+                                                        }
+                                                        // Running: a three-quarter ring turning.
+                                                        Canvas {
+                                                            anchors.fill: parent
+                                                            visible: checkRow.r.state === "running"
+                                                            onPaint: {
+                                                                var ctx = getContext("2d");
+                                                                ctx.reset();
+                                                                ctx.lineWidth = 2;
+                                                                ctx.strokeStyle = "#4fd2dc";
+                                                                ctx.beginPath();
+                                                                ctx.arc(width / 2, height / 2, width / 2 - 2, 0, Math.PI * 1.5);
+                                                                ctx.stroke();
+                                                            }
+                                                            RotationAnimator on rotation {
+                                                                running: checkRow.r.state === "running"
+                                                                from: 0; to: 360; duration: 900
+                                                                loops: Animation.Infinite
+                                                            }
+                                                        }
+                                                    }
+                                                    Text {
+                                                        text: checkRow.r.title
+                                                        color: "white"
+                                                        font.pixelSize: 13
+                                                        font.bold: true
+                                                        Layout.preferredWidth: 58
+                                                    }
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: checkRow.r.summary
+                                                        color: checkRow.r.state === "ok" ? "#8aa0a8" : checkRow.tone
+                                                        font.pixelSize: 12
+                                                        elide: Text.ElideMiddle
+                                                    }
+                                                    Text {
+                                                        visible: checkRow.hasDetails
+                                                        text: "›"
+                                                        color: rowMouse.containsMouse ? "white" : "#8aa0a8"
+                                                        font.pixelSize: 20
+                                                        Layout.preferredWidth: 14
+                                                        horizontalAlignment: Text.AlignHCenter
+                                                        rotation: checkRow.expanded ? 90 : 0
+                                                        Behavior on rotation { NumberAnimation { duration: 120 } }
+                                                    }
+                                                    Button {
+                                                        id: checkBtn
+                                                        visible: checkRow.r.action !== "" || checkRow.r.stoppable
+                                                        readonly property bool stop: checkRow.r.stoppable
+                                                        enabled: stop ? !(checkRow.r.key === "audio" ? packageDialog.audioStopping
+                                                                                                    : packageDialog.videoStopping)
+                                                                      : !card.d.rechecking
+                                                        text: stop ? "Stop" : checkRow.r.action
+                                                        Layout.preferredHeight: 28
+                                                        Layout.preferredWidth: 84
+                                                        background: Rectangle {
+                                                            radius: 3
+                                                            color: checkBtn.stop ? (checkBtn.hovered ? "#2A3337" : "#1A2327")
+                                                                 : !checkBtn.enabled ? "#2a3338"
+                                                                 : (checkBtn.hovered ? "#00b3be" : "#009ca6")
+                                                            border.width: checkBtn.stop ? 1 : 0
+                                                            border.color: "#009ca6"
+                                                        }
+                                                        contentItem: Text {
+                                                            text: checkBtn.text
+                                                            font.pixelSize: 12
+                                                            font.bold: !checkBtn.stop
+                                                            color: checkBtn.enabled ? "white" : "#6b7a80"
+                                                            horizontalAlignment: Text.AlignHCenter
+                                                            verticalAlignment: Text.AlignVCenter
+                                                        }
+                                                        onClicked: checkBtn.stop ? packageDialog.stopCheck(checkRow.r.key)
+                                                                                 : packageDialog.runCheck(card.book, checkRow.r.key)
+                                                    }
+                                                }
+                                            }
+
+                                            // Progress, flush with the row's bottom edge.
+                                            Rectangle {
+                                                Layout.fillWidth: true
+                                                Layout.leftMargin: 16
+                                                Layout.rightMargin: 8
+                                                Layout.bottomMargin: 6
+                                                Layout.preferredHeight: 3
+                                                visible: checkRow.r.progress >= 0
+                                                radius: 1.5
+                                                color: "#1A2327"
+                                                Rectangle {
+                                                    width: parent.width * Math.max(0, Math.min(1, checkRow.r.progress))
+                                                    height: parent.height
+                                                    radius: 1.5
+                                                    color: "#009ca6"
+                                                }
+                                            }
+
+                                            // The files, selectable so a path can be copied.
+                                            TextEdit {
+                                                Layout.fillWidth: true
+                                                Layout.leftMargin: 40
+                                                Layout.rightMargin: 10
+                                                Layout.bottomMargin: 8
+                                                visible: checkRow.expanded && checkRow.hasDetails
+                                                readOnly: true
+                                                selectByMouse: true
+                                                selectionColor: "#00707a"
+                                                selectedTextColor: "white"
+                                                textFormat: TextEdit.RichText
+                                                wrapMode: TextEdit.Wrap
+                                                font.pixelSize: 12
+                                                text: {
+                                                    function esc(t) {
+                                                        return ("" + t).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+                                                    }
+                                                    var lines = [];
+                                                    if (checkRow.r.error)
+                                                        lines.push("<span style='color:#e06c75'>✖ " + esc(checkRow.r.error).replace(/\n/g, "<br>✖ ") + "</span>");
+                                                    for (var i = 0; i < checkRow.r.details.length; i++) {
+                                                        var dl = checkRow.r.details[i];
+                                                        var col = dl.level === "error" ? "#e06c75" : dl.level === "warn" ? "#c9a25a" : "#8aa0a8";
+                                                        // "file — what": the file quiet, the finding in the row's colour.
+                                                        var cut = dl.text.indexOf(" — ");
+                                                        lines.push(cut < 0 ? "<span style='color:" + col + "'>" + esc(dl.text) + "</span>"
+                                                                   : "<span style='color:#b8c7cc'>" + esc(dl.text.slice(0, cut))
+                                                                     + "</span><span style='color:#5e7178'>  ·  </span><span style='color:"
+                                                                     + col + "'>" + esc(dl.text.slice(cut + 3)) + "</span>");
+                                                    }
+                                                    return lines.join("<br>");
+                                                }
+                                            }
+                                        }
                                     }
-                                }
-                                Text {
-                                    Layout.fillWidth: true
-                                    visible: videoBox.running && !!videoBox.p.dosya
-                                    text: (videoBox.p.dosya || "") + "  ·  " + (videoBox.p.pct || 0) + "%"
-                                    color: "#8aa0a8"
-                                    font.pixelSize: 11
-                                    elide: Text.ElideMiddle
-                                }
-                                TextEdit {
-                                    Layout.fillWidth: true
-                                    visible: !videoBox.running && !!card.d.videoError
-                                    readOnly: true
-                                    selectByMouse: true
-                                    selectionColor: "#00707a"
-                                    selectedTextColor: "white"
-                                    textFormat: TextEdit.PlainText
-                                    wrapMode: TextEdit.Wrap
-                                    font.pixelSize: 12
-                                    color: "#e06c75"
-                                    text: "✖  " + (card.d.videoError || "")
                                 }
                             }
 

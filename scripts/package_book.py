@@ -9,7 +9,9 @@ copied over. This file adds only what belongs to the editor:
       check_book() (touches nothing) plus what the Package dialog has to ask
       about before anything is written: is there an answered PDF, do the
       config's pages fit the PDF, the publisher logo path, which videos
-      won't play on Windows, and which game/fill images are oversized.
+      won't play on Windows, which game/fill images are oversized, and which
+      MP3s are off the -16 LUFS target (audio_level, measurements cached in
+      .pkgcache).
 
   video-check <book_dir>
       Only the videos: video_compat.check_book(), for Project ▸ Videos and the
@@ -41,6 +43,12 @@ copied over. This file adds only what belongs to the editor:
       the run when stdin closes, which is how the editor stops it (killing
       Python would leave ffmpeg running on Windows). Exit 0 all converted,
       1 some failed, 2 error, 3 stopped.
+
+  audio <book_dir> [--stdin-stop]
+      Brings the book's MP3s to -16 LUFS / -1.5 dBTP with a plain gain, in the
+      book's own folder (audio_level.optimize_book) — Optimize audio in Book
+      Details. PROGRESS: {i, n, dosya} lines; --stdin-stop as for videos.
+      Exit 0 all done, 1 some failed or skipped, 2 error, 3 stopped.
 
   images <book_dir>
       Brings the book's game and fill-with-color images whose long side is
@@ -75,6 +83,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import flowbook_normalize as fn
+import audio_level
 import image_optimize
 import video_compat
 
@@ -325,6 +334,7 @@ def cmd_check(a):
     r["kirik_detay"] = broken_refs(src)
     r["video"] = video_compat.check_book(src)
     r["gorsel"] = image_optimize.check_book(src)
+    r["ses"] = audio_level.check_book(src)
     return emit(r, 1 if r.get("ref_kayip") or r["kirik_detay"] else 0)
 
 
@@ -500,6 +510,39 @@ def cmd_videos(a):
     return emit(r, 1 if r["basarisiz"] else 0)
 
 
+def _stdin_stop(enabled):
+    """An Event set when the editor closes our stdin (see cmd_videos)."""
+    stopped = threading.Event()
+    if enabled:
+        def watch():
+            try:
+                while os.read(sys.stdin.fileno(), 4096):
+                    pass
+            except OSError:
+                pass
+            stopped.set()
+        threading.Thread(target=watch, daemon=True).start()
+    return stopped
+
+
+def cmd_audio(a):
+    src = Path(a.book_dir)
+    if not (src / "config.json").is_file():
+        return emit({"hata": f"Not a book (no config.json): {src}"}, 2)
+    stopped = _stdin_stop(a.stdin_stop)
+
+    def progress(i, n, dosya):
+        print("PROGRESS: " + json.dumps({"i": i, "n": n, "dosya": dosya},
+                                        ensure_ascii=False), flush=True)
+
+    r = audio_level.optimize_book(src, progress, stopped.is_set)
+    if "hata" in r:
+        return emit(r, 2)
+    if r.get("iptal"):
+        return emit(r, 3)
+    return emit(r, 1 if r["basarisiz"] or r["hizali_atlanan"] else 0)
+
+
 def cmd_images(a):
     src = Path(a.book_dir)
     if not (src / "config.json").is_file():
@@ -599,6 +642,9 @@ def main(argv=None):
     v = sub.add_parser("videos")
     v.add_argument("book_dir")
     v.add_argument("--stdin-stop", action="store_true")
+    au = sub.add_parser("audio")
+    au.add_argument("book_dir")
+    au.add_argument("--stdin-stop", action="store_true")
     im = sub.add_parser("images")
     im.add_argument("book_dir")
     i1 = sub.add_parser("image")
@@ -611,7 +657,7 @@ def main(argv=None):
     try:
         return {"check": cmd_check, "title": cmd_title, "normalize": cmd_normalize,
                 "video-check": cmd_video_check, "videos": cmd_videos,
-                "images": cmd_images, "image": cmd_image,
+                "images": cmd_images, "image": cmd_image, "audio": cmd_audio,
                 "zip": cmd_zip}[a.cmd](a)
     except Exception as exc:
         # The result line FIRST: printing a traceback can itself fail on a

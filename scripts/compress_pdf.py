@@ -2,7 +2,11 @@
 images, WITHOUT rasterizing the pages (vector text stays crisp). Used at
 package time to keep raw/original.pdf small.
 
-Two modes:
+Modes:
+  compress_pdf.py --cache <raw_dir> [dpi] [quality]
+      The original into <book>/.pkgcache/original.pdf (+ stamp.json), skipped
+      while that cache is fresh. --cache-answered does the same for the
+      answered PDF (.pkgcache/answered.pdf + stamp_answered.json).
   compress_pdf.py --from-raw <raw_dir> <output.pdf> [dpi] [quality]
       Find the original (non-answered) PDF in raw_dir, compress it.
   compress_pdf.py <input.pdf> <output.pdf> [dpi] [quality]
@@ -41,7 +45,7 @@ MIN_IMAGE_BYTES = 30 * 1024
 MIN_IMAGE_PIXELS = 256
 
 
-from book_files import find_original_pdf   # one rule, shared (see book_files)
+from book_files import find_answered_pdf, find_original_pdf   # one rule, shared (see book_files)
 
 
 def _recompress_image(raw_bytes, max_px, quality):
@@ -232,9 +236,15 @@ WAIT_POLL_SECS = 2
 WAIT_MAX_SECS = 45 * 60
 
 
-def _cache_paths(raw_dir):
+def _cache_paths(raw_dir, kind="original"):
+    """(dir, cached pdf, stamp, lock) for kind "original" or "answered". The
+    original's names predate the answered copy and stay as they were, so an
+    existing cache is still recognised."""
     book_dir = os.path.dirname(os.path.abspath(raw_dir.rstrip("/\\")))
     cdir = os.path.join(book_dir, ".pkgcache")
+    if kind == "answered":
+        return cdir, os.path.join(cdir, "answered.pdf"), \
+            os.path.join(cdir, "stamp_answered.json"), os.path.join(cdir, "lock_answered")
     return cdir, os.path.join(cdir, "original.pdf"), \
         os.path.join(cdir, "stamp.json"), os.path.join(cdir, "lock")
 
@@ -265,12 +275,12 @@ def _lock_fresh(lock_path):
         return False
 
 
-def cache_mode(raw_dir, dpi, quality):
-    src = find_original_pdf(raw_dir)
+def cache_mode(raw_dir, dpi, quality, kind="original"):
+    src = find_answered_pdf(raw_dir) if kind == "answered" else find_original_pdf(raw_dir)
     if not src:
-        print(f"ERROR: no original PDF found in: {raw_dir}", flush=True)
+        print(f"ERROR: no {kind} PDF found in: {raw_dir}", flush=True)
         return 1
-    cdir, cache_pdf, stamp_path, lock_path = _cache_paths(raw_dir)
+    cdir, cache_pdf, stamp_path, lock_path = _cache_paths(raw_dir, kind)
     os.makedirs(cdir, exist_ok=True)
     want = _stamp_for(src, dpi, quality)
 
@@ -307,14 +317,15 @@ def cache_mode(raw_dir, dpi, quality):
 def main():
     a = sys.argv[1:]
 
-    if a and a[0] == "--cache":
+    if a and a[0] in ("--cache", "--cache-answered"):
+        kind = "answered" if a[0] == "--cache-answered" else "original"
         a = a[1:]
         if not a:
-            print("ERROR: usage: --cache <raw_dir> [dpi] [quality]", flush=True)
+            print("ERROR: usage: --cache|--cache-answered <raw_dir> [dpi] [quality]", flush=True)
             return 1
         dpi = int(a[1]) if len(a) >= 2 else 150
         quality = int(a[2]) if len(a) >= 3 else 80
-        return cache_mode(a[0], dpi, quality)
+        return cache_mode(a[0], dpi, quality, kind)
 
     if a and a[0] == "--from-raw":
         a = a[1:]

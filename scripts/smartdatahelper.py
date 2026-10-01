@@ -47,6 +47,39 @@ def normalize_filename(filename):
     return name + ext
 
 
+def normalize_book_audio(audio_folder):
+    """The copied MP3s to -16 LUFS (audio_level) before anything is aligned to
+    them, so a book starts at the right loudness instead of being fixed at
+    package time. A clip already there, or one that can't be measured, is left
+    as it was — Create never fails over audio."""
+    try:
+        import audio_level
+        from concurrent.futures import ThreadPoolExecutor
+    except Exception as e:  # noqa: BLE001
+        print(f"Ses seviyesi ayarlanamadı: {e}", flush=True)
+        return
+    mp3s = sorted(os.path.join(audio_folder, f) for f in os.listdir(audio_folder)
+                  if f.lower().endswith(".mp3") and not f.startswith("."))
+    if not mp3s:
+        return
+    if not audio_level.audio_cbr._ffmpeg():
+        print("Ses seviyesi ayarlanmadı: ffmpeg yok (Help ▸ Dependencies)", flush=True)
+        return
+    print(f"Ses seviyesi ayarlanıyor ({len(mp3s)} dosya, hedef -16 LUFS)…", flush=True)
+    changed = failed = 0
+    workers = max(2, min(8, os.cpu_count() or 4))
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for r in ex.map(audio_level.normalize_file, mp3s):
+            if "hata" in r:
+                failed += 1
+                print(f"  ⚠ {r['dosya']}: {r['hata']}", flush=True)
+            elif r["degisti"]:
+                changed += 1
+                print(f"  {r['dosya']}: {r['i']} → {r['yeni_i']} LUFS", flush=True)
+    print(f"Ses seviyesi: {changed} dosya ayarlandı, {len(mp3s) - changed - failed} dosya zaten "
+          f"uygundu" + (f", {failed} dosya ayarlanamadı." if failed else "."), flush=True)
+
+
 def save_pdf_as_images(pdf_path, output_dir, dpi=150):
     """PDF sayfalarını PNG formatında kaydeder."""
     print(f"PDF açılıyor: {pdf_path}", flush=True)
@@ -300,6 +333,7 @@ def process_pdf_with_config(config_file, dpi=150):
                     sys.stdout.flush()
 
         print(f"Toplam {audio_files_count} ses dosyası kopyalandı.", flush=True)
+        normalize_book_audio(audio_folder)
     else:
         print(f"Ses dosyaları bulunamadı: {audio_path}", flush=True)
 

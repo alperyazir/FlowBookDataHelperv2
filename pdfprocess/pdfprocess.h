@@ -44,6 +44,10 @@ public:
     // references, raw/ PDFs, whether an answered PDF exists, page and logo
     // warnings. Blocks; nothing is written.
     Q_INVOKABLE QString checkBookForPackage(const QString &book);
+    // The same check on a worker thread, so the dialog never freezes while it
+    // runs (it measures every MP3 and probes every video): the answer arrives
+    // on bookChecked.
+    Q_INVOKABLE void checkBookForPackageAsync(const QString &book);
     // The book_export folder a title turns into plus the title warnings, as
     // JSON ({klasor, baslik_uyari} or {hata}). The same function the export
     // uses, so the preview can't disagree with the folder that gets written.
@@ -83,6 +87,14 @@ public:
     // books/<book> itself. On a worker thread; the end arrives on
     // imagesOptimized. One run at a time; false if one is already running.
     Q_INVOKABLE bool optimizeImages(const QString &book);
+    // Optimize audio (Package ▸ Book Details): every MP3 in books/<book> off
+    // the -16 LUFS target brought to it with a plain gain, in place
+    // (scripts/audio_level.py). Progress on audioOptimizeProgress, the end on
+    // audioOptimizeFinished. One run at a time; false if one is running.
+    Q_INVOKABLE bool optimizeAudio(const QString &book);
+    // Stops a running optimizeAudio(): the clip being encoded is dropped, the
+    // ones already done stay. Safe to call when nothing runs.
+    Q_INVOKABLE void cancelAudioOptimize();
     Q_INVOKABLE void copyAdditionalFiles(const QStringList &filePaths);
     Q_INVOKABLE void cropSectionFromPdf(const QString &pdfPath, int pageIndex,
                                          double x, double y, double w, double h,
@@ -175,6 +187,12 @@ public:
     // Start a background (detached) compression into the book's cache, unless
     // it's already fresh or running.
     Q_INVOKABLE void ensureOriginalCompressed(const QString &book);
+    // The same for the answered PDF (.pkgcache/answered.pdf); status as above,
+    // "none" when raw/ has no answered PDF.
+    Q_INVOKABLE QString answeredPdfStatus(const QString &book);
+    Q_INVOKABLE void ensureAnsweredCompressed(const QString &book);
+    // Book Details ▸ Optimize PDFs: both of the above.
+    Q_INVOKABLE void ensurePdfsCompressed(const QString &book);
     // Project ▸ Optimize button. force=true rebuilds even a fresh cache
     // (invalidates the stamp first), e.g. for the "Re-optimize" action.
     Q_INVOKABLE void optimizeOriginalPdf(const QString &book, bool force);
@@ -256,6 +274,14 @@ signals:
     // optimizeImages() done. json: {kucultulen: [{dosya, eski_mb, mb, eski,
     // yeni}], basarisiz: [{dosya, hata}]} or {hata}. Paths are book-relative.
     void imagesOptimized(const QString &book, bool ok, const QString &json);
+    // checkBookForPackageAsync() answered; json as checkBookForPackage().
+    void bookChecked(const QString &book, const QString &json);
+    // optimizeAudio() moving along. json: {i (0-based), n, dosya}.
+    void audioOptimizeProgress(const QString &book, const QString &json);
+    // optimizeAudio() done. json: {normalize_edilen: [{dosya, i, tp, gain,
+    // yeni_i, yeni_tp}], basarisiz: [{dosya, hata}], hizali_atlanan: [dosya],
+    // iptal?} or {hata}.
+    void audioOptimizeFinished(const QString &book, bool ok, const QString &json);
     void dependenciesChecked(bool ok, const QString &json);
     void dependenciesInstalled(bool ok);
     // A Python helper script failed — carries a short, user-readable reason
@@ -283,6 +309,8 @@ private:
     bool _passageCanceled = false;
     // The running optimizeVideos() process, nullptr when idle.
     QProcess *_videoProcess = nullptr;
+    // The running optimizeAudio() process, nullptr when idle.
+    QProcess *_audioProcess = nullptr;
 
     bool package(const QStringList &platforms, const QVariantList &books);
     // Normalize every book into book_export/; fills the exported folder names
@@ -302,6 +330,11 @@ private:
     QString findOriginalPdf(const QString &rawDir) const;
     // books/ root (platform-correct app-relative path).
     QString booksDir() const;
+    // "ready" | "inprogress" | "stale" | "none" for kind "original"/"answered".
+    QString pdfCacheStatus(const QString &book, const QString &kind) const;
+    QString findAnsweredPdf(const QString &rawDir) const;
+    bool applyOptimizedPdfKind(const QString &book, const QString &exportDir,
+                               const QString &kind);
 
     QAtomicInt _isPackaging = 0;   // guards against overlapping package runs
     QAtomicInt _isOptimizingImages = 0;   // one optimizeImages() at a time
