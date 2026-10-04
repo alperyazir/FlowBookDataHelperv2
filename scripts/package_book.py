@@ -23,6 +23,7 @@ copied over. This file adds only what belongs to the editor:
 
   normalize <book_dir> <export_root> --baslik T (--yayinevi P | --yayinevi-yok)
             [--answered PDF | --answered-original] [--geri-yaz]
+            [--display-order N]
       normalize_book() into <export_root>/<Folder>/, then:
         * --yayinevi-yok: publisher_name cleared (the module only ever sets
           one; the logo fields are left alone)
@@ -34,6 +35,10 @@ copied over. This file adds only what belongs to the editor:
         * stops before copying anything if a video won't play on Windows
         * --geri-yaz: book_title/publisher_name written back to the project's
           config.json, those two fields and nothing else
+        * --display-order N: top-level "display_order": N (a JSON integer) in
+          the export's config.json -- the reader's shelf order for books
+          bundled in one package, lowest first and opened first. The project's
+          own config.json is left alone.
 
   videos <book_dir> [--stdin-stop]
       Converts the book's videos the Windows reader can't play, in the book's
@@ -392,12 +397,19 @@ def cmd_normalize(a):
     rapor["raw"] = clean_raw(raw)
     rapor["editor_dosyalari"] = strip_editor_files(dest)
     conf = json.loads((dest / "config.json").read_text(encoding="utf-8"))
+    changed = False
     if a.yayinevi_yok and conf.get("publisher_name"):
         # normalize_book writes a publisher only when given one, so "None"
         # would otherwise keep whatever the project had.
         conf["publisher_name"] = ""
+        changed = True
+    if a.display_order is not None:
+        conf["display_order"] = a.display_order
+        changed = True
+    if changed:
         (dest / "config.json").write_text(json.dumps(conf, ensure_ascii=False, indent=4),
                                           encoding="utf-8")
+    rapor["display_order"] = conf.get("display_order")
     rapor["publisher_name"] = publisher
     rapor["sayfa_uyari"] = page_warning(pdf_pages(orig), config_last_page(conf))
     rapor["logo_uyari"] = logo_warning(conf)
@@ -637,6 +649,7 @@ def main(argv=None):
     g.add_argument("--answered")
     g.add_argument("--answered-original", action="store_true")
     n.add_argument("--geri-yaz", action="store_true")
+    n.add_argument("--display-order", type=int)
     vc = sub.add_parser("video-check")
     vc.add_argument("book_dir")
     v = sub.add_parser("videos")
