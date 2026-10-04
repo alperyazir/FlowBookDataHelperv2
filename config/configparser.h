@@ -3293,6 +3293,10 @@ public:
     QVector<Book*> _books;
     bool _fullscreen;
     QString _language;
+    // Top-level keys the editor doesn't model (e.g. "display_order", which
+    // the reader uses to order books bundled in one package): kept as read so
+    // a save writes them back instead of dropping them.
+    QJsonObject _otherKeys;
 
     int bookCount() const { return _bookCount; }
     void setBookCount(int bookCount) {
@@ -3377,7 +3381,7 @@ public:
     }
 
     QJsonObject toJson() const {
-        QJsonObject root;
+        QJsonObject root = _otherKeys;
         root["publisher_name"] = _publisherName;
         root["publisher_logo_path"] = _publisherLogoPath;
         root["publisher_full_logo_path"] = _publisherFullLogoPath;

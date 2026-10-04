@@ -62,6 +62,7 @@ Dialog {
     onOpened: {
         step = 1;
         selectedBooks = currentProject ? [currentProject] : [];
+        orderTouched = false;
         bookInfo = ({});
         pendingChecks = [];
         checking = false;
@@ -275,6 +276,46 @@ Dialog {
         else
             arr.splice(p, 1);
         selectedBooks = arr;
+        orderTouched = false;
+    }
+
+    // A package of several books: selectedBooks' order is the reader's shelf
+    // order (config.json "display_order" 1, 2, …; the first one opens first).
+    // An export makes one zip per book, so it has no shelf to order.
+    readonly property bool shelfOrdered: !exportOnly && selectedBooks.length > 1
+    // Set once the user moves a book; until then the order is the default.
+    property bool orderTouched: false
+
+    // Student's Book, then Workbook, then anything else, Activity Book last —
+    // it must never be the one that opens first. Name order within a rank.
+    function shelfRank(name) {
+        var n = ("" + name).toLowerCase().replace(/[_\-]+/g, " ");
+        if (/activit/.test(n)) return 3;
+        if (/student|pupil|\bsb\b/.test(n)) return 0;
+        if (/work ?book|\bwb\b/.test(n)) return 1;
+        return 2;
+    }
+
+    function defaultShelfOrder() {
+        if (orderTouched || selectedBooks.length < 2)
+            return;
+        var arr = selectedBooks.slice();
+        arr.sort(function(a, b) {
+            return (shelfRank(a) - shelfRank(b))
+                || ("" + a).localeCompare("" + b, undefined, { numeric: true, sensitivity: "base" });
+        });
+        selectedBooks = arr;
+    }
+
+    function moveBook(name, delta) {
+        var arr = selectedBooks.slice();
+        var p = arr.indexOf(name), q = p + delta;
+        if (p === -1 || q < 0 || q >= arr.length)
+            return;
+        arr.splice(p, 1);
+        arr.splice(q, 0, name);
+        selectedBooks = arr;
+        orderTouched = true;
     }
 
     function info(book) {
@@ -715,8 +756,11 @@ Dialog {
             var d = info(name);
             var title = d.title.trim();
             var publisher = publisherValue(name);
-            books.push({ book: name, title: title, publisher: publisher,
-                         answered: "" + (d.answered || "") });
+            var b = { book: name, title: title, publisher: publisher,
+                      answered: "" + (d.answered || "") };
+            if (shelfOrdered)
+                b.order = i + 1;
+            books.push(b);
             // Both write these back to the project's config.json; keep the
             // open project's in-memory copy in step so the next save doesn't
             // put the old values back.
@@ -919,6 +963,7 @@ Dialog {
                 }
                 onClicked: {
                     if (packageDialog.step === 1) {
+                        packageDialog.defaultShelfOrder();
                         packageDialog.step = 2;
                         packageDialog.checking = true;
                         checkTimer.restart();
@@ -977,8 +1022,8 @@ Dialog {
             Layout.fillWidth: true
             text: packageDialog.exportOnly
                   ? "Pick the book(s) to export into book_export/."
-                  : "Pick one book for a single package, or two for a paired set "
-                    + "(both go under books/ together)."
+                  : "Pick one book for a single package, or several for a set "
+                    + "(they go under books/ together; you set their shelf order next)."
             color: "#8aa0a8"
             font.pixelSize: 12
             wrapMode: Text.WordWrap
@@ -1214,6 +1259,7 @@ Dialog {
                     delegate: Rectangle {
                         id: card
                         required property var modelData
+                        required property int index
                         readonly property string book: "" + modelData
                         readonly property var d: {
                             packageDialog.bookInfo;
@@ -1279,13 +1325,66 @@ Dialog {
                                 }
                             }
 
-                            Text {
+                            RowLayout {
                                 Layout.fillWidth: true
-                                text: card.book
-                                color: "white"
-                                font.pixelSize: 14
-                                font.bold: true
-                                elide: Text.ElideRight
+                                spacing: 8
+
+                                // Shelf position in a several-book package.
+                                Rectangle {
+                                    visible: packageDialog.shelfOrdered
+                                    implicitWidth: 22
+                                    implicitHeight: 22
+                                    radius: 11
+                                    color: "#009ca6"
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: card.index + 1
+                                        color: "white"
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                    }
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: card.book
+                                    color: "white"
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    visible: packageDialog.shelfOrdered && card.index === 0
+                                    text: "opens first"
+                                    color: "#4fd2dc"
+                                    font.pixelSize: 11
+                                }
+                                Repeater {
+                                    model: packageDialog.shelfOrdered ? [-1, 1] : []
+                                    delegate: Button {
+                                        required property var modelData
+                                        readonly property int delta: modelData
+                                        text: delta < 0 ? "▲" : "▼"
+                                        enabled: delta < 0 ? card.index > 0
+                                                           : card.index < packageDialog.selectedBooks.length - 1
+                                        implicitWidth: 28
+                                        implicitHeight: 24
+                                        ToolTip.visible: hovered
+                                        ToolTip.text: delta < 0 ? "Earlier on the shelf" : "Later on the shelf"
+                                        background: Rectangle {
+                                            radius: 3
+                                            color: parent.hovered && parent.enabled ? "#2a3a42" : "#232f34"
+                                            border.color: parent.enabled ? "#009ca6" : "#33505b"
+                                        }
+                                        contentItem: Text {
+                                            text: parent.text
+                                            color: parent.enabled ? "white" : "#5e7178"
+                                            font.pixelSize: 11
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                        onClicked: packageDialog.moveBook(card.book, delta)
+                                    }
+                                }
                             }
 
                             Text { text: "Book title *"; color: "#8aa0a8"; font.pixelSize: 11 }

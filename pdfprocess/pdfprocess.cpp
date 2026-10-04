@@ -1330,6 +1330,11 @@ bool PdfProcess::normalizeBooks(const QVariantList &books, QStringList &folders,
             args << "--answered-original";
         else if (!answered.isEmpty())
             args << ("--answered=" + answered);
+        // Shelf position in a package of several books (the dialog sends it
+        // only then); the reader opens the lowest first.
+        const int order = b.value("order", 0).toInt();
+        if (order > 0)
+            args << ("--display-order=" + QString::number(order));
 
         int code = 2;
         const QJsonObject r = QJsonDocument::fromJson(
@@ -1339,6 +1344,8 @@ bool PdfProcess::normalizeBooks(const QVariantList &books, QStringList &folders,
             return false;
         }
         logNormalizeReport(r);
+        if (order > 0)
+            setLogMessages(QString("       shelf position %1 (display_order)").arg(order));
 
         const QJsonObject check = r.value("dogrulama").toObject();
         const int broken = check.value("kirik_referans").toInt();

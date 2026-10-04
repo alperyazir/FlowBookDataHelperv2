@@ -58,6 +58,10 @@ bool BookSet::initialize(const QString &config_path)
         _bookTitle = root["book_title"].toString();
         _bookCover = root["book_cover"].toString();
         _language = root["language"].toString();
+        _otherKeys = root;
+        for (const char *k : {"publisher_name", "publisher_logo_path", "publisher_full_logo_path",
+                              "fullscreen", "book_title", "book_cover", "language", "books"})
+            _otherKeys.remove(QLatin1String(k));
 
         auto bks = root["books"].toArray();
         _bookCount = bks.size();
