@@ -87,11 +87,20 @@ GroupBox {
     function _baseName(p) { return p ? String(p).substring(String(p).lastIndexOf("/") + 1) : ""; }
     function _isThisAudio(p) { return _baseName(p) === _baseName(root.audioModelData && root.audioModelData.audioPath); }
 
-    // <book>/audio/audio.json sits next to the audio file.
+    // audio.json sits next to the audio file — the reader looks in the audio's
+    // own folder, so audio in a sub-folder of audio/ has its own audio.json.
     function _audioJsonPath() {
         var p = (root.audioModelData && root.audioModelData.audioPath) ? String(root.audioModelData.audioPath) : "";
         var i = p.lastIndexOf("/");
         return i >= 0 ? p.substring(0, i + 1) + "audio.json" : "";
+    }
+
+    // <book>/audio/audio.json, where builds before the fix above wrote every
+    // entry. "" when the audio sits directly in audio/ (same file either way).
+    function _legacyAudioJsonPath() {
+        var p = (root.audioModelData && root.audioModelData.audioPath) ? String(root.audioModelData.audioPath) : "";
+        var m = p.match(/^(\.\/books\/[^\/]+\/audio\/)[^\/]+\/.+/i);
+        return m ? m[1] + "audio.json" : "";
     }
 
     // Load this audio's word timings into the page overlay (for in-editor preview).
@@ -109,6 +118,15 @@ GroupBox {
         // root. Read in C++ (QFile) so it works the same on Windows.
         var path = appPath + (rel.indexOf("./") === 0 ? rel.substring(2) : rel);
         var words = pdfProcess.loadKaraokeWords(path, id);
+        // Aligned by an older build into <book>/audio/audio.json, where the
+        // reader never looks for sub-folder audio: move the entry next to the
+        // audio. Only from this audio's own page, so page_index can tell apart
+        // two sub-folders that hold the same file name.
+        var legacy = _legacyAudioJsonPath();
+        if (words.length === 0 && legacy !== "" && root._audioIsOnShownPage()
+                && pdfProcess.moveKaraoke(appPath + legacy.substring(2), path, id,
+                                          content.pageDetails._pageIndex()))
+            words = pdfProcess.loadKaraokeWords(path, id);
         root.karaokeMeta = pdfProcess.loadKaraokeMeta(path, id) || {};
         // Point each cloze blank at the fill box it opens. Done on load (not
         // only right after aligning) so the link heals when the author moves,

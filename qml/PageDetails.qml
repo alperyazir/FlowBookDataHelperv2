@@ -2793,11 +2793,15 @@ Item {
             print("Passage submit: no book path, audio path or page index");
             return;
         }
+        // audio.json sits next to the audio file: the reader (FlowBook
+        // AudioController) looks for it in the audio's own folder, so audio in
+        // a sub-folder of audio/ needs its own audio.json there.
+        var audioAbs = appPath + aRel.substring(2);
         pdfProcess.cropPassageAudio(
             root._rawDir(), root._pageIndex(),
             JSON.stringify(root.passageRects),
             picture.sourceSize.width, picture.sourceSize.height,
-            appPath + aRel.substring(2), bookAbs + "/audio/audio.json", "en"
+            audioAbs, audioAbs.substring(0, audioAbs.lastIndexOf("/") + 1) + "audio.json", "en"
         );
         root.passageRects = [];
         endCropMode();

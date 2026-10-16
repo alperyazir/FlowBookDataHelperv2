@@ -394,6 +394,7 @@ def cmd_normalize(a):
             return emit({**rapor, "hata": "raw/ has no answered PDF. Choose one, or "
                                           "confirm the book has no answer key."}, 2)
 
+    rapor["audio_json_alt"] = remap_nested_audio_json(dest)
     rapor["raw"] = clean_raw(raw)
     rapor["editor_dosyalari"] = strip_editor_files(dest)
     conf = json.loads((dest / "config.json").read_text(encoding="utf-8"))
@@ -422,6 +423,51 @@ def cmd_normalize(a):
     if rapor["dogrulama"]["kirik_referans"]:
         rapor["kirik_detay"] = broken_refs(dest, rapor["klasor"])
     return emit(rapor, 1 if rapor["dogrulama"]["kirik_referans"] else 0)
+
+
+def remap_nested_audio_json(book):
+    """fn.remap_audio_json for the audio.json files in sub-folders of audio/.
+
+    The reader loads audio.json from the audio file's own folder, so audio in
+    audio/<Unit 1>/ keeps its karaoke in audio/<Unit 1>/audio.json. The module
+    renames those folders and files but remaps only audio/audio.json's keys;
+    without this the sub-folder keys keep the old file names and karaoke
+    silently stops. Same rules as the module: a key that would collide keeps
+    its name and is reported. Returns {"<rel>": report} for the files touched.
+    """
+    out = {}
+    audio = Path(book) / "audio"
+    if not audio.is_dir():
+        return out
+    for aj in sorted(audio.rglob("audio.json")):
+        if aj.parent == audio or not aj.is_file():
+            continue
+        rel = aj.relative_to(book).as_posix()
+        try:
+            data = json.loads(aj.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            out[rel] = {"hata": f"audio.json unreadable, left alone: {exc}"}
+            continue
+        if not isinstance(data, dict):
+            continue
+        files = {f.name for f in aj.parent.iterdir() if f.is_file()}
+        new, renamed, clash, broken = {}, [], [], []
+        for key, entry in data.items():
+            name = fn.norm_component(key, is_dir=False)
+            if name != key and (name in new or name in data):
+                name = key
+                clash.append(key)
+            elif name != key:
+                renamed.append(f"{key} -> {name}")
+            new[name] = entry
+            if name not in files:
+                broken.append(name)
+        if renamed:
+            aj.write_text(json.dumps(new, indent=2, ensure_ascii=False), encoding="utf-8")
+        if renamed or clash or broken:
+            out[rel] = {"yeniden_adlandirilan": len(renamed), "ornek": renamed[:10],
+                        "cakisma": clash, "kopuk_sayi": len(broken), "kopuk": broken[:10]}
+    return out
 
 
 # The editor's own files, which never ship -- on top of the module's junk rules

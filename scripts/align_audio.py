@@ -6,8 +6,9 @@ the audio file that narrates it, this:
   2. forced-aligns that KNOWN text to the audio with whisperx (align-only,
      no ASR -> zero transcription errors),
   3. maps timestamps back onto the words, and
-  4. merges the result into <book>/audio/audio.json keyed by the audio
-     filename (e.g. "4.mp3").
+  4. merges the result into the audio.json next to the audio file (the
+     reader looks in the audio's own folder), keyed by the audio filename
+     (e.g. "4.mp3").
 
 Word bboxes are stored in the same PNG pixel space as everything else in
 config.json, as {x,y,w,h}. config.json itself only needs "karaoke": true on
