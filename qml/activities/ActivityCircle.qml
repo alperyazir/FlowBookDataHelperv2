@@ -546,6 +546,7 @@ Rectangle {
                                             modelData.isCorrect = false;
 
                                         answer.visible = true;
+                                        activityDialog.finishAnswerEdit();
                                         // config.bookSets[0].saveToJson();
                                     }
                                     onEditingFinished: {

@@ -139,7 +139,35 @@ Dialog {
         }
     }
 
-    // Escape: exit select mode -> clear the answer selection -> close.
+    // A text field in this dialog (an answer box being typed into) holding
+    // keyboard focus swallows the single-letter shortcuts: 'f' would be typed
+    // into it instead of adding a box. Hand focus back to the dialog — the
+    // field's onEditingFinished then commits and hides it. Returns whether a
+    // field was being edited.
+    function endTextEditing() {
+        var fi = root.contentItem ? root.contentItem.Window.activeFocusItem : null;
+        if (!fi || fi.cursorPosition === undefined)
+            return false;
+        for (var p = fi; p; p = p.parent) {
+            if (p === root.contentItem) {
+                root.contentItem.forceActiveFocus();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Enter in an answer box: what Escape does while typing — commit, hand the
+    // keyboard back to the dialog's shortcuts ('f' adds a box again) and drop
+    // the selection. Called from each activity's answer field onAccepted.
+    function finishAnswerEdit() {
+        root.endTextEditing();
+        if (root.currentActivity && root.currentActivity.clearAnsSelection)
+            root.currentActivity.clearAnsSelection();
+    }
+
+    // Escape: exit select mode -> stop typing / clear the answer selection
+    // (one press does both) -> close.
     Shortcut {
         sequence: "Escape"
         enabled: root.visible
@@ -148,11 +176,14 @@ Dialog {
                 root.selectMode = false;
                 return;
             }
+            var wasEditing = root.endTextEditing();
             if (root.currentActivity && root.currentActivity.selectedAnswers
                 && root.currentActivity.selectedAnswers.length > 0) {
                 root.currentActivity.clearAnsSelection();
                 return;
             }
+            if (wasEditing)
+                return;
             root.close();
             sideBar.hideAllComponent();
         }
