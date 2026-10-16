@@ -481,7 +481,8 @@ Rectangle {
                                 FlowText {
                                     id: answer
                                     text: textEdit.text
-                                    color: myColors.answerColor
+                                    color: (activityModelData && activityModelData.markColor !== "")
+                                           ? activityModelData.markColor : myColors.answerColor
                                     rotation: modelData.rotation
                                     height: parent.height
                                     width: parent.width
