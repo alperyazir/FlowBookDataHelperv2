@@ -240,17 +240,27 @@ def find_audio(book):
 
 
 def _aligned_names(book):
-    """File names audio/audio.json has karaoke timings for."""
+    """File names any audio.json under the audio folders has karaoke timings
+    for. Each audio.json sits next to its audio, so sub-folders have their
+    own. Matched by name only, which can over-protect a same-named clip in
+    another folder: leaving a clip's level alone is safe, shifting an aligned
+    one's timing is not."""
     from pathlib import Path
-    for d in AUDIO_DIRS:
-        f = Path(book) / d / "audio.json"
-        if f.is_file():
+    names = set()
+    book = Path(book)
+    try:
+        roots = [d for d in book.iterdir() if d.is_dir() and d.name.lower() in AUDIO_DIRS]
+    except OSError:
+        return names
+    for root in roots:
+        for f in root.rglob("audio.json"):
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
             except (OSError, ValueError, UnicodeDecodeError):
-                return set()
-            return set(data) if isinstance(data, dict) else set()
-    return set()
+                continue
+            if isinstance(data, dict):
+                names.update(data)
+    return names
 
 
 def _cache_file(book):

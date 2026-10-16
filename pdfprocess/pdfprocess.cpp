@@ -1207,6 +1207,22 @@ void PdfProcess::logNormalizeReport(const QJsonObject &r)
                 .arg(names(k.value("kopuk")).value(0)));
     if (k.contains("hata"))
         log("⚠  karaoke: " + k.value("hata").toString());
+    // The audio.json files in sub-folders of audio/ (package_book.py).
+    const QJsonObject sub = r.value("audio_json_alt").toObject();
+    for (auto it = sub.constBegin(); it != sub.constEnd(); ++it) {
+        const QJsonObject s = it.value().toObject();
+        if (s.value("yeniden_adlandirilan").toInt() > 0)
+            log(QString("karaoke (%1): %2 audio id(s) renamed with their files")
+                    .arg(it.key()).arg(s.value("yeniden_adlandirilan").toInt()));
+        for (const QString &n : names(s.value("cakisma")))
+            log(QString("⚠  karaoke (%1): id clash, kept as it was: %2").arg(it.key(), n));
+        if (s.value("kopuk_sayi").toInt() > 0)
+            log(QString("⚠  karaoke (%1): %2 id(s) have no audio file, e.g. %3")
+                    .arg(it.key()).arg(s.value("kopuk_sayi").toInt())
+                    .arg(names(s.value("kopuk")).value(0)));
+        if (s.contains("hata"))
+            log(QString("⚠  karaoke (%1): %2").arg(it.key(), s.value("hata").toString()));
+    }
 
     if (!r.value("sayfa_uyari").toString().isEmpty())
         log("⚠  " + r.value("sayfa_uyari").toString());
@@ -2072,6 +2088,55 @@ bool PdfProcess::deleteKaraoke(const QString &audioJsonPath, const QString &audi
     }
     out.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
     return out.commit();
+}
+
+static bool readJsonObject(const QString &path, QJsonObject *obj)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return false;
+    QJsonParseError err;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject())
+        return false;
+    *obj = doc.object();
+    return true;
+}
+
+bool PdfProcess::moveKaraoke(const QString &fromJsonPath, const QString &toJsonPath,
+                             const QString &audioId, int expectedPage)
+{
+    QJsonObject from;
+    if (!readJsonObject(fromJsonPath, &from) || !from.contains(audioId))
+        return false;
+    const QJsonObject entry = from.value(audioId).toObject();
+    if (expectedPage >= 0 && entry.contains("page_index")
+            && entry.value("page_index").toInt(-1) != expectedPage) {
+        qDebug() << "moveKaraoke: page mismatch for" << audioId
+                 << entry.value("page_index").toInt() << "!=" << expectedPage;
+        return false;
+    }
+    QJsonObject to;
+    if (QFile::exists(toJsonPath) && !readJsonObject(toJsonPath, &to)) {
+        qDebug() << "moveKaraoke: cannot read" << toJsonPath;
+        return false;
+    }
+    if (to.contains(audioId))
+        return false;
+    to.insert(audioId, entry);
+
+    // Write the target first: if anything fails after this, the entry exists
+    // twice rather than nowhere.
+    QSaveFile out(toJsonPath);
+    if (!out.open(QIODevice::WriteOnly)) {
+        qDebug() << "moveKaraoke: cannot write" << toJsonPath;
+        return false;
+    }
+    out.write(QJsonDocument(to).toJson(QJsonDocument::Indented));
+    if (!out.commit())
+        return false;
+    qDebug() << "moveKaraoke:" << audioId << fromJsonPath << "->" << toJsonPath;
+    return deleteKaraoke(fromJsonPath, audioId);
 }
 
 QVariantList PdfProcess::loadKaraokeWords(const QString &audioJsonPath,

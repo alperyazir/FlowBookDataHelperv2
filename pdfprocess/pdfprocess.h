@@ -125,8 +125,8 @@ public:
                                               double x, double y, double w, double h,
                                               double pngWidth, double pngHeight);
     // Forced-align the text under the rect to the audio and write word-level
-    // karaoke timing into <book>/audio/audio.json (keyed by the audio file
-    // name). rawDir is <book>/raw; pageIndex is 0-based.
+    // karaoke timing into the audio.json next to the audio file (keyed by the
+    // audio file name). rawDir is <book>/raw; pageIndex is 0-based.
     // Align a passage made of one or more crops. `rects` is a JSON array of
     // {x,y,w,h} in page-image pixels, IN READING ORDER — a page can lay a
     // passage out in columns or scatter it, and no geometry reliably recovers
@@ -165,6 +165,17 @@ public:
     // if the file ends up without that entry (including when it was missing).
     Q_INVOKABLE bool deleteKaraoke(const QString &audioJsonPath,
                                    const QString &audioId);
+    // Move one audio id's karaoke entry from one audio.json to another.
+    // Builds before this wrote every entry to <book>/audio/audio.json, but the
+    // reader looks next to the audio file, so audio in a sub-folder lost its
+    // karaoke. Refuses (false) when the source has no such entry, when its
+    // page_index isn't expectedPage (-1 skips the check: two sub-folders can
+    // hold the same file name, and the root file kept only the last one), or
+    // when the target already has the id.
+    Q_INVOKABLE bool moveKaraoke(const QString &fromJsonPath,
+                                 const QString &toJsonPath,
+                                 const QString &audioId,
+                                 int expectedPage = -1);
     // Overwrite one audio id's "words" array in audio/audio.json with the given
     // list (each a {text, bbox, start, end, ...} map, order = playback order).
     // Used by the audio panel to persist rename / reorder / delete edits. Other
