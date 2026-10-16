@@ -13,6 +13,7 @@
 #include "games/gamesparser.h"
 #include "activity/activitytracker.h"
 #include "logger.h"
+#include "markiconprovider.h"
 
 
 
@@ -70,6 +71,7 @@ int main(int argc, char *argv[])
     ActivityTracker *activityTracker = new ActivityTracker(&app);
     app.installEventFilter(activityTracker);
 
+    engine.addImageProvider(QStringLiteral("markicon"), new MarkIconProvider);
     QQmlContext *rootContext = engine.rootContext();
     rootContext->setContextProperty("config", config);
     rootContext->setContextProperty("appPath", appPath);

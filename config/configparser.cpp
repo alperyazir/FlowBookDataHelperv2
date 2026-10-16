@@ -241,6 +241,8 @@ QVector<Module*> BookSet::handleBooksModules(const QJsonArray &doc)
                 act->_header_text = scObj["headerText"].toString();
                 act->_circleCount = scObj["circleCount"].toInt();
                 act->_markCount = scObj["markCount"].toInt();
+                act->setMarkType(scObj["markType"].toString());
+                act->setMarkColor(scObj["markColor"].toString());
                 act->_isTrueFalseEnabled = scObj["isTrueFalseEnabled"].toBool();
                 act->_isTextOnLeft = scObj["isTextOnLeft"].toBool();
                 act->_textFontSize = scObj["textFontSize"].toInt();

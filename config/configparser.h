@@ -4,6 +4,7 @@
 #include <QQmlApplicationEngine>
 
 #include <QRect>
+#include <QColor>
 #include <QString>
 #include <QVector>
 #include <QSet>
@@ -726,6 +727,12 @@ struct Activity : public QObject {
     Q_PROPERTY(QString headerText READ headerText WRITE setHeaderText NOTIFY headerTextChanged)
     Q_PROPERTY(int circleCount READ circleCount WRITE setCircleCount NOTIFY circleCountChanged)
     Q_PROPERTY(int markCount READ markCount WRITE setMarkCount NOTIFY markCountChanged)
+    // markwithx: what a mark looks like in the reader — "dot" (the default,
+    // also what an empty value means), "x" or "tick".
+    Q_PROPERTY(QString markType READ markType WRITE setMarkType NOTIFY markTypeChanged)
+    // markwithx: the mark's colour as "#rrggbb"; empty = FlowBook's answer
+    // colour (#d2232b), which is what the reader draws when the key is absent.
+    Q_PROPERTY(QString markColor READ markColor WRITE setMarkColor NOTIFY markColorChanged)
     Q_PROPERTY(bool isTrueFalseEnabled READ isTrueFalseEnabled WRITE setIsTrueFalseEnabled NOTIFY isTrueFalseEnabledChanged)
     Q_PROPERTY(bool isTextOnLeft READ isTextOnLeft WRITE setIsTextOnLeft NOTIFY isTextOnLeftChanged)
     Q_PROPERTY(int textFontSize READ textFontSize WRITE setTextFontSize NOTIFY textFontSizeChanged)
@@ -760,6 +767,8 @@ public:
     QString _header_text;
     int _circleCount;
     int _markCount;
+    QString _markType;
+    QString _markColor;
     bool _isTrueFalseEnabled;
     bool _isTextOnLeft;
     int _textFontSize;
@@ -1056,6 +1065,31 @@ public:
         }
     }
 
+    QString markColor() const { return _markColor; }
+    void setMarkColor(const QString &markColor) {
+        // Only a valid colour is kept, normalised to #rrggbb; anything else
+        // (including the default red) clears it back to "use the default".
+        QString c;
+        if (QColor::isValidColorName(markColor)) {
+            c = QColor::fromString(markColor).name();
+            if (c == QLatin1String("#d2232b"))
+                c.clear();
+        }
+        if (_markColor != c) {
+            _markColor = c;
+            emit markColorChanged();
+        }
+    }
+
+    QString markType() const { return _markType.isEmpty() ? QStringLiteral("dot") : _markType; }
+    void setMarkType(const QString &markType) {
+        const QString t = markType == QLatin1String("dot") ? QString() : markType;
+        if (_markType != t) {
+            _markType = t;
+            emit markTypeChanged();
+        }
+    }
+
     bool isTrueFalseEnabled() const { return _isTrueFalseEnabled; }
     void setIsTrueFalseEnabled(bool isTrueFalseEnabled) {
         if (_isTrueFalseEnabled != isTrueFalseEnabled) {
@@ -1101,6 +1135,15 @@ public:
         
         if (_markCount != 2) {
             activityObj["markCount"] = _markCount;
+        }
+
+        // Only x/tick are written: "dot" is the reader's default, so books
+        // that never chose a type keep the same config.
+        if (!_markType.isEmpty()) {
+            activityObj["markType"] = _markType;
+        }
+        if (!_markColor.isEmpty()) {
+            activityObj["markColor"] = _markColor;
         }
         
         if (_isTrueFalseEnabled) {
@@ -1231,6 +1274,8 @@ signals:
     void headerTextChanged();
     void circleCountChanged();
     void markCountChanged();
+    void markTypeChanged();
+    void markColorChanged();
     void isTrueFalseEnabledChanged();
     void isTextOnLeftChanged();
     void textFontSizeChanged();

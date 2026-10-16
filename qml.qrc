@@ -66,7 +66,9 @@
         <file>icons/incorrect.svg</file>
         <file>icons/tick.svg</file>
         <file>icons/puzzle.png</file>
-        <file>icons/selectCirclle.png</file>
+        <file>icons/mark_dot.svg</file>
+        <file>icons/mark_x.svg</file>
+        <file>icons/mark_tick.svg</file>
         <file>logo/logo.png</file>
         <file>qml/FlowSideBar.qml</file>
         <file>qml/NewProjectDialog.qml</file>
