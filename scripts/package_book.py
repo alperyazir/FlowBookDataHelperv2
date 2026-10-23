@@ -49,10 +49,12 @@ copied over. This file adds only what belongs to the editor:
       Python would leave ffmpeg running on Windows). Exit 0 all converted,
       1 some failed, 2 error, 3 stopped.
 
-  audio <book_dir> [--stdin-stop]
-      Brings the book's MP3s to -16 LUFS / -1.5 dBTP with a plain gain, in the
-      book's own folder (audio_level.optimize_book) — Optimize audio in Book
-      Details. PROGRESS: {i, n, dosya} lines; --stdin-stop as for videos.
+  audio <book_dir> [--netlik] [--stdin-stop]
+      Brings the book's MP3s and its videos' audio to -16 LUFS / -1.5 dBTP
+      with a plain gain, in the book's own folder (audio_level.optimize_book)
+      — Optimize audio in Book Details. --netlik: with the clearer voice
+      instead (EQ, gain to -16, limiter), every clip not done that way yet.
+      PROGRESS: {i, n, dosya} lines; --stdin-stop as for videos.
       Exit 0 all done, 1 some failed or skipped, 2 error, 3 stopped.
 
   images <book_dir>
@@ -593,7 +595,7 @@ def cmd_audio(a):
         print("PROGRESS: " + json.dumps({"i": i, "n": n, "dosya": dosya},
                                         ensure_ascii=False), flush=True)
 
-    r = audio_level.optimize_book(src, progress, stopped.is_set)
+    r = audio_level.optimize_book(src, progress, stopped.is_set, clarity=a.netlik)
     if "hata" in r:
         return emit(r, 2)
     if r.get("iptal"):
@@ -704,6 +706,7 @@ def main(argv=None):
     au = sub.add_parser("audio")
     au.add_argument("book_dir")
     au.add_argument("--stdin-stop", action="store_true")
+    au.add_argument("--netlik", action="store_true")
     im = sub.add_parser("images")
     im.add_argument("book_dir")
     i1 = sub.add_parser("image")

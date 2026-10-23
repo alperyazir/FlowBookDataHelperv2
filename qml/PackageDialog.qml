@@ -201,6 +201,22 @@ Dialog {
     property string audioBook: ""        // "" when idle
     property var audioProgress: ({})     // {i, n, dosya}
     property bool audioStopping: false
+    property bool audioClarity: false    // the running Optimize uses the clearer voice
+    // Clearer voice per book, as the author ticked it; a book not in here
+    // follows the check (on when its voices sound muffled).
+    property var clarityChoice: ({})
+
+    function clarityOn(book) {
+        if (clarityChoice[book] !== undefined)
+            return clarityChoice[book];
+        return !!(((info(book).check || {}).ses || {}).boguk);
+    }
+
+    function setClarity(book, on) {
+        var o = Object.assign({}, clarityChoice);
+        o[book] = on;
+        clarityChoice = o;
+    }
 
     function audioIn(book, durum) {
         var all = (((info(book).check || {}).ses || {}).sesler) || [];
@@ -218,8 +234,10 @@ Dialog {
         // won't replace an open file).
         if (book === currentProject && typeof sideBar !== "undefined")
             sideBar.audioVisible = false;
-        if (pdfProcess.optimizeAudio(book)) {
+        var clear = clarityOn(book);
+        if (pdfProcess.optimizeAudio(book, clear)) {
             audioBook = book;
+            audioClarity = clear;
             audioProgress = ({});
             audioStopping = false;
             setInfo(book, { audioError: "" });
@@ -258,7 +276,8 @@ Dialog {
                 msgs.push(skipped[k] + ": left as it is — re-encoding would move its karaoke timings");
             var done = (r.normalize_edilen || []).length;
             if (done)
-                toast.show(done + " audio file(s) brought to -16 LUFS (" + book + ")"
+                toast.show(done + " audio file(s) brought to -16 LUFS"
+                           + (r.netlik ? " with the clearer voice" : "") + " (" + book + ")"
                            + (r.iptal ? " — stopped" : ""));
             if (!packageDialog.bookInfo[book])
                 return;
@@ -535,7 +554,8 @@ Dialog {
 
     // Each row: {key, title, state ("ok" | "warn" | "error" | "running"),
     // summary, details: [{text, level}], action ("" for none), stoppable,
-    // progress (0-1, or -1 for none), error}. State "error" holds Next back.
+    // progress (0-1, or -1 for none), error, option ({text, checked}: a
+    // checkbox beside the action; audio only)}. State "error" holds Next back.
     function mediaChecks(book) {
         var d = info(book);
         var c = d.check || {};
@@ -573,12 +593,17 @@ Dialog {
         }
         rows.push(pdf);
 
-        // Audio — -16 LUFS; a warning.
+        // Audio — -16 LUFS, and the clearer voice for muffled recordings; a warning.
         var s = c.ses;
         if (s && s.toplam) {
             var au = { key: "audio", title: "Audio", details: [], action: "", stoppable: false,
-                       progress: -1, error: d.audioError || "" };
+                       progress: -1, error: d.audioError || "", option: null };
             var quiet = audioIn(book, "duzeltilecek"), badAu = audioIn(book, "okunamayan");
+            var clear = clarityOn(book);
+            if (s.boguk)
+                au.details.push({ level: "warn", text: "Voices sound muffled: the lows sit " + s.koyuluk
+                                  + " dB over the 2–5 kHz band (clear recordings, about 9). "
+                                  + "Clearer voice turns the boxy lows down and the consonants up." });
             for (var q = 0; q < quiet.length; q++)
                 au.details.push({ level: "warn", text: quiet[q].dosya + " — " + quiet[q].i + " LUFS, peak "
                                   + quiet[q].tp + " dBTP → " + (quiet[q].gain > 0 ? "+" : "") + quiet[q].gain + " dB" });
@@ -587,7 +612,8 @@ Dialog {
             if (audioBook === book) {
                 var ap = audioProgress;
                 au.state = "running";
-                au.summary = ap.n > 0 ? "Leveling " + (ap.i + 1) + " of " + ap.n + " · " + (ap.dosya || "")
+                au.summary = ap.n > 0 ? (audioClarity ? "Clearing " : "Leveling ") + (ap.i + 1) + " of "
+                                        + ap.n + " · " + (ap.dosya || "")
                                       : "Measuring…";
                 au.progress = ap.n > 0 ? ap.i / ap.n : 0;
                 au.stoppable = true;
@@ -597,10 +623,20 @@ Dialog {
             } else if (s.ffmpeg_yok) {
                 au.state = "warn";
                 au.summary = "Can't check " + s.toplam + " file(s): ffmpeg isn't installed (Help ▸ Dependencies)";
-            } else if (quiet.length) {
+            } else if (quiet.length || s.boguk || (clear && s.netlik_bekleyen)) {
                 au.state = "warn";
-                au.summary = quiet.length + " of " + s.toplam + " file(s) too quiet — off " + s.hedef + " LUFS";
-                au.action = "Optimize";
+                var parts = [];
+                if (quiet.length)
+                    parts.push(quiet.length + " of " + s.toplam + " file(s) too quiet — off " + s.hedef + " LUFS");
+                if (s.boguk)
+                    parts.push(parts.length ? "voices sound muffled" : "Voices sound muffled");
+                if (!parts.length)
+                    parts.push(s.netlik_bekleyen + " file(s) without the clearer voice");
+                au.summary = parts.join(", ");
+                if (quiet.length || (clear && s.netlik_bekleyen))
+                    au.action = "Optimize";
+                if (s.netlik_bekleyen)
+                    au.option = { text: "Clearer voice", checked: clear };
             } else if (badAu.length) {
                 au.state = "warn";
                 au.summary = badAu.length + " file(s) can't be read";
@@ -1532,6 +1568,7 @@ Dialog {
                                     packageDialog.audioProgress;
                                     packageDialog.videoProgress;
                                     packageDialog.audioBook;
+                                    packageDialog.clarityChoice;
                                     packageDialog.imageBook;
                                     packageDialog.videoBook;
                                     return packageDialog.mediaChecks(card.book);
@@ -1545,7 +1582,8 @@ Dialog {
                                         required property int index
                                         readonly property var r: checksBox.checks[index]
                                             || ({ key: "", title: "", state: "ok", summary: "", details: [],
-                                                  action: "", stoppable: false, progress: -1, error: "" })
+                                                  action: "", stoppable: false, progress: -1, error: "",
+                                                  option: null })
                                         readonly property bool expanded: !!packageDialog.openChecks[card.book + "/" + r.key]
                                         readonly property bool hasDetails: r.details.length > 0 || !!r.error
                                         readonly property color tone: r.state === "ok" ? "#4fbf8a"
@@ -1646,6 +1684,35 @@ Dialog {
                                                         horizontalAlignment: Text.AlignHCenter
                                                         rotation: checkRow.expanded ? 90 : 0
                                                         Behavior on rotation { NumberAnimation { duration: 120 } }
+                                                    }
+                                                    // Clearer voice (audio): ticked when the
+                                                    // book sounds muffled, the author's call.
+                                                    CheckBox {
+                                                        id: optionCheck
+                                                        visible: !!checkRow.r.option && !checkRow.r.stoppable
+                                                        enabled: !card.d.rechecking
+                                                        checked: !!checkRow.r.option && checkRow.r.option.checked
+                                                        text: checkRow.r.option ? checkRow.r.option.text : ""
+                                                        onToggled: packageDialog.setClarity(card.book, checked)
+                                                        Layout.preferredHeight: 28
+                                                        ToolTip.visible: hovered
+                                                        ToolTip.delay: 500
+                                                        ToolTip.text: "EQ for a muffled recording: the boxy lows down, the consonants "
+                                                                      + "up, every file to -16 LUFS. Videos too. Done once per file."
+                                                        indicator: Rectangle {
+                                                            width: 16; height: 16; radius: 3
+                                                            color: optionCheck.checked ? "#00e6e6" : "#232f34"
+                                                            border.color: "#009ca6"; border.width: 1
+                                                            anchors.verticalCenter: parent.verticalCenter
+                                                            anchors.left: parent.left
+                                                        }
+                                                        contentItem: Text {
+                                                            text: optionCheck.text
+                                                            color: optionCheck.enabled ? "white" : "#6b7a80"
+                                                            font.pixelSize: 12
+                                                            verticalAlignment: Text.AlignVCenter
+                                                            leftPadding: optionCheck.indicator.width + 6
+                                                        }
                                                     }
                                                     Button {
                                                         id: checkBtn

@@ -28,6 +28,33 @@ sample rate and channel count, with a Xing header, exactly like audio_cbr.
 Karaoke: normalize BEFORE aligning, so audio.json's timings describe the file
 that ships (the same reasoning as audio_cbr). For books aligned long ago,
 measure_shift() reports how far a re-encode moved the audio.
+
+Clearer voice (clarity=True), for recordings that are muffled as well as quiet.
+My English Path's LS books drew "quiet and muffled on the board" complaints
+that a gain alone did not fix: the publisher's mix sits dark — boxy around
+400 Hz, little in the 2–5 kHz band consonants live in. On the board this one
+was heard against the original and the gain-only file and chosen:
+
+  highpass 70 Hz, -3.5 dB at 400 Hz, +4 dB at 3 kHz, +1.5 dB at 6.5 kHz
+  then the gain that puts the EQ'd clip at -16 LUFS (+0.3 for the limiter)
+  then a limiter at -1.5 dBFS instead of the true-peak cap
+
+so every clip lands on -16 instead of under it. The EQ adds ~5 ms of phase
+delay and no frames, so karaoke timings still hold. A clip done this way
+carries a "flowbook_audio=clarity-1" tag (ID3 TXXX, MP4 metadata): it is
+never EQ'd twice, and counts as level from then on.
+
+It is the author's choice, never automatic: a clear recording would only get
+brighter. check_book() suggests it — "koyuluk", the 200–600 Hz band's level
+over the 2–5 kHz band's, median over the book's clips: My English Path's books
+11.2–13.1 dB, Campus (heard as clear) 9.1, My English Path after the EQ 7.4.
+Over MUFFLED the book is called muffled.
+
+Videos: the book's MP4/MOV videos are measured and leveled too, with the same
+rule — only their audio is re-encoded (AAC, the source's rate and channels),
+the picture is copied. My English Path 2's videos sat at -21…-24 LUFS, a drop
+from the clips around them. Formats the Windows reader can't play are
+video_compat's job; this leaves them alone.
 """
 import json
 import os
@@ -47,6 +74,20 @@ TOLERANCE = 1.0
 # re-encode.
 MIN_GAIN = 0.5
 
+CLARITY_EQ = ("highpass=f=70,equalizer=f=400:t=q:w=1.0:g=-3.5,"
+              "equalizer=f=3000:t=q:w=0.8:g=4,equalizer=f=6500:t=q:w=1.0:g=1.5")
+# 0.84 is -1.5 dBFS; release short enough that a loud syllable doesn't dip
+# the next word.
+CLARITY_LIMIT = "alimiter=limit=0.84:attack=5:release=60:level=disabled:asc=1"
+# What the limiter takes off the integrated loudness, added back up front.
+CLARITY_HEADROOM = 0.3
+MARK_KEY, MARK = "flowbook_audio", "clarity-1"
+# koyuluk (dB) over which a book's voices are called muffled.
+MUFFLED = 10.5
+
+# The videos whose audio is leveled here: the containers the reader opens.
+VIDEO_EXTS = {".mp4", ".m4v", ".mov"}
+
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 
@@ -55,44 +96,108 @@ def _run(cmd, timeout=600):
                           creationflags=_NO_WINDOW)
 
 
+def _num(v):
+    try:
+        v = float(v)
+    except ValueError:
+        return None
+    return v if v > -70 else None
+
+
+# Loudness and true peak of the first audio stream, and beside it the level of
+# the 200–600 Hz and 2–5 kHz bands (mono, whole clip) for koyuluk.
+_MEASURE_GRAPH = (
+    "[0:a:0]asplit=2[m][t];[m]ebur128=peak=true:framelog=verbose[o];"
+    "[t]aformat=channel_layouts=mono,asplit=2[a][b];"
+    "[a]highpass=f=200,lowpass=f=600,astats@lo[l];"
+    "[b]highpass=f=2000,lowpass=f=5000,astats@hi[h]")
+
+
 def measure(path, ffmpeg=None):
-    """{"i": LUFS, "tp": dBTP}, or raises.
+    """{"i": LUFS, "tp": dBTP, "koyuluk": dB, "netlik": bool}, or raises.
 
     ffmpeg's ebur128 filter, not loudnorm's analysis pass: the same numbers
     (loudnorm is built on it) at about five times the speed, because loudnorm
     resamples to 192 kHz first. Silence, or a clip too short to gate, comes
-    back as i=None so callers leave it alone."""
+    back as i=None so callers leave it alone; so does a video with no sound.
+    netlik: the clip carries the clearer-voice tag. One ffmpeg run for all."""
     ffmpeg = ffmpeg or audio_cbr._ffmpeg()
     if not ffmpeg:
         raise RuntimeError("ffmpeg not found")
-    r = _run([ffmpeg, "-hide_banner", "-nostdin", "-i", path, "-vn",
-              "-af", "ebur128=peak=true", "-f", "null", "-"])
+    r = _run([ffmpeg, "-hide_banner", "-nostdin", "-i", path, "-filter_complex", _MEASURE_GRAPH,
+              "-map", "[o]", "-f", "null", "-", "-map", "[l]", "-f", "null", "-",
+              "-map", "[h]", "-f", "null", "-"])
     err = r.stderr.decode("utf-8", "replace")
+    if "matches no streams" in err:
+        return {"i": None, "tp": None, "koyuluk": None, "netlik": False}
     tail = err[err.rfind("Summary:"):] if "Summary:" in err else ""
     mi = re.search(r"I:\s*(-?[\d.]+|-inf) LUFS", tail)
     mp = re.search(r"True peak:\s*Peak:\s*(-?[\d.]+|-inf) dBFS", tail)
     if not mi or not mp:
         raise RuntimeError("could not measure: " + err.strip()[-300:])
+    # astats prints each channel, then Overall: the last value is the whole clip.
+    bands = []
+    for name in ("lo", "hi"):
+        v = re.findall(r"\[astats@" + name + r" @ [^\]]*\] RMS level dB: (-?[\d.]+|-inf)", err)
+        bands.append(_num(v[-1]) if v else None)
+    koyuluk = (round(bands[0] - bands[1], 1)
+               if None not in bands else None)
+    netlik = re.search(r"^\s*" + MARK_KEY + r"\s*:\s*" + re.escape(MARK) + r"\s*$",
+                       err[:err.find("Stream #")] if "Stream #" in err else err,
+                       re.M | re.I) is not None
+    return {"i": _num(mi.group(1)), "tp": _num(mp.group(1)), "koyuluk": koyuluk, "netlik": netlik}
 
-    def num(v):
-        try:
-            v = float(v)
-        except ValueError:
-            return None
-        return v if v > -70 else None
 
-    return {"i": num(mi.group(1)), "tp": num(mp.group(1))}
+def _eq_loudness(path, ffmpeg):
+    """Integrated loudness of the clip after CLARITY_EQ, or None."""
+    r = _run([ffmpeg, "-hide_banner", "-nostdin", "-i", path, "-vn",
+              "-af", CLARITY_EQ + ",ebur128=framelog=verbose", "-f", "null", "-"])
+    err = r.stderr.decode("utf-8", "replace")
+    tail = err[err.rfind("Summary:"):] if "Summary:" in err else ""
+    mi = re.search(r"I:\s*(-?[\d.]+|-inf) LUFS", tail)
+    return _num(mi.group(1)) if mi else None
 
 
 def gain_for(m):
     """dB to add for measurement m: up to the target, capped by the ceiling.
-    0 when the clip is silent or already within tolerance."""
-    if m["i"] is None or m["tp"] is None:
+    0 when the clip is silent, already within tolerance, or already done
+    with the clearer voice."""
+    if m["i"] is None or m["tp"] is None or m.get("netlik"):
         return 0.0
     if abs(m["i"] - TARGET_I) <= TOLERANCE:
         return 0.0
     g = min(TARGET_I - m["i"], TARGET_TP - m["tp"])
     return round(g, 2) if abs(g) >= MIN_GAIN else 0.0
+
+
+def _chain(path, ffmpeg, m, clarity):
+    """(the -af chain, its gain) that brings the clip to the rule, or
+    (None, 0) to leave it as it is."""
+    if m["i"] is None or m.get("netlik"):
+        return None, 0.0
+    if clarity:
+        i = _eq_loudness(path, ffmpeg)
+        if i is None:
+            return None, 0.0
+        g = round(TARGET_I - i + CLARITY_HEADROOM, 2)
+        return f"{CLARITY_EQ},volume={g}dB,{CLARITY_LIMIT}", g
+    g = gain_for(m)
+    return (f"volume={g}dB", g) if g else (None, 0.0)
+
+
+def _swap_in(tmp, path):
+    """os.replace(tmp, path), waiting out a short hold: Windows refuses to
+    replace a file another process has open (the editor's player, once a clip
+    has been auditioned)."""
+    for attempt in range(8):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == 7:
+                raise RuntimeError("the file is open in another program — "
+                                   "stop playback and try again")
+            time.sleep(0.25)
 
 
 def _stream_info(path, ffmpeg):
@@ -131,11 +236,13 @@ def _lame_delay(path):
     return None
 
 
-def normalize_file(path, ffmpeg=None, m=None, keep_timing=False):
-    """Bring one MP3 to the target in place. Returns a result dict:
+def normalize_file(path, ffmpeg=None, m=None, keep_timing=False, clarity=False):
+    """Bring one MP3 to the target in place; clarity: with the clearer voice
+    (see the top of this file). Returns a result dict:
 
         {"dosya", "degisti": False, "i", "tp"}                      left alone
-        {"dosya", "degisti": True, "i", "tp", "gain", "yeni_i", "yeni_tp", "kbps"}
+        {"dosya", "degisti": True, "i", "tp", "gain", "yeni_i", "yeni_tp", "kbps",
+         "netlik"}
         {"dosya", "hata"}                                            failed
         {"dosya", "hata", "hizali": True}   keep_timing and the re-encode
                                             would have moved the audio
@@ -152,8 +259,8 @@ def normalize_file(path, ffmpeg=None, m=None, keep_timing=False):
     except Exception as e:  # noqa: BLE001 - reported per file
         return {"dosya": name, "hata": str(e)}
     out = {"dosya": name, "degisti": False, "i": m["i"], "tp": m["tp"]}
-    g = gain_for(m)
-    if not g:
+    af, g = _chain(path, ffmpeg, m, clarity)
+    if not af:
         return out
 
     info = audio_cbr.scan_frames(path)
@@ -163,7 +270,7 @@ def normalize_file(path, ffmpeg=None, m=None, keep_timing=False):
             else audio_cbr.target_kbps(info["kbps_avg"]))
     rate, ch = _stream_info(path, ffmpeg)
     cmd = [ffmpeg, "-y", "-hide_banner", "-nostdin", "-loglevel", "error",
-           "-i", path, "-map", "0:a:0", "-af", f"volume={g}dB",
+           "-i", path, "-map", "0:a:0", "-af", af,
            "-c:a", "libmp3lame", "-b:a", f"{kbps}k", "-write_xing", "1"]
     if rate:
         cmd += ["-ar", str(rate)]
@@ -171,6 +278,8 @@ def normalize_file(path, ffmpeg=None, m=None, keep_timing=False):
         cmd += ["-ac", str(ch)]
     # Keep the ID3 tags (title, artist) the source had.
     cmd += ["-map_metadata", "0", "-id3v2_version", "3"]
+    if clarity:
+        cmd += ["-metadata", f"{MARK_KEY}={MARK}"]
     tmp = tempfile.mktemp(suffix=".mp3", dir=os.path.dirname(path) or ".")
     try:
         r = _run(cmd + [tmp])
@@ -193,22 +302,96 @@ def normalize_file(path, ffmpeg=None, m=None, keep_timing=False):
                     "hata": "the re-encode would move the audio under its karaoke "
                             "timings — normalize it, then re-run karaoke"}
         m2 = measure(tmp, ffmpeg)
-        # Windows refuses to replace a file another process holds open (the
-        # editor's player, once a clip has been auditioned).
-        for attempt in range(8):
-            try:
-                os.replace(tmp, path)
-                break
-            except PermissionError:
-                if attempt == 7:
-                    raise RuntimeError("the file is open in another program — "
-                                       "stop playback and try again")
-                time.sleep(0.25)
+        _swap_in(tmp, path)
     except Exception as e:  # noqa: BLE001 - reported per file
         if os.path.exists(tmp):
             os.remove(tmp)
         return {"dosya": name, "hata": str(e)}
-    out.update(degisti=True, gain=g, yeni_i=m2["i"], yeni_tp=m2["tp"], kbps=kbps)
+    out.update(degisti=True, gain=g, yeni_i=m2["i"], yeni_tp=m2["tp"], kbps=kbps,
+               netlik=clarity)
+    return out
+
+
+def _video_audio(path, ffmpeg):
+    """(sample_rate, channels, kbps) of a video's first audio stream from
+    `ffmpeg -i`, any of them None."""
+    r = _run([ffmpeg, "-hide_banner", "-nostdin", "-i", path], timeout=60)
+    err = r.stderr.decode("utf-8", "replace")
+    line = re.search(r"Stream #[^\n]*Audio:[^\n]*", err)
+    if not line:
+        return None, None, None
+    line = line.group(0)
+    rate = re.search(r"(\d+) Hz", line)
+    ch = re.search(r"Hz, (mono|stereo|[\d.]+(?:\(\w+\))?)", line)
+    kb = re.search(r"(\d+) kb/s", line)
+    chans = None
+    if ch:
+        chans = 1 if ch.group(1) == "mono" else 2
+    return (int(rate.group(1)) if rate else None, chans,
+            int(kb.group(1)) if kb else None)
+
+
+def normalize_video(path, ffmpeg=None, m=None, clarity=False):
+    """Bring one video's audio to the target in place, the picture copied as
+    it is. Result dicts as normalize_file (no "kbps" for a video).
+
+    The audio becomes AAC at the source's sample rate, stereo or mono as it
+    was, at the next of 128/160/192/256 kb/s at or over the source's. Swapped
+    in only once the result still has its picture and runs as long as the
+    source."""
+    import video_compat
+    name = os.path.basename(path)
+    ffmpeg = ffmpeg or audio_cbr._ffmpeg()
+    if not ffmpeg:
+        return {"dosya": name, "hata": "ffmpeg not found"}
+    try:
+        m = m or measure(path, ffmpeg)
+    except Exception as e:  # noqa: BLE001 - reported per file
+        return {"dosya": name, "hata": str(e)}
+    out = {"dosya": name, "degisti": False, "i": m["i"], "tp": m["tp"]}
+    af, g = _chain(path, ffmpeg, m, clarity)
+    if not af:
+        return out
+
+    rate, ch, src_kbps = _video_audio(path, ffmpeg)
+    kbps = next((k for k in (128, 160, 192, 256) if k >= (src_kbps or 0) * 0.95), 256)
+    ext = os.path.splitext(path)[1].lower()
+    cmd = [ffmpeg, "-y", "-hide_banner", "-nostdin", "-loglevel", "error", "-i", path,
+           # the picture (V: not a cover image) and the first audio, as video_compat
+           "-map", "0:V:0?", "-map", "0:a:0", "-c:v", "copy", "-af", af,
+           "-c:a", "aac", "-b:a", f"{kbps}k"]
+    if rate:
+        cmd += ["-ar", str(rate)]
+    if ch:
+        cmd += ["-ac", str(ch)]
+    # use_metadata_tags lets the tag below in; it would also write the brands
+    # -map_metadata carries over a second time, as tags of their own.
+    cmd += ["-map_metadata", "0", "-movflags", "+faststart+use_metadata_tags",
+            "-metadata", "major_brand=", "-metadata", "minor_version=",
+            "-metadata", "compatible_brands="]
+    if clarity:
+        cmd += ["-metadata", f"{MARK_KEY}={MARK}"]
+    tmp = tempfile.mktemp(suffix=ext, dir=os.path.dirname(path) or ".")
+    try:
+        before = video_compat.probe(path, ffmpeg)
+        r = _run(cmd + [tmp], timeout=1800)
+        if r.returncode != 0:
+            raise RuntimeError("ffmpeg failed: "
+                               + r.stderr.decode("utf-8", "replace").strip()[-300:])
+        after = video_compat.probe(tmp, ffmpeg)
+        if after.get("error") or not after.get("audio") or (
+                before.get("video") and not after.get("video")):
+            raise RuntimeError("the re-encoded video lost a stream")
+        d0, d1 = before.get("duration") or 0, after.get("duration") or 0
+        if d0 and abs(d1 - d0) > max(0.5, d0 * 0.01):
+            raise RuntimeError(f"the re-encoded video runs {d1:.1f} s, the original {d0:.1f} s")
+        m2 = measure(tmp, ffmpeg)
+        _swap_in(tmp, path)
+    except Exception as e:  # noqa: BLE001 - reported per file
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        return {"dosya": name, "hata": str(e)}
+    out.update(degisti=True, gain=g, yeni_i=m2["i"], yeni_tp=m2["tp"], netlik=clarity)
     return out
 
 
@@ -237,6 +420,17 @@ def find_audio(book):
                 continue
             out.append(p)
     return sorted(out)
+
+
+def find_videos(book):
+    """The book's videos in a container the reader opens (VIDEO_EXTS); the
+    rest are video_compat's to convert first."""
+    import video_compat
+    return [p for p in video_compat.find_videos(book) if p.suffix.lower() in VIDEO_EXTS]
+
+
+def _is_video(p):
+    return p.suffix.lower() in VIDEO_EXTS
 
 
 def _aligned_names(book):
@@ -285,8 +479,11 @@ def _measure_all(book, paths, ffmpeg):
         st = p.stat()
         key = p.relative_to(book).as_posix()
         c = cache.get(key)
-        if c and c.get("size") == st.st_size and c.get("mtime") == int(st.st_mtime):
-            out[p] = {"i": c["i"], "tp": c["tp"]}
+        # An entry from before koyuluk/netlik were measured is measured again.
+        if (c and c.get("size") == st.st_size and c.get("mtime") == int(st.st_mtime)
+                and "koyuluk" in c):
+            out[p] = {"i": c["i"], "tp": c["tp"], "koyuluk": c["koyuluk"],
+                      "netlik": c.get("netlik", False)}
         else:
             todo.append(p)
 
@@ -302,7 +499,8 @@ def _measure_all(book, paths, ffmpeg):
             if "hata" not in m:
                 st = p.stat()
                 cache[p.relative_to(book).as_posix()] = {
-                    "size": st.st_size, "mtime": int(st.st_mtime), "i": m["i"], "tp": m["tp"]}
+                    "size": st.st_size, "mtime": int(st.st_mtime), "i": m["i"], "tp": m["tp"],
+                    "koyuluk": m["koyuluk"], "netlik": m["netlik"]}
     if todo:
         try:
             os.makedirs(os.path.dirname(cache_path), exist_ok=True)
@@ -313,26 +511,43 @@ def _measure_all(book, paths, ffmpeg):
     return out
 
 
-def check_book(book):
-    """Every MP3 in the book against the rule; writes nothing but the cache.
+def _median(xs):
+    xs = sorted(xs)
+    n = len(xs)
+    if not n:
+        return None
+    return xs[n // 2] if n % 2 else round((xs[n // 2 - 1] + xs[n // 2]) / 2, 1)
 
-    {toplam, duzeltilecek, okunamayan, ffmpeg_yok, hedef, sesler: [row]}; each
-    row {dosya, durum ("uygun" | "duzeltilecek" | "sessiz" | "okunamayan"),
-    i, tp, gain} or {dosya, durum, hata}.
+
+def check_book(book):
+    """Every MP3 and video in the book against the rule; writes nothing but
+    the cache.
+
+    {toplam, duzeltilecek, okunamayan, ffmpeg_yok, hedef, koyuluk, boguk,
+     netlik_bekleyen, sesler: [row]}; each row {dosya, video, durum ("uygun" |
+    "duzeltilecek" | "sessiz" | "okunamayan"), i, tp, gain, koyuluk, netlik} or
+    {dosya, video, durum, hata}.
+
+    koyuluk is the median over the MP3s not yet done with the clearer voice —
+    videos carry music, which would skew it; boguk when it is over MUFFLED
+    and there are at least three of them. netlik_bekleyen: the clips the
+    clearer voice would still change.
     """
     from pathlib import Path
     book = Path(book)
-    paths = find_audio(book)
+    paths = find_audio(book) + find_videos(book)
     r = {"toplam": len(paths), "duzeltilecek": 0, "okunamayan": 0, "ffmpeg_yok": False,
-         "hedef": TARGET_I, "sesler": []}
+         "hedef": TARGET_I, "koyuluk": None, "boguk": False, "netlik_bekleyen": 0,
+         "sesler": []}
     if not paths:
         return r
     ffmpeg = audio_cbr._ffmpeg()
     if not ffmpeg:
         r["ffmpeg_yok"] = True
         return r
+    dark = []
     for p, m in _measure_all(book, paths, ffmpeg).items():
-        row = {"dosya": p.relative_to(book).as_posix()}
+        row = {"dosya": p.relative_to(book).as_posix(), "video": _is_video(p)}
         if "hata" in m:
             row.update(durum="okunamayan", hata=m["hata"])
             r["okunamayan"] += 1
@@ -340,16 +555,24 @@ def check_book(book):
             row.update(durum="sessiz")
         else:
             g = gain_for(m)
-            row.update(i=m["i"], tp=m["tp"], gain=g, durum="duzeltilecek" if g else "uygun")
+            row.update(i=m["i"], tp=m["tp"], gain=g, koyuluk=m["koyuluk"], netlik=m["netlik"],
+                       durum="duzeltilecek" if g else "uygun")
             if g:
                 r["duzeltilecek"] += 1
+            if not m["netlik"]:
+                r["netlik_bekleyen"] += 1
+                if not row["video"] and m["koyuluk"] is not None:
+                    dark.append(m["koyuluk"])
         r["sesler"].append(row)
     r["sesler"].sort(key=lambda x: x["dosya"])
+    r["koyuluk"] = _median(dark)
+    r["boguk"] = len(dark) >= 3 and r["koyuluk"] > MUFFLED
     return r
 
 
-def optimize_book(book, progress=None, stopped=lambda: False):
-    """Normalizes every clip check_book calls "duzeltilecek", in place.
+def optimize_book(book, progress=None, stopped=lambda: False, clarity=False):
+    """Normalizes every clip check_book calls "duzeltilecek", in place — with
+    clarity, every clip not yet done with the clearer voice, level or not.
 
     progress(i, n, dosya) before each clip. A clip audio.json has karaoke
     timings for is only replaced when the re-encode keeps its frame count and
@@ -357,7 +580,7 @@ def optimize_book(book, progress=None, stopped=lambda: False):
     otherwise it is left as it is and listed under hizali_atlanan.
 
     {normalize_edilen: [row], basarisiz: [{dosya, hata}],
-     hizali_atlanan: [dosya], iptal?} or {hata}.
+     hizali_atlanan: [dosya], netlik, iptal?} or {hata}.
     """
     from pathlib import Path
     book = Path(book)
@@ -365,18 +588,23 @@ def optimize_book(book, progress=None, stopped=lambda: False):
     if not ffmpeg:
         return {"hata": "ffmpeg isn't installed — install it from Help ▸ Dependencies"}
     aligned = _aligned_names(book)
-    measured = _measure_all(book, find_audio(book), ffmpeg)
+    measured = _measure_all(book, find_audio(book) + find_videos(book), ffmpeg)
     todo = [(p, m) for p, m in measured.items()
-            if "hata" not in m and m["i"] is not None and gain_for(m)]
+            if "hata" not in m and m["i"] is not None and not m["netlik"]
+            and (clarity or gain_for(m))]
     done, failed, skipped = [], [], []
     for i, (p, m) in enumerate(sorted(todo)):
         if stopped():
             return {"normalize_edilen": done, "basarisiz": failed,
-                    "hizali_atlanan": skipped, "iptal": True}
+                    "hizali_atlanan": skipped, "netlik": clarity, "iptal": True}
         rel = p.relative_to(book).as_posix()
         if progress:
             progress(i, len(todo), rel)
-        r = normalize_file(str(p), ffmpeg, m, keep_timing=p.name in aligned)
+        if _is_video(p):
+            r = normalize_video(str(p), ffmpeg, m, clarity=clarity)
+        else:
+            r = normalize_file(str(p), ffmpeg, m, keep_timing=p.name in aligned,
+                               clarity=clarity)
         r["dosya"] = rel
         if r.get("hizali"):
             skipped.append(rel)
@@ -384,4 +612,5 @@ def optimize_book(book, progress=None, stopped=lambda: False):
             failed.append({"dosya": rel, "hata": r["hata"]})
         elif r["degisti"]:
             done.append(r)
-    return {"normalize_edilen": done, "basarisiz": failed, "hizali_atlanan": skipped}
+    return {"normalize_edilen": done, "basarisiz": failed, "hizali_atlanan": skipped,
+            "netlik": clarity}
