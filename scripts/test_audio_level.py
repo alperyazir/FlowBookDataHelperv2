@@ -2,9 +2,10 @@
 """audio_level + package_book'un ses adimi icin bagimsiz test.
 
 Sentetik, kisik ve boguk (alcak geciren filtreli gurultu) MP3'ler ve bir video
-ile bir kitap kurar; kontrolu (bogukluk dahil), duz seviye ayarini, net ses
-modunu, ikinci calistirmanin hicbir seye dokunmamasini ve videonun goruntusunun
-aynen kalmasini dogrular. ffmpeg (libmp3lame, libx264 ile) gerektirir; yoksa
+ile bir kitap kurar; kontrolu (bogukluk dahil), boguk kitabin kendiliginden net
+sesle, parlak kitabin duz kazancla duzeltilmesini, sonradan eklenen dosyanin
+kitabin geri kalani gibi yapilmasini, ikinci calistirmanin hicbir seye
+dokunmamasini ve videonun goruntusunun aynen kalmasini dogrular. ffmpeg (libmp3lame, libx264 ile) gerektirir; yoksa
 atlanir.
 
     python3 test_audio_level.py
@@ -42,12 +43,14 @@ def kontrol(ad, kosul, ayrinti=""):
 FFMPEG = audio_cbr._ffmpeg()
 # Pembe gurultu, 1.2 kHz'te kesilmis: konusmanin boguk kaydi gibi koyu, kisik.
 BOGUK = "anoisesrc=color=pink:amplitude=0.08:duration={sure}:seed={tohum},lowpass=f=1200,lowpass=f=1200"
+# Ayni gurultu, kesilmeden: kisik ama acik.
+ACIK = "anoisesrc=color=pink:amplitude=0.03:duration={sure}:seed={tohum}"
 
 
-def mp3(hedef, sure=6, tohum=1):
+def mp3(hedef, sure=6, tohum=1, kaynak=BOGUK):
     hedef.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run([FFMPEG, "-v", "error", "-y", "-f", "lavfi",
-                    "-i", BOGUK.format(sure=sure, tohum=tohum),
+                    "-i", kaynak.format(sure=sure, tohum=tohum),
                     "-ac", "2", "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "128k",
                     "-write_xing", "1", str(hedef)], check=True)
 
@@ -103,20 +106,10 @@ def main():
         kontrol("boguk bulundu", r["boguk"] and r["koyuluk"] > al.MUFFLED, (r["boguk"], r["koyuluk"]))
         kontrol("video satiri isaretli", any(s["video"] for s in r["sesler"]))
 
-        print("duz seviye (eski davranis)")
-        b2 = kok / "SesKitap2"
-        shutil.copytree(b, b2)
-        kod, s = calistir("audio", str(b2))
+        print("boguk kitap: Optimize net sesi kendisi secer")
+        kod, s = calistir("audio", str(b))
         kontrol("cikis 0", kod == 0, (kod, s))
-        kontrol("5 dosya ayarlandi", len(s.get("normalize_edilen", [])) == 5, s)
-        kontrol("net ses yok", not s.get("netlik") and not any(x["netlik"] for x in s["normalize_edilen"]))
-        r = al.check_book(b2)
-        kontrol("sonra hala boguk, net ses bekleyen 5", r["boguk"] and r["netlik_bekleyen"] == 5,
-                (r["boguk"], r["netlik_bekleyen"]))
-
-        print("net ses")
-        kod, s = calistir("audio", str(b), "--netlik")
-        kontrol("cikis 0", kod == 0, (kod, s))
+        kontrol("net ses secildi", s.get("netlik") is True, s.get("netlik"))
         yeni = s.get("normalize_edilen", [])
         kontrol("5 dosya islendi", len(yeni) == 5, s)
         kontrol("hepsi -16 ±0.5 LUFS", all(abs(x["yeni_i"] + 16) <= 0.5 for x in yeni),
@@ -130,14 +123,40 @@ def main():
         r = al.check_book(b)
         kontrol("hepsi isaretli ve uygun",
                 all(x["netlik"] and x["durum"] == "uygun" for x in r["sesler"]), r["sesler"])
-        kontrol("artik boguk denmiyor", not r["boguk"] and r["netlik_bekleyen"] == 0,
-                (r["boguk"], r["netlik_bekleyen"]))
+        kontrol("yapilacak bir sey kalmadi", r["duzeltilecek"] == 0 and not r["boguk"],
+                (r["duzeltilecek"], r["boguk"]))
 
         print("ikinci calistirma")
-        kod, s = calistir("audio", str(b), "--netlik")
-        kontrol("hicbir sey degismedi", kod == 0 and not s.get("normalize_edilen"), s)
         kod, s = calistir("audio", str(b))
-        kontrol("duz modda da degismedi", kod == 0 and not s.get("normalize_edilen"), s)
+        kontrol("hicbir sey degismedi", kod == 0 and not s.get("normalize_edilen"), s)
+
+        print("sonradan eklenen dosya")
+        mp3(b / "audio" / "Pg-9.mp3", tohum=9)
+        r = al.check_book(b)
+        kontrol("tek dosya boguk sayilmaz ama kitap net sesli",
+                not r["boguk"] and r["netlik"] and r["duzeltilecek"] == 1,
+                (r["boguk"], r["netlik"], r["duzeltilecek"]))
+        kod, s = calistir("audio", str(b))
+        kontrol("o da net sesle yapildi",
+                [x["dosya"] for x in s.get("normalize_edilen", [])] == ["audio/Pg-9.mp3"]
+                and s["normalize_edilen"][0]["netlik"], s)
+
+        print("acik ama kisik kitap: duz kazanc")
+        a = kok / "AcikKitap"
+        (a / "config.json").parent.mkdir(parents=True, exist_ok=True)
+        (a / "config.json").write_text("{}", encoding="utf-8")
+        for i in range(4):
+            mp3(a / "audio" / f"Pg-{i + 1}.mp3", tohum=i + 1, kaynak=ACIK)
+        r = al.check_book(a)
+        kontrol("boguk degil, hepsi kisik",
+                not r["boguk"] and not r["netlik"] and r["duzeltilecek"] == 4,
+                (r["koyuluk"], r["boguk"], r["duzeltilecek"]))
+        kod, s = calistir("audio", str(a))
+        kontrol("duz kazanc, isaret yok",
+                kod == 0 and s.get("netlik") is False and len(s.get("normalize_edilen", [])) == 4
+                and not any(x["netlik"] for x in s["normalize_edilen"]), s)
+        kod, s = calistir("audio", str(a))
+        kontrol("ikinci calistirma bos", kod == 0 and not s.get("normalize_edilen"), s)
     finally:
         shutil.rmtree(kok, ignore_errors=True)
 

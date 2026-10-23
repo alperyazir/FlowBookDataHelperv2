@@ -29,7 +29,7 @@ Karaoke: normalize BEFORE aligning, so audio.json's timings describe the file
 that ships (the same reasoning as audio_cbr). For books aligned long ago,
 measure_shift() reports how far a re-encode moved the audio.
 
-Clearer voice (clarity=True), for recordings that are muffled as well as quiet.
+Clearer voice (clarity), for recordings that are muffled as well as quiet.
 My English Path's LS books drew "quiet and muffled on the board" complaints
 that a gain alone did not fix: the publisher's mix sits dark — boxy around
 400 Hz, little in the 2–5 kHz band consonants live in. On the board this one
@@ -44,11 +44,13 @@ delay and no frames, so karaoke timings still hold. A clip done this way
 carries a "flowbook_audio=clarity-1" tag (ID3 TXXX, MP4 metadata): it is
 never EQ'd twice, and counts as level from then on.
 
-It is the author's choice, never automatic: a clear recording would only get
-brighter. check_book() suggests it — "koyuluk", the 200–600 Hz band's level
-over the 2–5 kHz band's, median over the book's clips: My English Path's books
-11.2–13.1 dB, Campus (heard as clear) 9.1, My English Path after the EQ 7.4.
-Over MUFFLED the book is called muffled.
+Optimize chooses it by itself, per book, never per clip: a clear recording
+would only get brighter, and one book should sound one way. The measure is
+"koyuluk", the 200–600 Hz band's level over the 2–5 kHz band's, median over
+the book's clips: My English Path's books 11.2–13.1 dB, Unter der Lupe
+11.5–12.3, Campus (heard as clear) 9.1, My English Path after the EQ 7.4.
+Over MUFFLED the book is muffled and gets the clearer voice; so does a book
+that has a clip with it already.
 
 Videos: the book's MP4/MOV videos are measured and leveled too, with the same
 rule — only their audio is re-encoded (AAC, the source's rate and channels),
@@ -479,8 +481,8 @@ def _measure_all(book, paths, ffmpeg):
         st = p.stat()
         key = p.relative_to(book).as_posix()
         c = cache.get(key)
-        # An entry from before koyuluk/netlik were measured is measured again.
-        if (c and c.get("size") == st.st_size and c.get("mtime") == int(st.st_mtime)
+        # An entry from before koyuluk/netlik (and mtime_ns) is measured again.
+        if (c and c.get("size") == st.st_size and c.get("mtime_ns") == st.st_mtime_ns
                 and "koyuluk" in c):
             out[p] = {"i": c["i"], "tp": c["tp"], "koyuluk": c["koyuluk"],
                       "netlik": c.get("netlik", False)}
@@ -499,7 +501,7 @@ def _measure_all(book, paths, ffmpeg):
             if "hata" not in m:
                 st = p.stat()
                 cache[p.relative_to(book).as_posix()] = {
-                    "size": st.st_size, "mtime": int(st.st_mtime), "i": m["i"], "tp": m["tp"],
+                    "size": st.st_size, "mtime_ns": st.st_mtime_ns, "i": m["i"], "tp": m["tp"],
                     "koyuluk": m["koyuluk"], "netlik": m["netlik"]}
     if todo:
         try:
@@ -511,6 +513,24 @@ def _measure_all(book, paths, ffmpeg):
     return out
 
 
+def _forget(book, rels):
+    """Drops rels from the measurement cache. A re-encode at the same bitrate
+    has the same size, and on a coarse clock (FAT32: 2 s) the same mtime, as
+    the clip it replaced — its old numbers must not answer for it."""
+    if not rels:
+        return
+    cache_path = _cache_file(book)
+    try:
+        with open(cache_path, encoding="utf-8") as fh:
+            cache = json.load(fh)
+        for rel in rels:
+            cache.pop(rel, None)
+        with open(cache_path, "w", encoding="utf-8") as fh:
+            json.dump(cache, fh)
+    except (OSError, ValueError):
+        pass
+
+
 def _median(xs):
     xs = sorted(xs)
     n = len(xs)
@@ -519,25 +539,51 @@ def _median(xs):
     return xs[n // 2] if n % 2 else round((xs[n // 2 - 1] + xs[n // 2]) / 2, 1)
 
 
+def _book_clarity(measured):
+    """(koyuluk, boguk, netlik) for a book's measurements {path: m}.
+
+    koyuluk is the median over the MP3s not yet done with the clearer voice —
+    videos carry music, which would skew it; boguk when it is over MUFFLED and
+    there are at least three of them. netlik — Optimize uses the clearer voice
+    — when the book is boguk, or when any clip already has it: one book, one
+    sound, so a clip added later is done the same way as the rest."""
+    dark, marked = [], False
+    for p, m in measured.items():
+        if "hata" in m or m["i"] is None:
+            continue
+        if m["netlik"]:
+            marked = True
+        elif not _is_video(p) and m["koyuluk"] is not None:
+            dark.append(m["koyuluk"])
+    koyuluk = _median(dark)
+    boguk = len(dark) >= 3 and koyuluk > MUFFLED
+    return koyuluk, boguk, boguk or marked
+
+
+def _needs(m, netlik):
+    """Whether Optimize changes a clip in a book that does (netlik) or doesn't
+    use the clearer voice."""
+    if "hata" in m or m["i"] is None or m["netlik"]:
+        return False
+    return netlik or bool(gain_for(m))
+
+
 def check_book(book):
     """Every MP3 and video in the book against the rule; writes nothing but
     the cache.
 
     {toplam, duzeltilecek, okunamayan, ffmpeg_yok, hedef, koyuluk, boguk,
-     netlik_bekleyen, sesler: [row]}; each row {dosya, video, durum ("uygun" |
+     netlik, sesler: [row]}; each row {dosya, video, durum ("uygun" |
     "duzeltilecek" | "sessiz" | "okunamayan"), i, tp, gain, koyuluk, netlik} or
-    {dosya, video, durum, hata}.
-
-    koyuluk is the median over the MP3s not yet done with the clearer voice —
-    videos carry music, which would skew it; boguk when it is over MUFFLED
-    and there are at least three of them. netlik_bekleyen: the clips the
-    clearer voice would still change.
+    {dosya, video, durum, hata}. duzeltilecek counts what Optimize would
+    change; netlik says it would do it with the clearer voice (_book_clarity),
+    and then a row's gain is only the plain gain's, for reference.
     """
     from pathlib import Path
     book = Path(book)
     paths = find_audio(book) + find_videos(book)
     r = {"toplam": len(paths), "duzeltilecek": 0, "okunamayan": 0, "ffmpeg_yok": False,
-         "hedef": TARGET_I, "koyuluk": None, "boguk": False, "netlik_bekleyen": 0,
+         "hedef": TARGET_I, "koyuluk": None, "boguk": False, "netlik": False,
          "sesler": []}
     if not paths:
         return r
@@ -545,8 +591,9 @@ def check_book(book):
     if not ffmpeg:
         r["ffmpeg_yok"] = True
         return r
-    dark = []
-    for p, m in _measure_all(book, paths, ffmpeg).items():
+    measured = _measure_all(book, paths, ffmpeg)
+    r["koyuluk"], r["boguk"], r["netlik"] = _book_clarity(measured)
+    for p, m in measured.items():
         row = {"dosya": p.relative_to(book).as_posix(), "video": _is_video(p)}
         if "hata" in m:
             row.update(durum="okunamayan", hata=m["hata"])
@@ -554,25 +601,20 @@ def check_book(book):
         elif m["i"] is None:
             row.update(durum="sessiz")
         else:
-            g = gain_for(m)
-            row.update(i=m["i"], tp=m["tp"], gain=g, koyuluk=m["koyuluk"], netlik=m["netlik"],
-                       durum="duzeltilecek" if g else "uygun")
-            if g:
+            todo = _needs(m, r["netlik"])
+            row.update(i=m["i"], tp=m["tp"], gain=gain_for(m), koyuluk=m["koyuluk"],
+                       netlik=m["netlik"], durum="duzeltilecek" if todo else "uygun")
+            if todo:
                 r["duzeltilecek"] += 1
-            if not m["netlik"]:
-                r["netlik_bekleyen"] += 1
-                if not row["video"] and m["koyuluk"] is not None:
-                    dark.append(m["koyuluk"])
         r["sesler"].append(row)
     r["sesler"].sort(key=lambda x: x["dosya"])
-    r["koyuluk"] = _median(dark)
-    r["boguk"] = len(dark) >= 3 and r["koyuluk"] > MUFFLED
     return r
 
 
-def optimize_book(book, progress=None, stopped=lambda: False, clarity=False):
-    """Normalizes every clip check_book calls "duzeltilecek", in place — with
-    clarity, every clip not yet done with the clearer voice, level or not.
+def optimize_book(book, progress=None, stopped=lambda: False, clarity=None):
+    """Brings every clip check_book calls "duzeltilecek" to the rule, in
+    place: with the clearer voice when the book calls for it (_book_clarity),
+    with a plain gain otherwise. clarity True/False forces one or the other.
 
     progress(i, n, dosya) before each clip. A clip audio.json has karaoke
     timings for is only replaced when the re-encode keeps its frame count and
@@ -589,12 +631,13 @@ def optimize_book(book, progress=None, stopped=lambda: False, clarity=False):
         return {"hata": "ffmpeg isn't installed — install it from Help ▸ Dependencies"}
     aligned = _aligned_names(book)
     measured = _measure_all(book, find_audio(book) + find_videos(book), ffmpeg)
-    todo = [(p, m) for p, m in measured.items()
-            if "hata" not in m and m["i"] is not None and not m["netlik"]
-            and (clarity or gain_for(m))]
+    if clarity is None:
+        clarity = _book_clarity(measured)[2]
+    todo = [(p, m) for p, m in measured.items() if _needs(m, clarity)]
     done, failed, skipped = [], [], []
     for i, (p, m) in enumerate(sorted(todo)):
         if stopped():
+            _forget(book, [r["dosya"] for r in done])
             return {"normalize_edilen": done, "basarisiz": failed,
                     "hizali_atlanan": skipped, "netlik": clarity, "iptal": True}
         rel = p.relative_to(book).as_posix()
@@ -612,5 +655,6 @@ def optimize_book(book, progress=None, stopped=lambda: False, clarity=False):
             failed.append({"dosya": rel, "hata": r["hata"]})
         elif r["degisti"]:
             done.append(r)
+    _forget(book, [r["dosya"] for r in done])
     return {"normalize_edilen": done, "basarisiz": failed, "hizali_atlanan": skipped,
             "netlik": clarity}

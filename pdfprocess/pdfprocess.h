@@ -88,12 +88,11 @@ public:
     // imagesOptimized. One run at a time; false if one is already running.
     Q_INVOKABLE bool optimizeImages(const QString &book);
     // Optimize audio (Package ▸ Book Details): every MP3 and video in
-    // books/<book> off the -16 LUFS target brought to it with a plain gain, in
-    // place (scripts/audio_level.py); clarity: with the clearer voice (EQ, gain
-    // to -16, limiter), every clip not done that way yet. Progress on
-    // audioOptimizeProgress, the end on audioOptimizeFinished. One run at a
-    // time; false if one is running.
-    Q_INVOKABLE bool optimizeAudio(const QString &book, bool clarity = false);
+    // books/<book> brought to -16 LUFS in place (scripts/audio_level.py) — a
+    // plain gain, or for a muffled book the clearer voice (EQ, gain, limiter).
+    // Progress on audioOptimizeProgress, the end on audioOptimizeFinished. One
+    // run at a time; false if one is running.
+    Q_INVOKABLE bool optimizeAudio(const QString &book);
     // Stops a running optimizeAudio(): the clip being encoded is dropped, the
     // ones already done stay. Safe to call when nothing runs.
     Q_INVOKABLE void cancelAudioOptimize();

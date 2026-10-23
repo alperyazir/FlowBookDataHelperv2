@@ -2729,7 +2729,7 @@ bool PdfProcess::optimizeImages(const QString &book)
     return true;
 }
 
-bool PdfProcess::optimizeAudio(const QString &book, bool clarity)
+bool PdfProcess::optimizeAudio(const QString &book)
 {
     if (_audioProcess)
         return false;
@@ -2788,11 +2788,9 @@ bool PdfProcess::optimizeAudio(const QString &book, bool clarity)
                                    QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact)));
     });
 
-    QStringList args = QStringList() << "-u" << (scriptsDir() + "/package_book.py") << "audio"
-                                     << (booksDir() + book) << "--stdin-stop";
-    if (clarity)
-        args << "--netlik";
-    process->start(pythonExecutable(), args);
+    process->start(pythonExecutable(),
+                   QStringList() << "-u" << (scriptsDir() + "/package_book.py") << "audio"
+                                 << (booksDir() + book) << "--stdin-stop");
     return true;
 }
 
