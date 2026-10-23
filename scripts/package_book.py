@@ -50,9 +50,11 @@ copied over. This file adds only what belongs to the editor:
       1 some failed, 2 error, 3 stopped.
 
   audio <book_dir> [--stdin-stop]
-      Brings the book's MP3s to -16 LUFS / -1.5 dBTP with a plain gain, in the
-      book's own folder (audio_level.optimize_book) — Optimize audio in Book
-      Details. PROGRESS: {i, n, dosya} lines; --stdin-stop as for videos.
+      Brings the book's MP3s and its videos' audio to -16 LUFS / -1.5 dBTP,
+      in the book's own folder (audio_level.optimize_book) — Optimize audio in
+      Book Details: a plain gain, or for a muffled book the clearer voice (EQ,
+      gain to -16, limiter) on every clip not done that way yet.
+      PROGRESS: {i, n, dosya} lines; --stdin-stop as for videos.
       Exit 0 all done, 1 some failed or skipped, 2 error, 3 stopped.
 
   images <book_dir>

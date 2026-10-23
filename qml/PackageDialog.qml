@@ -201,6 +201,7 @@ Dialog {
     property string audioBook: ""        // "" when idle
     property var audioProgress: ({})     // {i, n, dosya}
     property bool audioStopping: false
+    property bool audioClarity: false    // the running Optimize uses the clearer voice
 
     function audioIn(book, durum) {
         var all = (((info(book).check || {}).ses || {}).sesler) || [];
@@ -220,6 +221,7 @@ Dialog {
             sideBar.audioVisible = false;
         if (pdfProcess.optimizeAudio(book)) {
             audioBook = book;
+            audioClarity = !!(((info(book).check || {}).ses || {}).netlik);
             audioProgress = ({});
             audioStopping = false;
             setInfo(book, { audioError: "" });
@@ -258,7 +260,8 @@ Dialog {
                 msgs.push(skipped[k] + ": left as it is — re-encoding would move its karaoke timings");
             var done = (r.normalize_edilen || []).length;
             if (done)
-                toast.show(done + " audio file(s) brought to -16 LUFS (" + book + ")"
+                toast.show(done + " audio file(s) brought to -16 LUFS"
+                           + (r.netlik ? " with the clearer voice" : "") + " (" + book + ")"
                            + (r.iptal ? " — stopped" : ""));
             if (!packageDialog.bookInfo[book])
                 return;
@@ -573,21 +576,27 @@ Dialog {
         }
         rows.push(pdf);
 
-        // Audio — -16 LUFS; a warning.
+        // Audio — -16 LUFS, with the clearer voice for a muffled book; a warning.
         var s = c.ses;
         if (s && s.toplam) {
             var au = { key: "audio", title: "Audio", details: [], action: "", stoppable: false,
                        progress: -1, error: d.audioError || "" };
-            var quiet = audioIn(book, "duzeltilecek"), badAu = audioIn(book, "okunamayan");
-            for (var q = 0; q < quiet.length; q++)
-                au.details.push({ level: "warn", text: quiet[q].dosya + " — " + quiet[q].i + " LUFS, peak "
-                                  + quiet[q].tp + " dBTP → " + (quiet[q].gain > 0 ? "+" : "") + quiet[q].gain + " dB" });
+            var todo = audioIn(book, "duzeltilecek"), badAu = audioIn(book, "okunamayan");
+            if (s.boguk)
+                au.details.push({ level: "warn", text: "Voices sound muffled: the lows sit " + s.koyuluk
+                                  + " dB over the 2–5 kHz band (clear recordings, about 9). "
+                                  + "Optimize turns the boxy lows down and the consonants up." });
+            for (var q = 0; q < todo.length; q++)
+                au.details.push({ level: "warn", text: todo[q].dosya + " — " + todo[q].i + " LUFS, peak "
+                                  + todo[q].tp + " dBTP → " + (s.netlik ? "clearer voice, " + s.hedef + " LUFS"
+                                  : (todo[q].gain > 0 ? "+" : "") + todo[q].gain + " dB") });
             for (var ba = 0; ba < badAu.length; ba++)
                 au.details.push({ level: "warn", text: badAu[ba].dosya + " — can't be read: " + badAu[ba].hata });
             if (audioBook === book) {
                 var ap = audioProgress;
                 au.state = "running";
-                au.summary = ap.n > 0 ? "Leveling " + (ap.i + 1) + " of " + ap.n + " · " + (ap.dosya || "")
+                au.summary = ap.n > 0 ? (audioClarity ? "Clearing " : "Leveling ") + (ap.i + 1) + " of "
+                                        + ap.n + " · " + (ap.dosya || "")
                                       : "Measuring…";
                 au.progress = ap.n > 0 ? ap.i / ap.n : 0;
                 au.stoppable = true;
@@ -597,9 +606,10 @@ Dialog {
             } else if (s.ffmpeg_yok) {
                 au.state = "warn";
                 au.summary = "Can't check " + s.toplam + " file(s): ffmpeg isn't installed (Help ▸ Dependencies)";
-            } else if (quiet.length) {
+            } else if (todo.length) {
                 au.state = "warn";
-                au.summary = quiet.length + " of " + s.toplam + " file(s) too quiet — off " + s.hedef + " LUFS";
+                au.summary = s.boguk ? "Voices sound muffled — " + todo.length + " of " + s.toplam + " file(s) to clear"
+                                     : todo.length + " of " + s.toplam + " file(s) too quiet — off " + s.hedef + " LUFS";
                 au.action = "Optimize";
             } else if (badAu.length) {
                 au.state = "warn";

@@ -87,10 +87,11 @@ public:
     // books/<book> itself. On a worker thread; the end arrives on
     // imagesOptimized. One run at a time; false if one is already running.
     Q_INVOKABLE bool optimizeImages(const QString &book);
-    // Optimize audio (Package ▸ Book Details): every MP3 in books/<book> off
-    // the -16 LUFS target brought to it with a plain gain, in place
-    // (scripts/audio_level.py). Progress on audioOptimizeProgress, the end on
-    // audioOptimizeFinished. One run at a time; false if one is running.
+    // Optimize audio (Package ▸ Book Details): every MP3 and video in
+    // books/<book> brought to -16 LUFS in place (scripts/audio_level.py) — a
+    // plain gain, or for a muffled book the clearer voice (EQ, gain, limiter).
+    // Progress on audioOptimizeProgress, the end on audioOptimizeFinished. One
+    // run at a time; false if one is running.
     Q_INVOKABLE bool optimizeAudio(const QString &book);
     // Stops a running optimizeAudio(): the clip being encoded is dropped, the
     // ones already done stay. Safe to call when nothing runs.
@@ -290,8 +291,8 @@ signals:
     // optimizeAudio() moving along. json: {i (0-based), n, dosya}.
     void audioOptimizeProgress(const QString &book, const QString &json);
     // optimizeAudio() done. json: {normalize_edilen: [{dosya, i, tp, gain,
-    // yeni_i, yeni_tp}], basarisiz: [{dosya, hata}], hizali_atlanan: [dosya],
-    // iptal?} or {hata}.
+    // yeni_i, yeni_tp, netlik}], basarisiz: [{dosya, hata}], hizali_atlanan:
+    // [dosya], netlik, iptal?} or {hata}.
     void audioOptimizeFinished(const QString &book, bool ok, const QString &json);
     void dependenciesChecked(bool ok, const QString &json);
     void dependenciesInstalled(bool ok);
