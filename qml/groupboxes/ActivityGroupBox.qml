@@ -29,7 +29,13 @@ GroupBox {
     property bool audioRequested: false
     readonly property bool hasAudioExtra: !!(sectionModelData && sectionModelData.audioExtra && sectionModelData.audioExtra.path)
     readonly property bool audioExpanded: audioRequested || hasAudioExtra
-    onSectionModelDataChanged: audioRequested = false
+    // Switching sections also drops the previous section's audio from the
+    // player, so Play never resumes it on the new one.
+    onSectionModelDataChanged: {
+        audioRequested = false;
+        playRecordAudio.stop();
+        playRecordAudio.source = "";
+    }
 
     background: Rectangle {
         color: "#232f34"
@@ -105,7 +111,7 @@ GroupBox {
     MediaPlayer {
         id: playRecordAudio
         audioOutput: AudioOutput {}
-        onSourceChanged: play()
+        onSourceChanged: if (source.toString() !== "") play()
         // Push the position onto the slider while the user isn't dragging.
         onPositionChanged: function(position) {
             if (!extraAudioSlider.pressed) extraAudioSlider.value = position;
@@ -303,7 +309,9 @@ GroupBox {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 playRecordAudio.stop();
-                                audioTextField.text = "";
+                                // Clear the model only — writing the field's text
+                                // directly would break its binding, leaving it
+                                // blank for every section until a restart.
                                 if (root.sectionModelData && root.sectionModelData.audioExtra)
                                     root.sectionModelData.audioExtra.path = "";
                                 root.audioRequested = false;
