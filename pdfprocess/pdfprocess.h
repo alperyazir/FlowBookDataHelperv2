@@ -325,18 +325,22 @@ private:
     QProcess *_audioProcess = nullptr;
 
     bool package(const QStringList &platforms, const QVariantList &books);
-    // Normalize every book into book_export/; fills the exported folder names
-    // and paths. Shared by package() and exportBooks().
+    // Normalize every book into <exportRoot>/; fills the exported folder names
+    // and paths. Export Book writes book_export/ with both PDFs; package()
+    // passes a temporary folder and forPackage, which leaves the answered PDF
+    // out (the reader only opens original.pdf).
     bool normalizeBooks(const QVariantList &books, QStringList &folders,
-                        QStringList &exportDirs, int progressFrom, int progressTo);
+                        QStringList &exportDirs, int progressFrom, int progressTo,
+                        const QString &exportRoot, bool forPackage);
     // Runs scripts/package_book.py; returns its result object as JSON and the
     // exit code (0 clean, 1 broken references, 2 error — a script that dies
     // without a result comes back as {"hata": ...} with 2).
     static QString runPackageScript(const QStringList &args, int timeoutMs, int *exitCode);
     // The normalizer's report as package log lines.
-    void logNormalizeReport(const QJsonObject &report);
-    // Put the project's optimized original.pdf (.pkgcache) into the export.
-    bool applyOptimizedPdf(const QString &book, const QString &exportDir);
+    void logNormalizeReport(const QJsonObject &report, bool forPackage);
+    // Put the project's optimized original.pdf (.pkgcache) into the export,
+    // and answered.pdf too when withAnswered (Export Book).
+    bool applyOptimizedPdf(const QString &book, const QString &exportDir, bool withAnswered);
     // The original (non-answered) PDF in a book's raw/ dir, or "" if none.
     // Prefers an 'original'/'soru' name, skips answer keys and obvious covers.
     QString findOriginalPdf(const QString &rawDir) const;

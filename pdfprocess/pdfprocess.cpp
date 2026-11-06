@@ -2,6 +2,7 @@
 #include <QDebug>
 #include <QProcess>
 #include <QTemporaryFile>
+#include <QTemporaryDir>
 #include <QDir>
 #include <QRegularExpression>
 #include <QTextStream>
@@ -744,8 +745,8 @@ bool PdfProcess::removeDir(const QString &dirPath) {
 static bool isExcludedFromPackage(const QString &name, bool isDir, bool atRoot) {
     const QString lower = name.toLower();
     // raw/ is excluded wholesale here; the package step copies original.pdf
-    // back from the normalized export (the answer key stays in book_export),
-    // so every other raw artifact stays out of the package. .pkgcache is the
+    // back from the normalized copy (the answer key never goes in), so every
+    // other raw artifact stays out of the package. .pkgcache is the
     // PDF-optimize cache — never ship it.
     // Folder names count only at the book's root, where the editor writes
     // them: further down they are the publisher's content — Next Level 1-3
@@ -1111,7 +1112,7 @@ QString PdfProcess::packageFolderPreview(const QString &title, const QString &pu
 
 // Everything the normalizer changed or noticed, in the package log — nothing
 // about the book leaves silently.
-void PdfProcess::logNormalizeReport(const QJsonObject &r)
+void PdfProcess::logNormalizeReport(const QJsonObject &r, bool forPackage)
 {
     const auto log = [this](const QString &s) { setLogMessages("       " + s); };
     const auto names = [](const QJsonValue &v) {
@@ -1121,7 +1122,7 @@ void PdfProcess::logNormalizeReport(const QJsonObject &r)
         return out;
     };
 
-    log(QString("→ book_export/%1   (%2 MB)")
+    log(QString(forPackage ? "→ %1   (%2 MB)" : "→ book_export/%1   (%2 MB)")
             .arg(r.value("klasor").toString()).arg(r.value("mb").toDouble()));
     if (r.value("geri_yazildi").toBool())
         log("✎  title and publisher saved to the project's config.json");
@@ -1171,6 +1172,8 @@ void PdfProcess::logNormalizeReport(const QJsonObject &r)
 
     const QJsonObject pdf = r.value("pdf").toObject();
     for (const QString &k : {QStringLiteral("original.pdf"), QStringLiteral("answered.pdf")}) {
+        if (forPackage && k == QLatin1String("answered.pdf"))
+            continue;                      // not part of a package
         const QJsonObject o = pdf.value(k).toObject();
         if (o.contains("birlestirildi"))
             log(QString("%1 merged from: %2").arg(k, names(o.value("birlestirildi")).join(", ")));
@@ -1237,11 +1240,13 @@ void PdfProcess::logNormalizeReport(const QJsonObject &r)
 // the exported PDF is still the file it was built from (same size as the
 // project's): if the normalizer merged parts, or the author picked an answered
 // PDF from elsewhere, the export's own PDF is compressed right here instead.
-// Either way no PDF leaves uncompressed.
-bool PdfProcess::applyOptimizedPdf(const QString &book, const QString &exportDir)
+// Either way no PDF leaves uncompressed. A package has no answered.pdf, so
+// only Export Book does the answered one.
+bool PdfProcess::applyOptimizedPdf(const QString &book, const QString &exportDir,
+                                   bool withAnswered)
 {
     return applyOptimizedPdfKind(book, exportDir, QStringLiteral("original"))
-        && applyOptimizedPdfKind(book, exportDir, QStringLiteral("answered"));
+        && (!withAnswered || applyOptimizedPdfKind(book, exportDir, QStringLiteral("answered")));
 }
 
 bool PdfProcess::applyOptimizedPdfKind(const QString &book, const QString &exportDir,
@@ -1299,12 +1304,16 @@ bool PdfProcess::applyOptimizedPdfKind(const QString &book, const QString &expor
     return true;
 }
 
-// Every book is normalized into book_export/<Folder>/ first: the package is
-// built from that export, never from the project folder, and Export Book stops
-// here. The project itself is only read — apart from its title and publisher,
-// which are written back on purpose.
+// Every book is normalized into <exportRoot>/<Folder>/ first: the package is
+// built from that copy, never from the project folder. Export Book normalizes
+// into book_export/ (both PDFs, the answered one required) and stops here;
+// package() uses a temporary folder and no answered PDF — the reader only
+// opens original.pdf, so the answer key is neither asked for nor compressed.
+// The project itself is only read — apart from its title and publisher, which
+// are written back on purpose.
 bool PdfProcess::normalizeBooks(const QVariantList &books, QStringList &folders,
-                                QStringList &exportDirs, int progressFrom, int progressTo)
+                                QStringList &exportDirs, int progressFrom, int progressTo,
+                                const QString &exportRoot, bool forPackage)
 {
     if (books.isEmpty()) {
         setLogMessages("✖  No books selected.");
@@ -1322,7 +1331,6 @@ bool PdfProcess::normalizeBooks(const QVariantList &books, QStringList &folders,
         }
     }
 
-    const QString exportRoot = QDir::cleanPath(booksDir() + "../book_export");
     QDir().mkpath(exportRoot);
     for (int i = 0; i < books.size(); ++i) {
         const QVariantMap b = books[i].toMap();
@@ -1342,7 +1350,9 @@ bool PdfProcess::normalizeBooks(const QVariantList &books, QStringList &folders,
         else
             args << ("--yayinevi=" + publisher);
         args << "--geri-yaz";
-        if (answered == "original")
+        if (forPackage)
+            args << "--answered-yok";
+        else if (answered == "original")
             args << "--answered-original";
         else if (!answered.isEmpty())
             args << ("--answered=" + answered);
@@ -1359,7 +1369,7 @@ bool PdfProcess::normalizeBooks(const QVariantList &books, QStringList &folders,
             setLogMessages(QString("✖  %1: %2").arg(book, r.value("hata").toString()));
             return false;
         }
-        logNormalizeReport(r);
+        logNormalizeReport(r, forPackage);
         if (order > 0)
             setLogMessages(QString("       shelf position %1 (display_order)").arg(order));
 
@@ -1383,12 +1393,14 @@ bool PdfProcess::normalizeBooks(const QVariantList &books, QStringList &folders,
 
         const QString folder = r.value("klasor").toString();
         if (folders.contains(folder)) {
-            setLogMessages(QString("✖  Two books export to book_export/%1 — give them "
-                                   "different titles.").arg(folder));
+            setLogMessages(QString(forPackage ? "✖  Two books get the same folder %1 — give "
+                                                "them different titles."
+                                              : "✖  Two books export to book_export/%1 — give "
+                                                "them different titles.").arg(folder));
             return false;
         }
         const QString exportDir = r.value("hedef").toString();
-        if (!applyOptimizedPdf(book, exportDir))
+        if (!applyOptimizedPdf(book, exportDir, !forPackage))
             return false;
         folders << folder;
         exportDirs << exportDir;
@@ -1402,10 +1414,6 @@ bool PdfProcess::package(const QStringList &platforms, const QVariantList &books
     setProgress(0);
     qDebug() << "package() books:" << books << "platforms:" << platforms;
 
-    QStringList folders, exportDirs;
-    if (!normalizeBooks(books, folders, exportDirs, 0, 36))
-        return false;
-
     // Get application directory
     QString appDir = QGuiApplication::applicationDirPath();
 #ifdef Q_OS_MAC
@@ -1413,6 +1421,19 @@ bool PdfProcess::package(const QStringList &platforms, const QVariantList &books
 #else
     appDir += "/../";
 #endif
+
+    // The normalized copies live only for this run, next to books/ (same
+    // disk, so the copies are quick) — a package leaves nothing in
+    // book_export/; that is Export Book's. Removed with everything in it when
+    // this returns, whichever way.
+    QTemporaryDir work(QDir::cleanPath(appDir + "package_work-XXXXXX"));
+    if (!work.isValid()) {
+        setLogMessages("✖  Could not create a work folder next to books/: " + work.errorString());
+        return false;
+    }
+    QStringList folders, exportDirs;
+    if (!normalizeBooks(books, folders, exportDirs, 0, 36, work.path(), true))
+        return false;
 
     // One package may bundle several books (e.g. a paired Student Book +
     // Workbook); they all go under data/books/. The package is named after
@@ -1526,10 +1547,9 @@ bool PdfProcess::package(const QStringList &platforms, const QVariantList &books
                                        "seeking will drift; re-run karaoke on it "
                                        "to convert").arg(book, clip));
             // raw/ is excluded above; ship only original.pdf (already the
-            // optimized copy if there is one). The answer key stays behind in
-            // book_export/<Folder>/raw/: the reader only ever opens the
+            // optimized copy if there is one). The reader only ever opens the
             // original (PdfCropper::findOriginalPdf) and answers come from
-            // config.json, so a delivered package has no use for it.
+            // config.json, so a package has no answer key at all.
             QDir().mkpath(dstBook + "/raw");
             const QString dstPdf = dstBook + "/raw/original.pdf";
             QFile::remove(dstPdf);
@@ -2534,7 +2554,8 @@ bool PdfProcess::exportBooks(const QVariantList &books) {
     }
     QThread* thread = QThread::create([=]() {
         QStringList folders, exportDirs;
-        if (this->normalizeBooks(books, folders, exportDirs, 0, 70)) {
+        if (this->normalizeBooks(books, folders, exportDirs, 0, 70,
+                                 QDir::cleanPath(booksDir() + "../book_export"), false)) {
             QStringList zips;
             bool ok = true;
             for (int i = 0; i < exportDirs.size(); ++i) {

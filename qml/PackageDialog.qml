@@ -37,11 +37,13 @@ Dialog {
     // Per-book details, keyed by project folder name:
     //   { check, title, publisherIndex, configPublisher, folder, titleError,
     //     titleWarnings, answered }
-    // Packaging normalizes each book into book_export/<folder>/ and builds the
-    // package from there. The folder comes from the title, so title and
-    // publisher are required and set here, never read off the cover.
+    // Packaging normalizes each book into a temporary <folder>/ and builds the
+    // package from there; Export Book normalizes into book_export/<folder>/.
+    // The folder comes from the title, so title and publisher are required
+    // and set here, never read off the cover.
     // publisherIndex: into `publishers`, -1 until chosen.
-    // answered: "" | "original" (no answer key) | path of a chosen PDF.
+    // answered: "" | "original" (no answer key) | path of a chosen PDF —
+    // Export Book only: a package ships no answered PDF.
     property var bookInfo: ({})
     property bool checking: false
 
@@ -184,10 +186,14 @@ Dialog {
         }
     }
 
-    // ---- PDFs: original.pdf and answered.pdf must be optimized first ----
+    // ---- PDFs: original.pdf (and for Export Book answered.pdf) must be
+    // optimized first. A package ships only original.pdf — the reader never
+    // opens the answer key — so packaging doesn't wait for it.
     // "ready" | "inprogress" | "stale" | "none", re-read on every statusTick.
     function pdfState(book, kind) {
         statusTick;
+        if (kind === "answered" && !exportOnly)
+            return "none";
         return kind === "answered" ? pdfProcess.answeredPdfStatus(book)
                                    : pdfProcess.originalPdfStatus(book);
     }
@@ -433,6 +439,12 @@ Dialog {
                         titleWarnings: r.baslik_uyari || [] });
     }
 
+    // Multi-part PDFs without pypdf. A package ships only original.pdf, so
+    // only its parts count there; Export Book merges answered.pdf too.
+    function pypdfWarning(c) {
+        return exportOnly ? (c.pypdf_uyari || "") : (c.pypdf_uyari_original || "");
+    }
+
     function bookReady(book) {
         var d = info(book);
         var c = d.check || {};
@@ -440,8 +452,8 @@ Dialog {
                   && (d.title || "").trim() && d.publisherIndex >= 0
                   && d.folder && !d.titleError
                   && !(c.ref_kayip > 0) && !((c.kirik_detay || []).length > 0)
-                  && c.original !== "yok" && !c.pypdf_uyari
-                  && (c.answered !== "yok" || d.answered)
+                  && c.original !== "yok" && !pypdfWarning(c)
+                  && (!exportOnly || c.answered !== "yok" || d.answered)
                   && videosReady(book) && !d.rechecking && imageBook !== book
                   && audioBook !== book && pdfsReady(book));
     }
@@ -506,8 +518,8 @@ Dialog {
             out.push({ level: "info", text: c.ref_onarilabilir + " broken path(s) will be repaired" });
         if (c.original === "yok")
             out.push({ level: "error", text: "raw/ has no original PDF" });
-        if (c.pypdf_uyari)
-            out.push({ level: "error", text: c.pypdf_uyari });
+        if (pypdfWarning(c))
+            out.push({ level: "error", text: pypdfWarning(c) });
         if (c.referanssiz_gorsel > 0)
             out.push({ level: "info", text: c.referanssiz_gorsel + " image(s) in images/ that nothing uses will be left out"
                                             + ((c.referanssiz_ornek || []).length ? " (e.g. " + c.referanssiz_ornek[0] + ")" : "") });
@@ -698,7 +710,10 @@ Dialog {
 
     function runCheck(book, key) {
         if (key === "pdf") {
-            pdfProcess.ensurePdfsCompressed(book);
+            if (exportOnly)
+                pdfProcess.ensurePdfsCompressed(book);
+            else
+                pdfProcess.optimizeOriginalPdf(book, false);
             statusTick++;
         } else if (key === "audio") {
             startAudioOptimize(book);
@@ -1486,7 +1501,9 @@ Dialog {
                             Text {
                                 Layout.fillWidth: true
                                 visible: !!card.d.folder
-                                text: "Folder:  book_export/" + (card.d.folder || "")
+                                text: (packageDialog.exportOnly ? "Folder:  book_export/"
+                                                                : "Folder:  data/books/")
+                                      + (card.d.folder || "")
                                 color: "#4fd2dc"
                                 font.pixelSize: 12
                                 elide: Text.ElideMiddle
@@ -1746,11 +1763,12 @@ Dialog {
                                 }
                             }
 
-                            // Every package ships an answered.pdf; a book without
+                            // Every export ships an answered.pdf; a book without
                             // one needs the author to say where it comes from.
+                            // A package has none, so it isn't asked there.
                             ColumnLayout {
                                 Layout.fillWidth: true
-                                visible: card.c.answered === "yok"
+                                visible: packageDialog.exportOnly && card.c.answered === "yok"
                                 spacing: 6
 
                                 Text {
@@ -1820,8 +1838,9 @@ Dialog {
                         return packageDialog.duplicateFolder();
                     }
                     visible: dup !== ""
-                    text: "✖  Two books would both export to book_export/" + dup
-                          + " — give them different titles."
+                    text: (packageDialog.exportOnly ? "✖  Two books would both export to book_export/"
+                                                    : "✖  Two books would both get the folder ")
+                          + dup + " — give them different titles."
                     color: "#e06c75"
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap

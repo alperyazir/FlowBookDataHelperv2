@@ -22,12 +22,15 @@ copied over. This file adds only what belongs to the editor:
       live preview -- the same title_to_folder the export uses.
 
   normalize <book_dir> <export_root> --baslik T (--yayinevi P | --yayinevi-yok)
-            [--answered PDF | --answered-original] [--geri-yaz]
-            [--display-order N]
+            [--answered PDF | --answered-original | --answered-yok]
+            [--geri-yaz] [--display-order N]
       normalize_book() into <export_root>/<Folder>/, then:
         * --yayinevi-yok: publisher_name cleared (the module only ever sets
           one; the logo fields are left alone)
-        * answered.pdf missing: the chosen PDF, or a copy of original.pdf
+        * answered.pdf missing: the chosen PDF, or a copy of original.pdf;
+          --answered-yok (Package: the reader ships only original.pdf)
+          neither asks for one nor keeps one -- answered.pdf is removed from
+          the export, so it is never compressed or packaged
         * raw/: a file byte-identical to original.pdf/answered.pdf is deleted;
           any other extra is kept and reported, never silently dropped
         * the editor's own files (fbinf, settings.json, review/, *.ini, ...)
@@ -331,6 +334,8 @@ def cmd_check(a):
     r["pdf_parca"] = parca
     r["pypdf"] = importlib.util.find_spec("pypdf") is not None
     r["pypdf_uyari"] = pypdf_warning(parca, r["pypdf"])
+    # Package ships only original.pdf: only its parts matter there.
+    r["pypdf_uyari_original"] = pypdf_warning(len(kaynak), r["pypdf"])
     sayilar = [pdf_pages(f) for f in kaynak]
     r["pdf_sayfa"] = sum(sayilar) if sayilar and None not in sayilar else None
     r["config_sayfa_son"] = config_last_page(conf)
@@ -385,7 +390,7 @@ def cmd_normalize(a):
     # of rapor["pdf"].
     if not orig.is_file():
         return emit({**rapor, "hata": "raw/ has no original PDF — the book can't be packaged."}, 2)
-    if not ans.is_file():
+    if not ans.is_file() and not a.answered_yok:
         if a.answered:
             shutil.copyfile(a.answered, ans)
             rapor["answered_kaynak"] = f"chosen: {a.answered}"
@@ -398,6 +403,10 @@ def cmd_normalize(a):
 
     rapor["audio_json_alt"] = remap_nested_audio_json(dest)
     rapor["raw"] = clean_raw(raw)
+    if a.answered_yok and ans.is_file():
+        # After clean_raw, so the answered source it was copied from still
+        # goes as a duplicate instead of showing up as an extra file.
+        fn.safe_remove(ans)
     rapor["editor_dosyalari"] = strip_editor_files(dest)
     conf = json.loads((dest / "config.json").read_text(encoding="utf-8"))
     changed = False
@@ -696,6 +705,7 @@ def main(argv=None):
     g = n.add_mutually_exclusive_group()
     g.add_argument("--answered")
     g.add_argument("--answered-original", action="store_true")
+    g.add_argument("--answered-yok", action="store_true")
     n.add_argument("--geri-yaz", action="store_true")
     n.add_argument("--display-order", type=int)
     vc = sub.add_parser("video-check")
